@@ -1,0 +1,52 @@
+# Flutter
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.idea/
+.vscode/
+.DS_Store
+
+# Go
+bin/
+vendor/
+*.exe
+*.test
+*.out
+*.log
+coverage/
+go.sum
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+env/
+venv/
+.venv/
+
+# Node (for chat service)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Secrets / Local config
+.env
+.env.*
+secrets/
+*.key
+*.pem
+*.crt
+*.p12
+
+# System files
+Thumbs.db
