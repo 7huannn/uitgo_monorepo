@@ -1,0 +1,18 @@
+name: rider_app
+description: UIT-Go Rider Flutter app
+publish_to: "none"
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+dependencies:
+  flutter:
+    sdk: flutter
+  lottie: ^3.1.2
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+flutter:
+  uses-material-design: true
+  assets:
+  - assets/Welcome.json
