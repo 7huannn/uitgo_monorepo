@@ -1,0 +1,159 @@
+openapi: 3.1.0
+info:
+  title: UITGo Backend API
+  version: 0.1.0
+  description: >
+    Minimal trip API powering the UITGo rider/driver apps.
+    Realtime updates stream over WebSocket at `ws://{host}/v1/trips/{tripId}/ws`.
+servers:
+  - url: http://localhost:8080
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+  /v1/trips:
+    post:
+      summary: Create a trip
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTripRequest'
+      responses:
+        '201':
+          description: Trip created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripResponse'
+  /v1/trips/{id}:
+    get:
+      summary: Get trip details
+      parameters:
+        - $ref: '#/components/parameters/TripId'
+      responses:
+        '200':
+          description: Trip fetched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripResponse'
+        '404':
+          description: Trip not found
+    patch:
+      summary: Update trip status
+      parameters:
+        - $ref: '#/components/parameters/TripId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStatusRequest'
+      responses:
+        '200':
+          description: Trip updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: Trip not found
+  /v1/trips/{id}/ws:
+    get:
+      summary: Trip realtime channel
+      description: >
+        Upgrades to WebSocket. Drivers send `{"type":"location","lat":0,"lng":0}` messages.
+        Riders receive broadcasts including driver locations and status changes.
+      parameters:
+        - $ref: '#/components/parameters/TripId'
+      responses:
+        '101':
+          description: WebSocket Upgrade
+components:
+  parameters:
+    TripId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    TripResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        riderId:
+          type: string
+        driverId:
+          type: string
+          nullable: true
+        serviceId:
+          type: string
+        originText:
+          type: string
+        destText:
+          type: string
+        status:
+          $ref: '#/components/schemas/TripStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lastLocation:
+          $ref: '#/components/schemas/LocationUpdate'
+          nullable: true
+    CreateTripRequest:
+      type: object
+      required:
+        - originText
+        - destText
+        - serviceId
+      properties:
+        originText:
+          type: string
+        destText:
+          type: string
+        serviceId:
+          type: string
+    UpdateStatusRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          $ref: '#/components/schemas/TripStatus'
+    TripStatus:
+      type: string
+      enum: [requested, accepted, arriving, in_ride, completed, cancelled]
+    LocationUpdate:
+      type: object
+      properties:
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        timestamp:
+          type: string
+          format: date-time

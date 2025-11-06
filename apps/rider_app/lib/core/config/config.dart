@@ -3,5 +3,5 @@ const bool useMock = bool.fromEnvironment('USE_MOCK', defaultValue: true);
 
 const String apiBase = String.fromEnvironment(
   'API_BASE',
-  defaultValue: 'https://dev.api.example.com', // đổi tùy bạn muốn
+  defaultValue: 'http://localhost:8080', // đổi tùy bạn muốn
 );
