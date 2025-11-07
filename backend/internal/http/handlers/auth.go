@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -17,15 +19,17 @@ import (
 
 // AuthHandler handles register/login flows.
 type AuthHandler struct {
-	users     domain.UserRepository
-	jwtSecret string
+	users         domain.UserRepository
+	jwtSecret     string
+	notifications domain.NotificationRepository
 }
 
 // NewAuthHandler builds an AuthHandler.
-func NewAuthHandler(cfg *config.Config, users domain.UserRepository) *AuthHandler {
+func NewAuthHandler(cfg *config.Config, users domain.UserRepository, notifications domain.NotificationRepository) *AuthHandler {
 	return &AuthHandler{
-		users:     users,
-		jwtSecret: cfg.JWTSecret,
+		users:         users,
+		jwtSecret:     cfg.JWTSecret,
+		notifications: notifications,
 	}
 }
 
@@ -46,6 +50,40 @@ type authResponse struct {
 	Email string `json:"email"`
 	Name  string `json:"name,omitempty"`
 	Token string `json:"token"`
+}
+
+type userResponse struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Email     string    `json:"email"`
+	Phone     string    `json:"phone,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type updateProfileRequest struct {
+	Name  *string `json:"name"`
+	Phone *string `json:"phone"`
+}
+
+func userIDFromContext(c *gin.Context) string {
+	val, exists := c.Get("userID")
+	if !exists {
+		return ""
+	}
+	if id, ok := val.(string); ok {
+		return id
+	}
+	return ""
+}
+
+func toUserResponse(user *domain.User) userResponse {
+	return userResponse{
+		ID:        user.ID,
+		Name:      user.Name,
+		Email:     user.Email,
+		Phone:     user.Phone,
+		CreatedAt: user.CreatedAt,
+	}
 }
 
 // Register signs up a new user.
@@ -94,6 +132,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
 		return
 	}
+
+	go h.seedWelcomeNotifications(context.Background(), user.ID, user.Name)
 
 	token, err := h.signToken(user)
 	if err != nil {
@@ -147,6 +187,58 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	})
 }
 
+// Me returns the authenticated user.
+func (h *AuthHandler) Me(c *gin.Context) {
+	userID := userIDFromContext(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user context"})
+		return
+	}
+
+	user, err := h.users.FindByID(c.Request.Context(), userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load user"})
+		return
+	}
+
+	c.JSON(http.StatusOK, toUserResponse(user))
+}
+
+// UpdateMe patches the authenticated user's profile.
+func (h *AuthHandler) UpdateMe(c *gin.Context) {
+	userID := userIDFromContext(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user context"})
+		return
+	}
+
+	var req updateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Name == nil && req.Phone == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "nothing to update"})
+		return
+	}
+
+	user, err := h.users.UpdateProfile(c.Request.Context(), userID, req.Name, req.Phone)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update profile"})
+		return
+	}
+
+	c.JSON(http.StatusOK, toUserResponse(user))
+}
+
 func (h *AuthHandler) signToken(user *domain.User) (string, error) {
 	claims := jwt.MapClaims{
 		"sub":   user.ID,
@@ -156,4 +248,34 @@ func (h *AuthHandler) signToken(user *domain.User) (string, error) {
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(h.jwtSecret))
+}
+
+func (h *AuthHandler) seedWelcomeNotifications(ctx context.Context, userID, userName string) {
+	if h.notifications == nil {
+		return
+	}
+
+	displayName := strings.TrimSpace(userName)
+	if displayName == "" {
+		displayName = "UIT-Go Rider"
+	}
+
+	notifications := []*domain.Notification{
+		{
+			UserID: userID,
+			Title:  "Chào mừng đến với UIT-Go!",
+			Body:   "Xin chào " + displayName + ", cảm ơn bạn đã trải nghiệm UIT-Go. Chúng tôi đã sẵn sàng đồng hành trên mọi hành trình.",
+			Type:   "system",
+		},
+		{
+			UserID: userID,
+			Title:  "Ưu đãi độc quyền",
+			Body:   "Nhập mã UITGO50 để được giảm 50% cho chuyến đi đầu tiên trong hôm nay.",
+			Type:   "promotion",
+		},
+	}
+
+	if err := h.notifications.CreateMany(ctx, notifications); err != nil {
+		log.Printf("seed welcome notifications: %v", err)
+	}
 }

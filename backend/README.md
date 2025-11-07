@@ -67,6 +67,20 @@ curl -X POST http://localhost:8080/auth/login \
 
 The responses contain a JWT (`token`), user id, name, and email. Pass the token via `Authorization: Bearer <token>` for authenticated requests.
 
+Profile:
+
+```bash
+# Current user
+curl http://localhost:8080/auth/me \
+  -H "Authorization: Bearer <token>"
+
+# Update name/phone
+curl -X PATCH http://localhost:8080/users/me \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"UIT Rider","phone":"0900000000"}'
+```
+
 Create a trip:
 
 ```bash
@@ -89,6 +103,25 @@ Update status:
 curl -X PATCH http://localhost:8080/v1/trips/<tripId>/status \
   -H "Content-Type: application/json" \
   -d '{"status":"arriving"}'
+```
+
+Trip history for the logged-in rider or driver:
+
+```bash
+curl "http://localhost:8080/v1/trips?role=rider&limit=5" \
+  -H "Authorization: Bearer <token>"
+```
+
+Notifications:
+
+```bash
+# Fetch unread notifications (default limit 20)
+curl "http://localhost:8080/notifications?unreadOnly=true" \
+  -H "Authorization: Bearer <token>"
+
+# Mark as read
+curl -X PATCH http://localhost:8080/notifications/<notificationId>/read \
+  -H "Authorization: Bearer <token>"
 ```
 
 WebSocket (requires `wscat` or similar):
@@ -129,6 +162,7 @@ A static testing console lives in [`admin/index.html`](../admin/index.html). Ope
 
 - **Gin** for HTTP routing & middleware.
 - **GORM** for PostgreSQL persistence (trips + trip_events tables).
+- **Notifications** table stores user alerts and read state for `/notifications` endpoints.
 - **WebSocket** hub per trip broadcasting location/status updates.
 - `.env` configuration (`PORT`, `POSTGRES_DSN`, `CORS_ALLOWED_ORIGINS`).
 

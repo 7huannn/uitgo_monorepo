@@ -7,4 +7,5 @@ type TripRepository interface {
 	UpdateTripStatus(id string, status TripStatus) error
 	SaveLocation(tripID string, update LocationUpdate) error
 	GetLatestLocation(tripID string) (*LocationUpdate, error)
+	ListTrips(userID string, role string, limit, offset int) ([]*Trip, int64, error)
 }

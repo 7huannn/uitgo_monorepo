@@ -191,3 +191,48 @@ func (r *tripRepository) GetLatestLocation(tripID string) (*domain.LocationUpdat
 
 	return &update, nil
 }
+
+func (r *tripRepository) ListTrips(userID string, role string, limit, offset int) ([]*domain.Trip, int64, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	query := r.db.Model(&tripModel{})
+	switch role {
+	case "driver":
+		query = query.Where("driver_id = ?", userID)
+	default:
+		query = query.Where("rider_id = ?", userID)
+	}
+
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	var models []tripModel
+	if err := query.Order("created_at DESC").Limit(limit).Offset(offset).Find(&models).Error; err != nil {
+		return nil, 0, err
+	}
+
+	trips := make([]*domain.Trip, 0, len(models))
+	for _, model := range models {
+		trip := &domain.Trip{
+			ID:         model.ID.String(),
+			RiderID:    model.RiderID,
+			DriverID:   model.DriverID,
+			ServiceID:  model.ServiceID,
+			OriginText: model.OriginText,
+			DestText:   model.DestText,
+			Status:     domain.TripStatus(model.Status),
+			CreatedAt:  model.CreatedAt,
+			UpdatedAt:  model.UpdatedAt,
+		}
+		trips = append(trips, trip)
+	}
+
+	return trips, total, nil
+}

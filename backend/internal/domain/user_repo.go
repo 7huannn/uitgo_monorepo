@@ -13,6 +13,8 @@ import (
 type UserRepository interface {
 	Create(ctx context.Context, user *User) error
 	FindByEmail(ctx context.Context, email string) (*User, error)
+	FindByID(ctx context.Context, id string) (*User, error)
+	UpdateProfile(ctx context.Context, id string, name *string, phone *string) (*User, error)
 }
 
 // NewUserRepository returns a GORM-backed user repository.
@@ -75,4 +77,60 @@ func (r *gormUserRepository) FindByEmail(ctx context.Context, email string) (*Us
 		PasswordHash: model.PasswordHash,
 		CreatedAt:    model.CreatedAt,
 	}, nil
+}
+
+func (r *gormUserRepository) FindByID(ctx context.Context, id string) (*User, error) {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+
+	var model userModel
+	if err := r.db.WithContext(ctx).First(&model, "id = ?", uid).Error; err != nil {
+		return nil, err
+	}
+
+	return &User{
+		ID:           model.ID.String(),
+		Name:         model.Name,
+		Email:        model.Email,
+		Phone:        model.Phone,
+		PasswordHash: model.PasswordHash,
+		CreatedAt:    model.CreatedAt,
+	}, nil
+}
+
+func (r *gormUserRepository) UpdateProfile(ctx context.Context, id string, name *string, phone *string) (*User, error) {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+
+	updates := map[string]any{}
+	if name != nil {
+		trimmed := strings.TrimSpace(*name)
+		if trimmed != "" {
+			updates["name"] = trimmed
+		}
+	}
+	if phone != nil {
+		trimmed := strings.TrimSpace(*phone)
+		if trimmed != "" {
+			updates["phone"] = trimmed
+		} else {
+			updates["phone"] = nil
+		}
+	}
+
+	if len(updates) > 0 {
+		res := r.db.WithContext(ctx).Model(&userModel{}).Where("id = ?", uid).Updates(updates)
+		if res.Error != nil {
+			return nil, res.Error
+		}
+		if res.RowsAffected == 0 {
+			return nil, gorm.ErrRecordNotFound
+		}
+	}
+
+	return r.FindByID(ctx, id)
 }

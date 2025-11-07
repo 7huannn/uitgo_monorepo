@@ -54,6 +54,14 @@ func (s *stubRepo) GetLatestLocation(tripID string) (*domain.LocationUpdate, err
 	return s.lastLocation, nil
 }
 
+func (s *stubRepo) ListTrips(userID string, role string, limit, offset int) ([]*domain.Trip, int64, error) {
+	items := make([]*domain.Trip, 0, len(s.trips))
+	for _, trip := range s.trips {
+		items = append(items, trip)
+	}
+	return items, int64(len(items)), nil
+}
+
 func TestTripServiceCreate(t *testing.T) {
 	repo := newStubRepo()
 	service := domain.NewTripService(repo)

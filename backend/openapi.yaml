@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: UITGo Backend API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Minimal trip & auth API powering the UITGo rider/driver apps.
     Realtime updates stream over WebSocket at `ws://{host}/v1/trips/{tripId}/ws`.
@@ -62,7 +62,83 @@ paths:
           description: Invalid payload
         '401':
           description: Invalid credentials
+  /auth/me:
+    get:
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized
+        '404':
+          description: User not found
+  /users/me:
+    patch:
+      summary: Update current user profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid payload
+        '401':
+          description: Unauthorized
+        '404':
+          description: User not found
   /v1/trips:
+    get:
+      summary: List trips for current user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [rider, driver]
+            default: rider
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Trip page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripListResponse'
+        '401':
+          description: Unauthorized
     post:
       summary: Create a trip
       security:
@@ -145,6 +221,56 @@ paths:
       responses:
         '101':
           description: WebSocket Upgrade
+  /notifications:
+    get:
+      summary: List notifications
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: unreadOnly
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Notification page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationListResponse'
+        '401':
+          description: Unauthorized
+  /notifications/{id}/read:
+    patch:
+      summary: Mark notification as read
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NotificationId'
+      responses:
+        '204':
+          description: Marked as read
+        '401':
+          description: Unauthorized
+        '404':
+          description: Notification not found
 components:
   securitySchemes:
     bearerAuth:
@@ -153,6 +279,13 @@ components:
       bearerFormat: JWT
   parameters:
     TripId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    NotificationId:
       name: id
       in: path
       required: true
@@ -172,6 +305,35 @@ components:
         name:
           type: string
         token:
+          type: string
+    User:
+      type: object
+      required:
+        - id
+        - email
+        - name
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    UpdateUserRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
           type: string
     RegisterRequest:
       type: object
@@ -231,6 +393,20 @@ components:
         lastLocation:
           $ref: '#/components/schemas/LocationUpdate'
           nullable: true
+    TripListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TripResponse'
+        total:
+          type: integer
+          format: int64
+        limit:
+          type: integer
+        offset:
+          type: integer
     CreateTripRequest:
       type: object
       required:
@@ -266,3 +442,49 @@ components:
         timestamp:
           type: string
           format: date-time
+    Notification:
+      type: object
+      required:
+        - id
+        - userId
+        - title
+        - body
+        - type
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        type:
+          type: string
+        tripId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+    NotificationListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        total:
+          type: integer
+          format: int64
+        limit:
+          type: integer
+        offset:
+          type: integer

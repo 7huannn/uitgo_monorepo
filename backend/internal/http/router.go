@@ -34,7 +34,8 @@ func NewServer(cfg *config.Config, db *gorm.DB) (*Server, error) {
 	router.Use(middleware.Auth(cfg.JWTSecret))
 
 	userRepo := domain.NewUserRepository(db)
-	authHandler := handlers.NewAuthHandler(cfg, userRepo)
+	notificationRepo := dbrepo.NewNotificationRepository(db)
+	authHandler := handlers.NewAuthHandler(cfg, userRepo, notificationRepo)
 	tripRepo := dbrepo.NewTripRepository(db)
 	tripService := domain.NewTripService(tripRepo)
 	hubManager := handlers.NewHubManager(tripService)
@@ -42,7 +43,10 @@ func NewServer(cfg *config.Config, db *gorm.DB) (*Server, error) {
 	handlers.RegisterHealth(router)
 	router.POST("/auth/register", authHandler.Register)
 	router.POST("/auth/login", authHandler.Login)
+	router.GET("/auth/me", authHandler.Me)
+	router.PATCH("/users/me", authHandler.UpdateMe)
 	handlers.RegisterTripRoutes(router, tripService, hubManager)
+	handlers.RegisterNotificationRoutes(router, notificationRepo)
 
 	return &Server{
 		engine: router,

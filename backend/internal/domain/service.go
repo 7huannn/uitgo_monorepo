@@ -62,6 +62,17 @@ func (s *TripService) LatestLocation(ctx context.Context, tripID string) (*Locat
 	return s.repo.GetLatestLocation(tripID)
 }
 
+// List returns trips for the current user/role.
+func (s *TripService) List(ctx context.Context, userID, role string, limit, offset int) ([]*Trip, int64, error) {
+	if userID == "" {
+		return nil, 0, errors.New("user id required")
+	}
+	if role != "driver" {
+		role = "rider"
+	}
+	return s.repo.ListTrips(userID, role, limit, offset)
+}
+
 func isValidStatus(status TripStatus) bool {
 	switch status {
 	case TripStatusRequested,

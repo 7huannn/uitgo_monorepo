@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,7 @@ func RegisterTripRoutes(router *gin.Engine, service *domain.TripService, hubs *H
 
 	v1 := router.Group("/v1")
 	{
+		v1.GET("/trips", handler.listTrips)
 		v1.POST("/trips", handler.createTrip)
 		v1.GET("/trips/:id", handler.getTrip)
 		v1.PATCH("/trips/:id/status", handler.updateTripStatus)
@@ -55,6 +57,13 @@ type tripResponse struct {
 	LastLocation *domain.LocationUpdate `json:"lastLocation,omitempty"`
 }
 
+type tripListResponse struct {
+	Items  []tripResponse `json:"items"`
+	Total  int64          `json:"total"`
+	Limit  int            `json:"limit"`
+	Offset int            `json:"offset"`
+}
+
 func toTripResponse(trip *domain.Trip, location *domain.LocationUpdate) tripResponse {
 	return tripResponse{
 		ID:           trip.ID,
@@ -70,6 +79,39 @@ func toTripResponse(trip *domain.Trip, location *domain.LocationUpdate) tripResp
 	}
 }
 
+func (h *TripHandler) listTrips(c *gin.Context) {
+	userID := userIDFromContext(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user context"})
+		return
+	}
+
+	role := strings.ToLower(c.DefaultQuery("role", "rider"))
+	if role != "driver" {
+		role = "rider"
+	}
+
+	limit := queryInt(c, "limit", 20, 100)
+	offset := queryInt(c, "offset", 0, 1000)
+
+	trips, total, err := h.service.List(c.Request.Context(), userID, role, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list trips"})
+		return
+	}
+
+	resp := tripListResponse{
+		Items:  make([]tripResponse, 0, len(trips)),
+		Total:  total,
+		Limit:  limit,
+		Offset: offset,
+	}
+	for _, trip := range trips {
+		resp.Items = append(resp.Items, toTripResponse(trip, nil))
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
 func (h *TripHandler) createTrip(c *gin.Context) {
 	var req createTripRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -77,8 +119,7 @@ func (h *TripHandler) createTrip(c *gin.Context) {
 		return
 	}
 
-	userID, _ := c.Get("userID")
-	riderID, _ := userID.(string)
+	riderID := userIDFromContext(c)
 	if riderID == "" {
 		riderID = "demo-user"
 	}
