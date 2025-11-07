@@ -7,4 +7,5 @@ var (
 	ErrTripNotFound         = errors.New("trip not found")
 	ErrInvalidStatus        = errors.New("invalid status")
 	ErrNotificationNotFound = errors.New("notification not found")
+	ErrSavedPlaceNotFound   = errors.New("saved place not found")
 )

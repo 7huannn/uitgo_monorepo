@@ -39,6 +39,11 @@ func NewServer(cfg *config.Config, db *gorm.DB) (*Server, error) {
 	tripRepo := dbrepo.NewTripRepository(db)
 	tripService := domain.NewTripService(tripRepo)
 	hubManager := handlers.NewHubManager(tripService)
+	walletRepo := dbrepo.NewWalletRepository(db)
+	savedPlaceRepo := dbrepo.NewSavedPlaceRepository(db)
+	promotionRepo := dbrepo.NewPromotionRepository(db)
+	newsRepo := dbrepo.NewNewsRepository(db)
+	homeService := domain.NewHomeService(walletRepo, savedPlaceRepo, promotionRepo, newsRepo)
 
 	handlers.RegisterHealth(router)
 	router.POST("/auth/register", authHandler.Register)
@@ -47,6 +52,7 @@ func NewServer(cfg *config.Config, db *gorm.DB) (*Server, error) {
 	router.PATCH("/users/me", authHandler.UpdateMe)
 	handlers.RegisterTripRoutes(router, tripService, hubManager)
 	handlers.RegisterNotificationRoutes(router, notificationRepo)
+	handlers.RegisterHomeRoutes(router, homeService)
 
 	return &Server{
 		engine: router,

@@ -54,6 +54,8 @@ class TripService {
     required String role,
     int limit = 20,
     int offset = 0,
+    int? page,
+    int? pageSize,
   }) async {
     if (useMock) {
       final now = DateTime.now();
@@ -79,13 +81,46 @@ class TripService {
       );
     }
 
-    final res = await _dio.get('/v1/trips', queryParameters: {
+    final params = <String, dynamic>{
       'role': role,
-      'limit': limit,
-      'offset': offset,
-    });
+    };
+    if (page != null && page > 0) {
+      params['page'] = page;
+      if (pageSize != null && pageSize > 0) {
+        params['pageSize'] = pageSize;
+      }
+    } else {
+      params['limit'] = limit;
+      params['offset'] = offset;
+    }
+
+    final res = await _dio.get('/v1/trips', queryParameters: params);
 
     return PagedTrips.fromJson(res.data as Map<String, dynamic>);
+  }
+
+  Future<TripDetail> fetchTrip(String tripId) async {
+    if (useMock) {
+      final now = DateTime.now();
+      return TripDetail(
+        id: tripId,
+        riderId: 'demo-user',
+        serviceId: 'UIT-Go',
+        originText: 'Sảnh A, Đại học UIT',
+        destText: 'Ký túc xá Khu B',
+        status: 'requested',
+        createdAt: now.subtract(const Duration(minutes: 3)),
+        updatedAt: now,
+        lastLocation: LocationUpdate(
+          latitude: 10.8705,
+          longitude: 106.8032,
+          timestamp: now,
+        ),
+      );
+    }
+
+    final res = await _dio.get('/v1/trips/$tripId');
+    return TripDetail.fromJson(res.data as Map<String, dynamic>);
   }
 
   Future<Stream<TripRealtimeEvent>> connectToTrip(String tripId,
@@ -126,10 +161,24 @@ class TripService {
       try {
         final data = jsonDecode(event as String) as Map<String, dynamic>;
         final type = data['type'] as String? ?? '';
-        if (type == 'location' && data['location'] != null) {
-          return TripRealtimeEvent.fromLocation(
-            LocationUpdate.fromJson(data['location'] as Map<String, dynamic>),
-          );
+        if (type == 'location') {
+          final payload = data['location'];
+          if (payload is Map<String, dynamic>) {
+            return TripRealtimeEvent.fromLocation(
+              LocationUpdate.fromJson(payload),
+            );
+          }
+          if (data['lat'] != null && data['lng'] != null) {
+            return TripRealtimeEvent.fromLocation(
+              LocationUpdate.fromJson(
+                {
+                  'lat': data['lat'],
+                  'lng': data['lng'],
+                  'timestamp': data['timestamp'],
+                },
+              ),
+            );
+          }
         }
         if (type == 'status' && data['status'] != null) {
           return TripRealtimeEvent.fromStatus(data['status'] as String);

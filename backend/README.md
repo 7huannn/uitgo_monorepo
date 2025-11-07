@@ -105,10 +105,10 @@ curl -X PATCH http://localhost:8080/v1/trips/<tripId>/status \
   -d '{"status":"arriving"}'
 ```
 
-Trip history for the logged-in rider or driver:
+Trip history for the logged-in rider or driver (supports both `limit/offset` and `page/pageSize`):
 
 ```bash
-curl "http://localhost:8080/v1/trips?role=rider&limit=5" \
+curl "http://localhost:8080/v1/trips?role=rider&page=1&pageSize=5" \
   -H "Authorization: Bearer <token>"
 ```
 
@@ -121,6 +121,38 @@ curl "http://localhost:8080/notifications?unreadOnly=true" \
 
 # Mark as read
 curl -X PATCH http://localhost:8080/notifications/<notificationId>/read \
+  -H "Authorization: Bearer <token>"
+```
+
+Wallet & saved places:
+
+```bash
+# Wallet summary
+curl http://localhost:8080/wallet \
+  -H "Authorization: Bearer <token>"
+
+# List saved places
+curl http://localhost:8080/saved_places \
+  -H "Authorization: Bearer <token>"
+
+# Create saved place
+curl -X POST http://localhost:8080/saved_places \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Nhà","address":"12 Võ Oanh, Bình Thạnh","lat":10.79698,"lng":106.72098}'
+
+# Delete saved place
+curl -X DELETE http://localhost:8080/saved_places/<placeId> \
+  -H "Authorization: Bearer <token>"
+```
+
+Home promotions & news:
+
+```bash
+curl http://localhost:8080/promotions \
+  -H "Authorization: Bearer <token>"
+
+curl "http://localhost:8080/news?limit=5" \
   -H "Authorization: Bearer <token>"
 ```
 

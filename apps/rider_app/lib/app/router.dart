@@ -7,11 +7,13 @@ import 'package:rider_app/features/auth/pages/profile_page.dart';
 import 'package:rider_app/features/auth/pages/register_page.dart';
 import 'package:rider_app/features/help/pages/help_page.dart';
 import 'package:rider_app/features/home/home_page.dart';
+import 'package:rider_app/features/trip/models/trip_models.dart';
 import 'package:rider_app/features/notifications/pages/notifications_page.dart';
 import 'package:rider_app/features/payments/pages/payment_methods_page.dart';
 import 'package:rider_app/features/places/pages/saved_places_page.dart';
 import 'package:rider_app/features/settings/pages/settings_page.dart';
 import 'package:rider_app/features/trip/pages/trip_history_page.dart';
+import 'package:rider_app/features/trip/pages/trip_tracking_page.dart';
 
 class AppRouteNames {
   static const welcome = 'welcome';
@@ -26,6 +28,7 @@ class AppRouteNames {
   static const settings = 'settings';
   static const help = 'help';
   static const notifications = 'notifications';
+  static const tripTracking = 'trip-tracking';
 }
 
 class AppRoutePaths {
@@ -41,6 +44,7 @@ class AppRoutePaths {
   static const settings = '/settings';
   static const help = '/help';
   static const notifications = '/notifications';
+  static const tripTracking = '/trips/:id/live';
 }
 
 final GoRouter appRouter = GoRouter(
@@ -80,6 +84,22 @@ final GoRouter appRouter = GoRouter(
       name: AppRouteNames.tripHistory,
       path: AppRoutePaths.tripHistory,
       builder: (context, state) => const TripHistoryPage(),
+    ),
+    GoRoute(
+      name: AppRouteNames.tripTracking,
+      path: AppRoutePaths.tripTracking,
+      builder: (context, state) {
+        final tripId = state.pathParameters['id']!;
+        final extra = state.extra;
+        TripDetail? trip;
+        if (extra is TripDetail) {
+          trip = extra;
+        }
+        return TripTrackingPage(
+          tripId: tripId,
+          initialTrip: trip,
+        );
+      },
     ),
     GoRoute(
       name: AppRouteNames.payments,

@@ -93,6 +93,18 @@ func (h *TripHandler) listTrips(c *gin.Context) {
 
 	limit := queryInt(c, "limit", 20, 100)
 	offset := queryInt(c, "offset", 0, 1000)
+	page := queryInt(c, "page", 0, 10000)
+	pageSize := queryInt(c, "pageSize", 0, 100)
+	if page > 0 {
+		if pageSize <= 0 {
+			pageSize = limit
+		}
+		if pageSize > 100 {
+			pageSize = 100
+		}
+		limit = pageSize
+		offset = (page - 1) * pageSize
+	}
 
 	trips, total, err := h.service.List(c.Request.Context(), userID, role, limit, offset)
 	if err != nil {

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:rider_app/app/router.dart';
 import 'package:rider_app/features/auth/services/auth_service.dart';
+import 'package:rider_app/features/home/models/home_models.dart';
+import 'package:rider_app/features/home/services/home_service.dart';
 import 'package:rider_app/features/trip/models/trip_models.dart';
 import 'package:rider_app/features/trip/services/trip_service.dart';
 
@@ -25,10 +27,10 @@ class _HomePageState extends State<HomePage> {
   String _selectedServiceId = _serviceOptions.first.id;
   bool _scheduleEnabled = false;
   final TripService _tripService = TripService();
+  final HomeService _homeService = HomeService();
   TripDetail? _activeTrip;
   LocationUpdate? _liveLocation;
   String? _liveStatus;
-  StreamSubscription<TripRealtimeEvent>? _tripSubscription;
   bool _isBooking = false;
   late Future<_HomeSnapshot> _homeFuture;
 
@@ -40,17 +42,37 @@ class _HomePageState extends State<HomePage> {
 
   Future<_HomeSnapshot> _loadHomeSnapshot() async {
     final userInfo = await AuthService().getUserInfo();
-    final now = DateTime.now();
+    final riderName =
+        userInfo['name']?.isNotEmpty == true ? userInfo['name']! : 'Bạn';
+
+    final results = await Future.wait([
+      _homeService.fetchWallet(),
+      _homeService.fetchSavedPlaces(),
+      _homeService.fetchPromotions(),
+      _homeService.fetchNews(limit: 5),
+      _tripService.listTrips(role: 'rider', page: 1, pageSize: 20),
+    ]);
+
+    final wallet = results[0] as WalletSummary;
+    final savedPlaces = results[1] as List<SavedPlaceModel>;
+    final promotions = results[2] as List<PromotionBanner>;
+    final news = results[3] as List<HomeNewsItem>;
+    final pagedTrips = results[4] as PagedTrips;
+    final trips = pagedTrips.items;
+
+    final upcoming =
+        trips.where((trip) => !_isTerminalStatus(trip.status)).take(3).toList();
+    final recent =
+        trips.where((trip) => _isTerminalStatus(trip.status)).take(5).toList();
+
     return _HomeSnapshot(
-      riderName:
-          userInfo['name']?.isNotEmpty == true ? userInfo['name']! : 'Bạn',
-      walletBalance: 185000,
-      rewardPoints: 340,
-      savedPlaces: _mockSavedPlaces,
-      promotions: _mockPromotions,
-      upcomingTrips: _mockUpcomingTrips(now),
-      recentTrips: _mockRecentTrips(now),
-      news: _mockNewsItems,
+      riderName: riderName,
+      wallet: wallet,
+      savedPlaces: savedPlaces,
+      promotions: promotions,
+      upcomingTrips: upcoming,
+      recentTrips: recent,
+      news: news,
     );
   }
 
@@ -59,7 +81,6 @@ class _HomePageState extends State<HomePage> {
     _pickupController.dispose();
     _destinationController.dispose();
     _promoController.dispose();
-    _tripSubscription?.cancel();
     unawaited(_tripService.closeChannel());
     super.dispose();
   }
@@ -245,7 +266,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _showSavedPlaceSheet(_SavedPlace place) {
+  void _showSavedPlaceSheet(SavedPlaceModel place) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -268,7 +289,8 @@ class _HomePageState extends State<HomePage> {
             ListTile(
               leading: CircleAvatar(
                 backgroundColor: const Color(0xFF667EEA).withValues(alpha: 0.1),
-                child: Icon(place.icon, color: const Color(0xFF667EEA)),
+                child: Icon(_savedPlaceIcon(place),
+                    color: const Color(0xFF667EEA)),
               ),
               title: Text(place.name,
                   style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -336,7 +358,11 @@ class _HomePageState extends State<HomePage> {
         ),
       );
 
-      await _subscribeToTrip(trip.id);
+      context.goNamed(
+        AppRouteNames.tripTracking,
+        pathParameters: {'id': trip.id},
+        extra: trip,
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -349,32 +375,6 @@ class _HomePageState extends State<HomePage> {
         });
       }
     }
-  }
-
-  Future<void> _subscribeToTrip(String tripId) async {
-    final stream = await _tripService.connectToTrip(tripId);
-    await _tripSubscription?.cancel();
-    _tripSubscription = stream.listen(
-      (event) {
-        if (!mounted) return;
-        final type = event.type;
-        if (type == RealtimeEventType.location && event.location != null) {
-          setState(() {
-            _liveLocation = event.location;
-          });
-        } else if (type == RealtimeEventType.status && event.status != null) {
-          setState(() {
-            _liveStatus = event.status;
-          });
-        }
-      },
-      onError: (error) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Mất kết nối realtime: $error')),
-        );
-      },
-    );
   }
 
   Future<void> _pickSchedule() async {
@@ -601,6 +601,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildWalletAndPoints(_HomeSnapshot snapshot) {
+    final wallet = snapshot.wallet;
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 18, 20, 0),
       padding: const EdgeInsets.all(20),
@@ -625,7 +626,7 @@ class _HomePageState extends State<HomePage> {
                     style: TextStyle(fontSize: 14, color: Colors.black54)),
                 const SizedBox(height: 6),
                 Text(
-                  '${_formatCurrency(snapshot.walletBalance)} đ',
+                  '${_formatCurrency(wallet.balance)} đ',
                   style: const TextStyle(
                       fontSize: 20, fontWeight: FontWeight.w700),
                 ),
@@ -653,7 +654,7 @@ class _HomePageState extends State<HomePage> {
                     style: TextStyle(fontSize: 14, color: Colors.black54)),
                 const SizedBox(height: 6),
                 Text(
-                  '${snapshot.rewardPoints}',
+                  '${wallet.rewardPoints}',
                   style: const TextStyle(
                       fontSize: 20, fontWeight: FontWeight.w700),
                 ),
@@ -996,7 +997,8 @@ class _HomePageState extends State<HomePage> {
                   final place = snapshot.savedPlaces[index];
                   return ActionChip(
                     label: Text(place.name),
-                    avatar: Icon(place.icon, size: 18, color: Colors.grey[700]),
+                    avatar: Icon(_savedPlaceIcon(place),
+                        size: 18, color: Colors.grey[700]),
                     onPressed: () => _showSavedPlaceSheet(place),
                     backgroundColor: Colors.grey[100],
                   );
@@ -1052,80 +1054,120 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildSavedPlaces(_HomeSnapshot snapshot) {
-    if (snapshot.savedPlaces.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    final places = snapshot.savedPlaces;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 24, 20, 12),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
           child: Row(
             children: [
-              Text(
+              const Text(
                 'Địa điểm yêu thích',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () => context.pushNamed(AppRouteNames.savedPlaces),
+                child: const Text('Quản lý'),
               ),
             ],
           ),
         ),
-        SizedBox(
-          height: 114,
-          child: ListView.separated(
+        if (places.isEmpty)
+          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            scrollDirection: Axis.horizontal,
-            itemBuilder: (context, index) {
-              final place = snapshot.savedPlaces[index];
-              return GestureDetector(
-                onTap: () => _showSavedPlaceSheet(place),
-                child: Container(
-                  width: 180,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.08),
-                        blurRadius: 16,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.06),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(place.icon, color: const Color(0xFF667EEA)),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              place.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.w600),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Lưu địa điểm quen thuộc để đặt xe nhanh hơn.',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        context.pushNamed(AppRouteNames.savedPlaces),
+                    icon: const Icon(Icons.add_location_alt_outlined),
+                    label: const Text('Thêm địa điểm'),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          SizedBox(
+            height: 114,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              scrollDirection: Axis.horizontal,
+              itemBuilder: (context, index) {
+                final place = places[index];
+                return GestureDetector(
+                  onTap: () => _showSavedPlaceSheet(place),
+                  child: Container(
+                    width: 180,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(_savedPlaceIcon(place),
+                                color: const Color(0xFF667EEA)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                place.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const Spacer(),
-                      Text(
-                        place.address,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    ],
+                          ],
+                        ),
+                        const Spacer(),
+                        Text(
+                          place.address,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              );
-            },
-            separatorBuilder: (context, index) => const SizedBox(width: 16),
-            itemCount: snapshot.savedPlaces.length,
+                );
+              },
+              separatorBuilder: (context, index) => const SizedBox(width: 16),
+              itemCount: snapshot.savedPlaces.length,
+            ),
           ),
-        ),
       ],
     );
   }
@@ -1205,14 +1247,8 @@ class _HomePageState extends State<HomePage> {
                         TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                 const Spacer(),
                 TextButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text(
-                              'Màn hình quản lý chuyến chưa khả dụng trong bản demo.')),
-                    );
-                  },
-                  child: const Text('Quản lý'),
+                  onPressed: () => context.pushNamed(AppRouteNames.tripHistory),
+                  child: const Text('Xem tất cả'),
                 ),
               ],
             ),
@@ -1306,7 +1342,7 @@ class _HomePageState extends State<HomePage> {
                             ),
                             const SizedBox(width: 12),
                             Text(
-                              promo.expiry,
+                              promo.expiryLabel,
                               style: const TextStyle(
                                   color: Colors.white70, fontSize: 12),
                             ),
@@ -1351,11 +1387,7 @@ class _HomePageState extends State<HomePage> {
                         TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                 const Spacer(),
                 TextButton(
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text(
-                            'Lịch sử chuyến sẽ được đồng bộ khi kết nối backend.')),
-                  ),
+                  onPressed: () => context.pushNamed(AppRouteNames.tripHistory),
                   child: const Text('Xem tất cả'),
                 ),
               ],
@@ -1409,7 +1441,8 @@ class _HomePageState extends State<HomePage> {
                       color: const Color(0xFF667EEA).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Icon(item.icon, color: const Color(0xFF667EEA)),
+                    child:
+                        Icon(_newsIcon(item), color: const Color(0xFF667EEA)),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -1422,13 +1455,13 @@ class _HomePageState extends State<HomePage> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          item.description,
+                          item.body,
                           style:
                               TextStyle(fontSize: 13, color: Colors.grey[600]),
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          item.timeAgo,
+                          item.timeAgo(),
                           style:
                               TextStyle(fontSize: 12, color: Colors.grey[500]),
                         ),
@@ -1444,9 +1477,12 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildTripTile(_TripSummary trip, {bool highlight = false}) {
+  Widget _buildTripTile(TripDetail trip, {bool highlight = false}) {
     final service = _serviceOptions.firstWhere((s) => s.id == trip.serviceId,
         orElse: () => _serviceOptions.first);
+    final createdAt = trip.createdAt.toLocal();
+    final status = trip.status;
+    final isTrackable = !_isTerminalStatus(status);
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(16),
@@ -1478,24 +1514,25 @@ class _HomePageState extends State<HomePage> {
                         style: const TextStyle(
                             fontSize: 15, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 4),
-                    Text(_formatSchedule(trip.dateTime),
+                    Text(_formatSchedule(createdAt),
                         style:
                             TextStyle(fontSize: 12, color: Colors.grey[600])),
                   ],
                 ),
               ),
-              _buildStatusChip(trip.status),
+              _buildStatusChipFromString(status),
             ],
           ),
           const SizedBox(height: 12),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Icon(Icons.radio_button_checked,
-                  size: 16, color: Colors.green),
+                  size: 16, color: Color(0xFF38B000)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  trip.origin,
+                  trip.originText,
                   style: const TextStyle(
                       fontSize: 13, fontWeight: FontWeight.w600),
                 ),
@@ -1504,12 +1541,13 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(height: 8),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Icon(Icons.flag, size: 16, color: Color(0xFFFF6B6B)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  trip.destination,
+                  trip.destText,
                   style: const TextStyle(
                       fontSize: 13, fontWeight: FontWeight.w600),
                 ),
@@ -1519,43 +1557,27 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 12),
           Row(
             children: [
-              Icon(Icons.attach_money, size: 18, color: Colors.grey[600]),
-              const SizedBox(width: 4),
-              Text(
-                '${_formatCurrency(trip.estimatedPrice)} đ',
-                style: const TextStyle(fontWeight: FontWeight.w600),
+              const Icon(Icons.confirmation_number,
+                  size: 16, color: Color(0xFF667EEA)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  trip.id,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
               ),
-              const Spacer(),
-              if (trip.status == TripStatus.scheduled)
+              if (isTrackable)
                 TextButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text(
-                              'Bạn có thể sửa chuyến khi kết nối backend.')),
-                    );
-                  },
-                  child: const Text('Sửa chuyến'),
+                  onPressed: () => context.pushNamed(
+                    AppRouteNames.tripTracking,
+                    pathParameters: {'id': trip.id},
+                    extra: trip,
+                  ),
+                  child: const Text('Theo dõi'),
                 ),
             ],
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildStatusChip(TripStatus status) {
-    final color = _statusColor(status);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Text(
-        _statusLabel(status),
-        style:
-            TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -1574,6 +1596,41 @@ class _HomePageState extends State<HomePage> {
             TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
       ),
     );
+  }
+
+  IconData _savedPlaceIcon(SavedPlaceModel place) {
+    final name = place.name.toLowerCase();
+    if (name.contains('nhà') || name.contains('home')) {
+      return Icons.home_rounded;
+    }
+    if (name.contains('uit') || name.contains('trường')) {
+      return Icons.school_rounded;
+    }
+    if (name.contains('công ty') || name.contains('office')) {
+      return Icons.business_rounded;
+    }
+    return Icons.location_on_rounded;
+  }
+
+  IconData _newsIcon(HomeNewsItem item) {
+    switch (item.icon.toLowerCase()) {
+      case 'shield':
+      case 'safety':
+        return Icons.shield_outlined;
+      case 'two_wheeler':
+      case 'bike':
+        return Icons.two_wheeler;
+      case 'gift':
+      case 'promo':
+        return Icons.card_giftcard;
+      default:
+        return Icons.campaign_outlined;
+    }
+  }
+
+  bool _isTerminalStatus(String status) {
+    final normalized = status.toLowerCase();
+    return normalized == 'completed' || normalized == 'cancelled';
   }
 
   Widget _buildEmptyState(String message) {
@@ -1717,8 +1774,7 @@ class _MenuItemData {
 class _HomeSnapshot {
   const _HomeSnapshot({
     required this.riderName,
-    required this.walletBalance,
-    required this.rewardPoints,
+    required this.wallet,
     required this.savedPlaces,
     required this.promotions,
     required this.upcomingTrips,
@@ -1727,13 +1783,12 @@ class _HomeSnapshot {
   });
 
   final String riderName;
-  final int walletBalance;
-  final int rewardPoints;
-  final List<_SavedPlace> savedPlaces;
-  final List<_PromotionItem> promotions;
-  final List<_TripSummary> upcomingTrips;
-  final List<_TripSummary> recentTrips;
-  final List<_NewsItem> news;
+  final WalletSummary wallet;
+  final List<SavedPlaceModel> savedPlaces;
+  final List<PromotionBanner> promotions;
+  final List<TripDetail> upcomingTrips;
+  final List<TripDetail> recentTrips;
+  final List<HomeNewsItem> news;
 }
 
 class _ServiceOption {
@@ -1768,68 +1823,6 @@ class _QuickAction {
   final String description;
   final IconData icon;
   final Color color;
-}
-
-class _SavedPlace {
-  const _SavedPlace({
-    required this.name,
-    required this.address,
-    required this.icon,
-  });
-
-  final String name;
-  final String address;
-  final IconData icon;
-}
-
-class _PromotionItem {
-  const _PromotionItem({
-    required this.title,
-    required this.description,
-    required this.code,
-    required this.expiry,
-    required this.gradient,
-  });
-
-  final String title;
-  final String description;
-  final String code;
-  final String expiry;
-  final List<Color> gradient;
-}
-
-class _NewsItem {
-  const _NewsItem({
-    required this.title,
-    required this.description,
-    required this.timeAgo,
-    required this.icon,
-  });
-
-  final String title;
-  final String description;
-  final String timeAgo;
-  final IconData icon;
-}
-
-enum TripStatus { scheduled, onTheWay, completed, cancelled }
-
-class _TripSummary {
-  const _TripSummary({
-    required this.serviceId,
-    required this.origin,
-    required this.destination,
-    required this.dateTime,
-    required this.estimatedPrice,
-    required this.status,
-  });
-
-  final String serviceId;
-  final String origin;
-  final String destination;
-  final DateTime dateTime;
-  final int estimatedPrice;
-  final TripStatus status;
 }
 
 const List<_ServiceOption> _serviceOptions = [
@@ -1895,119 +1888,6 @@ const List<_QuickAction> _quickActions = [
   ),
 ];
 
-const List<_SavedPlace> _mockSavedPlaces = [
-  _SavedPlace(
-    name: 'Nhà riêng',
-    address: '12 Võ Oanh, Bình Thạnh, TP.HCM',
-    icon: Icons.home_rounded,
-  ),
-  _SavedPlace(
-    name: 'Đại học UIT',
-    address: 'Khu phố 6, P. Linh Trung, Thủ Đức',
-    icon: Icons.school_rounded,
-  ),
-  _SavedPlace(
-    name: 'Tòa nhà F',
-    address: 'Tòa nhà F, UIT, Thủ Đức',
-    icon: Icons.apartment_rounded,
-  ),
-];
-
-const List<_PromotionItem> _mockPromotions = [
-  _PromotionItem(
-    title: 'Giảm 30% chuyến đầu',
-    description: 'Nhập mã UITNEW để được ưu đãi tối đa 30.000đ',
-    code: 'UITNEW',
-    expiry: 'HSD: 30/09',
-    gradient: [Color(0xFFFFA751), Color(0xFFFFE259)],
-  ),
-  _PromotionItem(
-    title: 'Đi 5 chuyến - Tặng 1',
-    description: 'Tích đủ 5 chuyến UIT-Bike để nhận chuyến miễn phí',
-    code: 'FREERIDE5',
-    expiry: 'HSD: 15/10',
-    gradient: [Color(0xFF11998E), Color(0xFF38EF7D)],
-  ),
-  _PromotionItem(
-    title: 'UIT-Food giảm 50%',
-    description: 'Ưu đãi ngon cho sinh viên, áp dụng đơn từ 50k',
-    code: 'UITFOOD50',
-    expiry: 'HSD: 05/10',
-    gradient: [Color(0xFFFF6B6B), Color(0xFFFF9A56)],
-  ),
-];
-
-const List<_NewsItem> _mockNewsItems = [
-  _NewsItem(
-    title: 'UITGo mở rộng khu vực',
-    description: 'Tài xế nay đã phủ sóng khắp TP Dĩ An và Thuận An.',
-    timeAgo: '2 giờ trước',
-    icon: Icons.map_outlined,
-  ),
-  _NewsItem(
-    title: 'UIT-Food hợp tác cùng canteen',
-    description: 'Đặt món tại căn tin B nhanh chóng, giao trong 10 phút.',
-    timeAgo: 'Hôm qua',
-    icon: Icons.restaurant_menu,
-  ),
-  _NewsItem(
-    title: 'Chăm sóc khách hàng 24/7',
-    description: 'Liên hệ ngay UITGo Care để được hỗ trợ mọi lúc.',
-    timeAgo: '2 ngày trước',
-    icon: Icons.support_agent,
-  ),
-];
-
-List<_TripSummary> _mockUpcomingTrips(DateTime now) {
-  return [
-    _TripSummary(
-      serviceId: 'bike',
-      origin: 'KTX UIT, Thủ Đức',
-      destination: 'Bến xe Miền Đông mới',
-      dateTime: now.add(const Duration(hours: 2)),
-      estimatedPrice: 78000,
-      status: TripStatus.scheduled,
-    ),
-    _TripSummary(
-      serviceId: 'car',
-      origin: 'UIT, Tòa nhà H',
-      destination: 'Quận 1, Nguyễn Huệ',
-      dateTime: now.add(const Duration(hours: 5, minutes: 30)),
-      estimatedPrice: 190000,
-      status: TripStatus.scheduled,
-    ),
-  ];
-}
-
-List<_TripSummary> _mockRecentTrips(DateTime now) {
-  return [
-    _TripSummary(
-      serviceId: 'express',
-      origin: 'UIT, Linh Trung',
-      destination: 'Ký túc xá khu B',
-      dateTime: now.subtract(const Duration(hours: 4)),
-      estimatedPrice: 45000,
-      status: TripStatus.completed,
-    ),
-    _TripSummary(
-      serviceId: 'bike',
-      origin: 'Nhà sách Fahasa',
-      destination: 'Ký túc xá UIT',
-      dateTime: now.subtract(const Duration(days: 1, hours: 3)),
-      estimatedPrice: 39000,
-      status: TripStatus.completed,
-    ),
-    _TripSummary(
-      serviceId: 'food',
-      origin: 'UIT-Food - Canteen A',
-      destination: 'Tòa nhà E, UIT',
-      dateTime: now.subtract(const Duration(days: 2, hours: 1)),
-      estimatedPrice: 62000,
-      status: TripStatus.completed,
-    ),
-  ];
-}
-
 String _formatSchedule(DateTime time) {
   final day = time.day.toString().padLeft(2, '0');
   final month = time.month.toString().padLeft(2, '0');
@@ -2033,32 +1913,6 @@ String _formatCurrency(int amount) {
     }
   }
   return buffer.toString();
-}
-
-Color _statusColor(TripStatus status) {
-  switch (status) {
-    case TripStatus.scheduled:
-      return const Color(0xFF667EEA);
-    case TripStatus.onTheWay:
-      return const Color(0xFFFFA751);
-    case TripStatus.completed:
-      return const Color(0xFF38EF7D);
-    case TripStatus.cancelled:
-      return const Color(0xFFFF6B6B);
-  }
-}
-
-String _statusLabel(TripStatus status) {
-  switch (status) {
-    case TripStatus.scheduled:
-      return 'Đã đặt';
-    case TripStatus.onTheWay:
-      return 'Đang tới';
-    case TripStatus.completed:
-      return 'Hoàn thành';
-    case TripStatus.cancelled:
-      return 'Đã hủy';
-  }
 }
 
 String _statusLabelFromBackend(String status) {

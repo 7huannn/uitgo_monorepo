@@ -16,6 +16,9 @@ dependencies:
   intl: ^0.19.0
   flutter_secure_storage: ^9.2.0              # API calls (optional, để sau này)
   web_socket_channel: ^2.4.0
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  flutter_map_cancellable_tile_provider: ^3.0.2
 
 dev_dependencies:
   flutter_test:
