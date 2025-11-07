@@ -3,17 +3,57 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// đường dẫn tới core theo cấu trúc thư mục bạn gửi:
 import '../../../core/config/config.dart';
 import '../../../core/network/dio_client.dart';
+
+class AuthException implements Exception {
+  const AuthException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+class UserProfile {
+  const UserProfile({
+    required this.id,
+    required this.email,
+    required this.name,
+    this.phone,
+    this.createdAt,
+  });
+
+  final String id;
+  final String email;
+  final String name;
+  final String? phone;
+  final DateTime? createdAt;
+
+  factory UserProfile.fromJson(Map<String, dynamic> json) {
+    return UserProfile(
+      id: json['id'] as String? ?? '',
+      email: json['email'] as String? ?? '',
+      name: json['name'] as String? ?? '',
+      phone: json['phone'] as String?,
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? ''),
+    );
+  }
+
+  Map<String, String?> toCache() => {
+        'id': id,
+        'email': email,
+        'name': name,
+        'phone': phone,
+      };
+}
 
 class AuthService {
   static const String _keyToken = 'auth_token';
   static const String _keyUserId = 'user_id';
   static const String _keyUserEmail = 'user_email';
   static const String _keyUserName = 'user_name';
+  static const String _keyUserPhone = 'user_phone';
 
-  // Singleton
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
   AuthService._internal();
@@ -21,58 +61,34 @@ class AuthService {
   final _secure = const FlutterSecureStorage();
   final Dio _dio = DioClient().dio;
 
-  // LOGIN
   Future<bool> login({
     required String email,
     required String password,
   }) async {
     try {
       if (useMock) {
-        // --- MOCK LOCAL ---
-        await Future.delayed(const Duration(milliseconds: 600));
-        final prefs = await SharedPreferences.getInstance();
-        final token = 'demo_token_${DateTime.now().millisecondsSinceEpoch}';
-        await prefs.setString(_keyToken, token);
-        await prefs.setString(_keyUserId, 'user_123');
-        await prefs.setString(_keyUserEmail, email);
-        await prefs.setString(_keyUserName, 'Demo User');
-        await _secure.write(key: _keyToken, value: token); // để interceptor đọc
+        await _persistMockSession(email: email, name: 'Demo User');
         return true;
       }
 
-      // --- API THẬT ---
       final res = await _dio.post('/auth/login', data: {
         'email': email,
         'password': password,
       });
 
       if (res.statusCode == 200 && res.data is Map<String, dynamic>) {
-        final data = res.data as Map<String, dynamic>;
-        final token = data['token'] as String? ?? '';
-        if (token.isEmpty) return false;
-
-        await _secure.write(key: _keyToken, value: token);
-
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_keyToken, token);
-        await prefs.setString(_keyUserId, '${data['id'] ?? ''}');
-        await prefs.setString(_keyUserEmail, '${data['email'] ?? ''}');
-        await prefs.setString(_keyUserName, '${data['name'] ?? ''}');
+        await _persistSession(res.data as Map<String, dynamic>);
         return true;
       }
       return false;
     } on DioException catch (e) {
-      // Inspect e.response?.statusCode / data nếu cần show message
-      print(
-          'Login DioException: ${e.response?.statusCode} ${e.response?.data}');
-      return false;
-    } catch (e) {
-      print('Login error: $e');
-      return false;
+      if (e.response?.statusCode == 401) {
+        return false;
+      }
+      rethrow;
     }
   }
 
-  // REGISTER
   Future<bool> register({
     required String email,
     required String password,
@@ -81,8 +97,8 @@ class AuthService {
   }) async {
     try {
       if (useMock) {
-        await Future.delayed(const Duration(milliseconds: 500));
-        return email.isNotEmpty && password.isNotEmpty && name.isNotEmpty;
+        await _persistMockSession(email: email, name: name);
+        return true;
       }
 
       final res = await _dio.post('/auth/register', data: {
@@ -94,31 +110,20 @@ class AuthService {
 
       if ((res.statusCode == 201 || res.statusCode == 200) &&
           res.data is Map<String, dynamic>) {
-        final data = res.data as Map<String, dynamic>;
-        final token = data['token'] as String? ?? '';
-        if (token.isEmpty) return false;
-
-        await _secure.write(key: _keyToken, value: token);
-
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_keyToken, token);
-        await prefs.setString(_keyUserId, '${data['id'] ?? ''}');
-        await prefs.setString(_keyUserEmail, '${data['email'] ?? ''}');
-        await prefs.setString(_keyUserName, '${data['name'] ?? ''}');
+        await _persistSession(res.data as Map<String, dynamic>);
         return true;
       }
       return false;
     } on DioException catch (e) {
-      print(
-          'Register DioException: ${e.response?.statusCode} ${e.response?.data}');
-      return false;
-    } catch (e) {
-      print('Register error: $e');
-      return false;
+      if (e.response?.statusCode == 409) {
+        throw const AuthException(
+          'Email đã tồn tại — vui lòng đăng nhập.',
+        );
+      }
+      throw const AuthException('Đăng ký thất bại, vui lòng thử lại.');
     }
   }
 
-  // RESET PASSWORD (quên mật khẩu)
   Future<bool> resetPassword({required String email}) async {
     try {
       if (useMock) {
@@ -126,98 +131,106 @@ class AuthService {
         return email.isNotEmpty;
       }
 
-      // Đổi endpoint theo BE của bạn (ví dụ: /auth/forgot-password)
       final res =
           await _dio.post('/auth/forgot-password', data: {'email': email});
       return res.statusCode == 200;
-    } on DioException catch (e) {
-      print(
-          'Reset password DioException: ${e.response?.statusCode} ${e.response?.data}');
-      return false;
-    } catch (e) {
-      print('Reset password error: $e');
+    } on DioException {
       return false;
     }
   }
 
-  // LOGOUT
   Future<void> logout() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_keyToken);
-      await prefs.remove(_keyUserId);
-      await prefs.remove(_keyUserEmail);
-      await prefs.remove(_keyUserName);
-      await _secure.delete(key: _keyToken);
-    } catch (e) {
-      print('Logout error: $e');
-    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyToken);
+    await prefs.remove(_keyUserId);
+    await prefs.remove(_keyUserEmail);
+    await prefs.remove(_keyUserName);
+    await prefs.remove(_keyUserPhone);
+    await _secure.delete(key: _keyToken);
   }
 
-  // CHECK ĐÃ ĐĂNG NHẬP CHƯA
   Future<bool> isLoggedIn() async {
-    try {
-      final token = await _secure.read(key: _keyToken);
-      return token != null && token.isNotEmpty;
-    } catch (e) {
-      return false;
-    }
+    final token = await _secure.read(key: _keyToken);
+    return token != null && token.isNotEmpty;
   }
 
-  // LẤY USER INFO (từ cache local)
   Future<Map<String, String?>> getUserInfo() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      return {
-        'userId': prefs.getString(_keyUserId),
-        'email': prefs.getString(_keyUserEmail),
-        'name': prefs.getString(_keyUserName),
-      };
-    } catch (e) {
-      return {};
-    }
+    final prefs = await SharedPreferences.getInstance();
+    return {
+      'userId': prefs.getString(_keyUserId),
+      'email': prefs.getString(_keyUserEmail),
+      'name': prefs.getString(_keyUserName),
+      'phone': prefs.getString(_keyUserPhone),
+    };
   }
 
-  // LẤY TOKEN (từ secure storage)
   Future<String?> getToken() async {
+    return _secure.read(key: _keyToken);
+  }
+
+  Future<UserProfile?> me({bool forceRefresh = false}) async {
+    if (useMock) {
+      return const UserProfile(
+        id: 'mock-user',
+        email: 'mock@example.com',
+        name: 'UIT-Go Rider',
+        phone: '0900000000',
+      );
+    }
+
+    if (!forceRefresh) {
+      final cached = await _readCachedProfile();
+      if (cached != null) return cached;
+    }
+
     try {
-      return await _secure.read(key: _keyToken);
-    } catch (e) {
+      final res = await _dio.get('/auth/me');
+      if (res.statusCode == 200 && res.data is Map<String, dynamic>) {
+        final profile = UserProfile.fromJson(res.data as Map<String, dynamic>);
+        await _cacheProfile(profile);
+        return profile;
+      }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        return null;
+      }
+      rethrow;
+    }
+    return null;
+  }
+
+  Future<UserProfile?> updateMe({String? name, String? phone}) async {
+    if (useMock) {
+      final updated = UserProfile(
+        id: 'mock-user',
+        email: 'mock@example.com',
+        name: name ?? 'UIT-Go Rider',
+        phone: phone ?? '0900000000',
+      );
+      await _cacheProfile(updated);
+      return updated;
+    }
+
+    try {
+      final payload = <String, dynamic>{};
+      if (name != null) payload['name'] = name;
+      if (phone != null) payload['phone'] = phone;
+
+      final res = await _dio.patch('/users/me', data: payload);
+      if (res.statusCode == 200 && res.data is Map<String, dynamic>) {
+        final profile = UserProfile.fromJson(res.data as Map<String, dynamic>);
+        await _cacheProfile(profile);
+        return profile;
+      }
       return null;
+    } on DioException catch (e) {
+      throw AuthException(
+        e.response?.data?['error']?.toString() ??
+            'Không thể cập nhật thông tin. Vui lòng thử lại.',
+      );
     }
   }
 
-  // UPDATE PROFILE
-  Future<bool> updateProfile({String? name, String? phone}) async {
-    try {
-      if (useMock) {
-        final prefs = await SharedPreferences.getInstance();
-        if (name != null) await prefs.setString(_keyUserName, name);
-        return true;
-      }
-
-      final res = await _dio.put('/auth/profile', data: {
-        if (name != null) 'name': name,
-        if (phone != null) 'phone': phone,
-      });
-
-      if (res.statusCode == 200) {
-        // Cập nhật cache local nếu BE trả lại user mới
-        final prefs = await SharedPreferences.getInstance();
-        final data = res.data;
-        if (data is Map && data['name'] != null) {
-          await prefs.setString(_keyUserName, '${data['name']}');
-        }
-        return true;
-      }
-      return false;
-    } catch (e) {
-      print('Update profile error: $e');
-      return false;
-    }
-  }
-
-  // ĐỔI MẬT KHẨU
   Future<bool> changePassword({
     required String currentPassword,
     required String newPassword,
@@ -234,9 +247,62 @@ class AuthService {
       });
 
       return res.statusCode == 200;
-    } catch (e) {
-      print('Change password error: $e');
+    } on DioException {
       return false;
     }
+  }
+
+  Future<void> _persistSession(Map<String, dynamic> data) async {
+    final token = data['token'] as String? ?? '';
+    if (token.isNotEmpty) {
+      await _secure.write(key: _keyToken, value: token);
+    }
+
+    final profile = UserProfile(
+      id: '${data['id'] ?? ''}',
+      email: '${data['email'] ?? ''}',
+      name: '${data['name'] ?? ''}',
+    );
+    await _cacheProfile(profile);
+  }
+
+  Future<void> _persistMockSession({
+    required String email,
+    required String name,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final mockToken = 'mock-token-${DateTime.now().millisecondsSinceEpoch}';
+    await prefs.setString(_keyToken, mockToken);
+    await prefs.setString(_keyUserId, 'mock-user');
+    await prefs.setString(_keyUserEmail, email);
+    await prefs.setString(_keyUserName, name);
+    await prefs.setString(_keyUserPhone, '0900000000');
+    await _secure.write(key: _keyToken, value: mockToken);
+  }
+
+  Future<void> _cacheProfile(UserProfile profile) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyUserId, profile.id);
+    await prefs.setString(_keyUserEmail, profile.email);
+    await prefs.setString(_keyUserName, profile.name);
+    if (profile.phone != null) {
+      await prefs.setString(_keyUserPhone, profile.phone!);
+    }
+  }
+
+  Future<UserProfile?> _readCachedProfile() async {
+    final prefs = await SharedPreferences.getInstance();
+    final id = prefs.getString(_keyUserId);
+    final email = prefs.getString(_keyUserEmail);
+    final name = prefs.getString(_keyUserName);
+    if (id == null || email == null || name == null) {
+      return null;
+    }
+    return UserProfile(
+      id: id,
+      email: email,
+      name: name,
+      phone: prefs.getString(_keyUserPhone),
+    );
   }
 }

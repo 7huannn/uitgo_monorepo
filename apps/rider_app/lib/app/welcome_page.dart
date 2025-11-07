@@ -1,6 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lottie/lottie.dart';
+import 'package:rider_app/app/router.dart';
+import 'package:rider_app/core/config/config.dart';
+import 'package:rider_app/features/auth/services/auth_service.dart';
 
 /// Splash/Welcome hiển thị khi mở app.
 /// - Luôn hiện animation.
@@ -14,44 +18,45 @@ class WelcomePage extends StatefulWidget {
 
 class _WelcomePageState extends State<WelcomePage>
     with TickerProviderStateMixin {
-  late final AnimationController _c;
-  bool _navigated = false; // ngăn điều hướng 2 lần nếu hot-reload
+  late final AnimationController _controller;
+  final AuthService _authService = AuthService();
+  bool _navigated = false;
+  bool _animationBound = false;
 
   @override
   void initState() {
     super.initState();
-    _c = AnimationController(vsync: this);
-    // Khi animation hoàn tất -> điều hướng.
-    _c.addStatusListener((status) {
+    _controller = AnimationController(vsync: this);
+    _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed && !_navigated) {
-        _navigated = true;
         _goNext();
       }
     });
   }
 
   Future<void> _goNext() async {
-    // TODO: thay bằng AuthService thật của bạn.
-    final loggedIn = await _fakeIsLoggedIn();
+    if (_navigated) return;
+    final loggedIn = await _authService.isLoggedIn();
+    if (loggedIn && !useMock) {
+      try {
+        await _authService.me();
+      } catch (_) {
+        // ignore profile refresh errors during splash
+      }
+    }
 
     if (!mounted) return;
+    _navigated = true;
     if (loggedIn) {
-      // vào thẳng Home, không cho back về Welcome
-      Navigator.of(context).pushReplacementNamed('/home');
+      context.goNamed(AppRouteNames.home);
     } else {
-      Navigator.of(context).pushReplacementNamed('/login');
+      context.goNamed(AppRouteNames.login);
     }
-  }
-
-  // Mock check đăng nhập – thay bằng storage/secure storage của bạn.
-  Future<bool> _fakeIsLoggedIn() async {
-    await Future.delayed(const Duration(milliseconds: 200)); // giả lập I/O
-    return false; // chỉnh true để test case đã đăng nhập
   }
 
   @override
   void dispose() {
-    _c.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
@@ -62,15 +67,14 @@ class _WelcomePageState extends State<WelcomePage>
       body: Center(
         child: Lottie.asset(
           'assets/Welcome.json',
-          controller: _c,
+          controller: _controller,
           width: 300,
           height: 150,
           fit: BoxFit.contain,
           onLoaded: (comp) {
-            debugPrint(
-              '✅ Lottie loaded, duration = ${comp.duration.inMilliseconds} ms',
-            );
-            _c
+            if (_animationBound) return;
+            _animationBound = true;
+            _controller
               ..duration = comp.duration
               ..forward(from: 0);
           },
@@ -79,10 +83,7 @@ class _WelcomePageState extends State<WelcomePage>
             // Nếu lỗi asset, chờ 800ms rồi điều hướng luôn để không kẹt ở đây
             Future.microtask(() async {
               await Future.delayed(const Duration(milliseconds: 800));
-              if (!_navigated) {
-                _navigated = true;
-                _goNext();
-              }
+              await _goNext();
             });
             return const Text(
               'Không tải được assets/Welcome.json',

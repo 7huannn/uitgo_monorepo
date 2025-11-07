@@ -11,21 +11,12 @@ class UITApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'UIT-Go Rider',
       debugShowCheckedModeBanner: false,
-
-      // Theme sáng
       theme: buildLightTheme(),
-
-      // Force light mode (không dùng dark mode)
       themeMode: ThemeMode.light,
-
-      // Định nghĩa route
-      onGenerateRoute: buildRoutes(),
-
-      // Mở mặc định trang welcome
-      initialRoute: AppRoutes.welcome,
+      routerConfig: appRouter,
     );
   }
 }

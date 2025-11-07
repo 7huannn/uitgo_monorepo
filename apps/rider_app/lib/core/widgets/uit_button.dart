@@ -18,7 +18,9 @@ class UITButton extends StatelessWidget {
       onPressed: loading ? null : onPressed,
       child: loading
           ? const SizedBox(
-              height: 22, width: 22, child: CircularProgressIndicator(strokeWidth: 2),
+              height: 22,
+              width: 22,
+              child: CircularProgressIndicator(strokeWidth: 2),
             )
           : Text(label),
     );

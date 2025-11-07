@@ -94,3 +94,30 @@ class TripRealtimeEvent {
 }
 
 enum RealtimeEventType { status, location }
+
+class PagedTrips {
+  PagedTrips({
+    required this.items,
+    required this.total,
+    required this.limit,
+    required this.offset,
+  });
+
+  final List<TripDetail> items;
+  final int total;
+  final int limit;
+  final int offset;
+
+  factory PagedTrips.fromJson(Map<String, dynamic> json) {
+    final itemsJson = json['items'] as List<dynamic>? ?? [];
+    return PagedTrips(
+      items: itemsJson
+          .whereType<Map<String, dynamic>>()
+          .map(TripDetail.fromJson)
+          .toList(),
+      total: (json['total'] as num?)?.toInt() ?? 0,
+      limit: (json['limit'] as num?)?.toInt() ?? itemsJson.length,
+      offset: (json['offset'] as num?)?.toInt() ?? 0,
+    );
+  }
+}

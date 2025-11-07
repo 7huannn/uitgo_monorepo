@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:rider_app/app/router.dart';
 import 'package:rider_app/features/auth/services/auth_service.dart';
 import 'package:rider_app/features/trip/models/trip_models.dart';
@@ -63,10 +64,10 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  void _logout(BuildContext context) {
-    AuthService().logout();
-    Navigator.of(context)
-        .pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+  Future<void> _logout() async {
+    await AuthService().logout();
+    if (!mounted) return;
+    context.goNamed(AppRouteNames.login);
   }
 
   Future<void> _refreshHome() async {
@@ -574,13 +575,7 @@ class _HomePageState extends State<HomePage> {
               IconButton(
                 icon: const Icon(Icons.notifications_none,
                     color: Colors.white, size: 28),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text(
-                            'Bạn đang xem bản demo, tính năng thông báo sẽ có sớm!')),
-                  );
-                },
+                onPressed: () => context.pushNamed(AppRouteNames.notifications),
               ),
               Positioned(
                 right: 6,
@@ -1063,12 +1058,14 @@ class _HomePageState extends State<HomePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(20, 24, 20, 12),
           child: Row(
-            children: const [
-              Text('Địa điểm yêu thích',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            children: [
+              Text(
+                'Địa điểm yêu thích',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
             ],
           ),
         ),
@@ -1598,10 +1595,49 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _showProfileMenu(BuildContext context) {
+    final rootContext = context;
+    const menuItems = [
+      _MenuItemData(
+        icon: Icons.person_outline,
+        title: 'Thông tin cá nhân',
+        routeName: AppRouteNames.profile,
+      ),
+      _MenuItemData(
+        icon: Icons.history,
+        title: 'Lịch sử chuyến đi',
+        routeName: AppRouteNames.tripHistory,
+      ),
+      _MenuItemData(
+        icon: Icons.payment,
+        title: 'Phương thức thanh toán',
+        routeName: AppRouteNames.payments,
+      ),
+      _MenuItemData(
+        icon: Icons.location_on_outlined,
+        title: 'Địa điểm đã lưu',
+        routeName: AppRouteNames.savedPlaces,
+      ),
+      _MenuItemData(
+        icon: Icons.settings_outlined,
+        title: 'Cài đặt',
+        routeName: AppRouteNames.settings,
+      ),
+      _MenuItemData(
+        icon: Icons.help_outline,
+        title: 'Trợ giúp & Hỗ trợ',
+        routeName: AppRouteNames.help,
+      ),
+      _MenuItemData(
+        icon: Icons.logout,
+        title: 'Đăng xuất',
+        color: Color(0xFFEF5350),
+      ),
+    ];
+
     showModalBottomSheet(
-      context: context,
+      context: rootContext,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
+      builder: (sheetContext) => Container(
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -1619,46 +1655,22 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
             const SizedBox(height: 24),
-            _buildMenuItem(
-              icon: Icons.person_outline,
-              title: 'Thông tin cá nhân',
-              onTap: () => Navigator.pop(context),
-            ),
-            _buildMenuItem(
-              icon: Icons.history,
-              title: 'Lịch sử chuyến đi',
-              onTap: () => Navigator.pop(context),
-            ),
-            _buildMenuItem(
-              icon: Icons.payment,
-              title: 'Phương thức thanh toán',
-              onTap: () => Navigator.pop(context),
-            ),
-            _buildMenuItem(
-              icon: Icons.location_on_outlined,
-              title: 'Địa điểm đã lưu',
-              onTap: () => Navigator.pop(context),
-            ),
-            _buildMenuItem(
-              icon: Icons.settings_outlined,
-              title: 'Cài đặt',
-              onTap: () => Navigator.pop(context),
-            ),
-            _buildMenuItem(
-              icon: Icons.help_outline,
-              title: 'Trợ giúp & Hỗ trợ',
-              onTap: () => Navigator.pop(context),
-            ),
-            const Divider(height: 1),
-            _buildMenuItem(
-              icon: Icons.logout,
-              title: 'Đăng xuất',
-              color: Colors.red[400],
-              onTap: () {
-                Navigator.pop(context);
-                _logout(context);
-              },
-            ),
+            for (final item in menuItems) ...[
+              _buildMenuItem(
+                icon: item.icon,
+                title: item.title,
+                color: item.color,
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  if (item.routeName != null) {
+                    rootContext.pushNamed(item.routeName!);
+                  } else {
+                    await _logout();
+                  }
+                },
+              ),
+              if (item != menuItems.last) const Divider(height: 1),
+            ],
             const SizedBox(height: 24),
           ],
         ),
@@ -1686,6 +1698,20 @@ class _HomePageState extends State<HomePage> {
       onTap: onTap,
     );
   }
+}
+
+class _MenuItemData {
+  const _MenuItemData({
+    required this.icon,
+    required this.title,
+    this.routeName,
+    this.color,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? routeName;
+  final Color? color;
 }
 
 class _HomeSnapshot {

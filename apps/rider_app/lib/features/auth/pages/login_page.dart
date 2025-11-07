@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:rider_app/app/router.dart';
 import 'package:rider_app/core/widgets/uit_button.dart';
 import 'package:rider_app/features/auth/services/auth_service.dart';
@@ -15,7 +16,7 @@ class _LoginPageState extends State<LoginPage> {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _authService = AuthService();
-  
+
   bool _loading = false;
   bool _obscurePassword = true;
 
@@ -28,24 +29,22 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _onLogin() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    
+
     setState(() => _loading = true);
-    
+
     try {
       final success = await _authService.login(
         email: _emailCtrl.text.trim(),
         password: _passCtrl.text,
       );
-      
+
       if (!mounted) return;
-      
+
       if (success) {
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRoutes.home,
-          (route) => false,
-        );
+        context.goNamed(AppRouteNames.home);
       } else {
-        _showErrorDialog('Đăng nhập thất bại', 'Email hoặc mật khẩu không đúng');
+        _showErrorDialog(
+            'Đăng nhập thất bại', 'Email hoặc mật khẩu không đúng');
       }
     } catch (e) {
       if (!mounted) return;
@@ -74,18 +73,18 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _navigateToForgotPassword() {
-    Navigator.pushNamed(context, AppRoutes.forgotPassword);
+    context.pushNamed(AppRouteNames.forgotPassword);
   }
 
   void _navigateToRegister() {
-    Navigator.pushNamed(context, AppRoutes.register);
+    context.pushNamed(AppRouteNames.register);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     return Scaffold(
       backgroundColor: colorScheme.surface,
       body: SafeArea(
@@ -137,7 +136,8 @@ class _LoginPageState extends State<LoginPage> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           filled: true,
-                          fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                          fillColor: colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.3),
                         ),
                         keyboardType: TextInputType.emailAddress,
                         textInputAction: TextInputAction.next,
@@ -145,7 +145,8 @@ class _LoginPageState extends State<LoginPage> {
                           if (v == null || v.isEmpty) {
                             return 'Vui lòng nhập email';
                           }
-                          if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(v)) {
+                          if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                              .hasMatch(v)) {
                             return 'Email không hợp lệ';
                           }
                           return null;
@@ -167,14 +168,16 @@ class _LoginPageState extends State<LoginPage> {
                                   : Icons.visibility_off_outlined,
                             ),
                             onPressed: () {
-                              setState(() => _obscurePassword = !_obscurePassword);
+                              setState(
+                                  () => _obscurePassword = !_obscurePassword);
                             },
                           ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                           filled: true,
-                          fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                          fillColor: colorScheme.surfaceContainerHighest
+                              .withValues(alpha: 0.3),
                         ),
                         obscureText: _obscurePassword,
                         textInputAction: TextInputAction.done,

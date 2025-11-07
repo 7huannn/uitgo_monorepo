@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:rider_app/app/router.dart';
 import 'package:rider_app/core/widgets/uit_button.dart';
 import 'package:rider_app/features/auth/services/auth_service.dart';
@@ -18,7 +19,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _passCtrl = TextEditingController();
   final _confirmPassCtrl = TextEditingController();
   final _authService = AuthService();
-  
+
   bool _loading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -35,15 +36,16 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Future<void> _onRegister() async {
+    if (_loading) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    
+
     if (!_agreedToTerms) {
       _showErrorDialog('Lỗi', 'Vui lòng đồng ý với điều khoản sử dụng');
       return;
     }
-    
+
     setState(() => _loading = true);
-    
+
     try {
       final success = await _authService.register(
         email: _emailCtrl.text.trim(),
@@ -51,17 +53,17 @@ class _RegisterPageState extends State<RegisterPage> {
         name: _nameCtrl.text.trim(),
         phone: _phoneCtrl.text.trim(),
       );
-      
+
       if (!mounted) return;
-      
+
       if (success) {
-        Navigator.of(context).pushNamedAndRemoveUntil(
-          AppRoutes.home,
-          (route) => false,
-        );
+        context.goNamed(AppRouteNames.home);
       } else {
         _showErrorDialog('Đăng ký thất bại', 'Vui lòng thử lại sau');
       }
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      _showErrorDialog('Không thể đăng ký', e.message);
     } catch (e) {
       if (!mounted) return;
       _showErrorDialog('Lỗi', 'Có lỗi xảy ra: ${e.toString()}');
@@ -92,7 +94,7 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Đăng ký'),
@@ -141,7 +143,8 @@ class _RegisterPageState extends State<RegisterPage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     filled: true,
-                    fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                    fillColor:
+                        colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                   ),
                   textCapitalization: TextCapitalization.words,
                   textInputAction: TextInputAction.next,
@@ -168,7 +171,8 @@ class _RegisterPageState extends State<RegisterPage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     filled: true,
-                    fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                    fillColor:
+                        colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                   ),
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
@@ -176,7 +180,8 @@ class _RegisterPageState extends State<RegisterPage> {
                     if (v == null || v.isEmpty) {
                       return 'Vui lòng nhập email';
                     }
-                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(v)) {
+                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                        .hasMatch(v)) {
                       return 'Email không hợp lệ';
                     }
                     return null;
@@ -195,7 +200,8 @@ class _RegisterPageState extends State<RegisterPage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     filled: true,
-                    fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                    fillColor:
+                        colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                   ),
                   keyboardType: TextInputType.phone,
                   textInputAction: TextInputAction.next,
@@ -232,7 +238,8 @@ class _RegisterPageState extends State<RegisterPage> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     filled: true,
-                    fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                    fillColor:
+                        colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                   ),
                   obscureText: _obscurePassword,
                   textInputAction: TextInputAction.next,
@@ -262,14 +269,16 @@ class _RegisterPageState extends State<RegisterPage> {
                             : Icons.visibility_off_outlined,
                       ),
                       onPressed: () {
-                        setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
+                        setState(() =>
+                            _obscureConfirmPassword = !_obscureConfirmPassword);
                       },
                     ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     filled: true,
-                    fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                    fillColor:
+                        colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
                   ),
                   obscureText: _obscureConfirmPassword,
                   textInputAction: TextInputAction.done,
@@ -337,7 +346,7 @@ class _RegisterPageState extends State<RegisterPage> {
                       style: TextStyle(color: colorScheme.onSurfaceVariant),
                     ),
                     TextButton(
-                      onPressed: () => Navigator.pop(context),
+                      onPressed: () => context.goNamed(AppRouteNames.login),
                       child: Text(
                         'Đăng nhập',
                         style: TextStyle(

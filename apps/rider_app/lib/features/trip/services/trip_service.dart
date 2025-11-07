@@ -38,19 +38,6 @@ class TripService {
       );
     }
 
-    final userInfo = await _auth.getUserInfo();
-    final userId = userInfo['userId']?.trim().isNotEmpty == true
-        ? userInfo['userId']!
-        : 'demo-user';
-
-    final token = await _auth.getToken();
-    final headers = <String, dynamic>{
-      'X-User-Id': userId,
-    };
-    if (token != null && token.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $token';
-    }
-
     final response = await _dio.post(
       '/v1/trips',
       data: {
@@ -58,10 +45,47 @@ class TripService {
         'destText': destText,
         'serviceId': serviceId,
       },
-      options: Options(headers: headers),
     );
 
     return TripDetail.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<PagedTrips> listTrips({
+    required String role,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    if (useMock) {
+      final now = DateTime.now();
+      final trips = List.generate(
+        5,
+        (index) => TripDetail(
+          id: 'mock-trip-$index',
+          riderId: 'demo-user',
+          serviceId: 'UIT-Go',
+          originText: 'UIT Campus ${index + 1}',
+          destText: 'KTX ${index + 1}',
+          status: index % 2 == 0 ? 'completed' : 'cancelled',
+          createdAt: now.subtract(Duration(days: index)),
+          updatedAt: now.subtract(Duration(days: index)),
+        ),
+      );
+      final slice = trips.skip(offset).take(limit).toList();
+      return PagedTrips(
+        items: slice,
+        total: trips.length,
+        limit: limit,
+        offset: offset,
+      );
+    }
+
+    final res = await _dio.get('/v1/trips', queryParameters: {
+      'role': role,
+      'limit': limit,
+      'offset': offset,
+    });
+
+    return PagedTrips.fromJson(res.data as Map<String, dynamic>);
   }
 
   Future<Stream<TripRealtimeEvent>> connectToTrip(String tripId,

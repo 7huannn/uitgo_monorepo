@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:rider_app/core/widgets/uit_button.dart';
 import 'package:rider_app/features/auth/services/auth_service.dart';
 
@@ -13,7 +14,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _authService = AuthService();
-  
+
   bool _loading = false;
   bool _emailSent = false;
 
@@ -25,16 +26,16 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
   Future<void> _onSubmit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    
+
     setState(() => _loading = true);
-    
+
     try {
       final success = await _authService.resetPassword(
         email: _emailCtrl.text.trim(),
       );
-      
+
       if (!mounted) return;
-      
+
       if (success) {
         setState(() => _emailSent = true);
       } else {
@@ -58,7 +59,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         content: Text(message),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => context.pop(),
             child: const Text('OK'),
           ),
         ],
@@ -76,7 +77,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         appBar: AppBar(
           leading: IconButton(
             icon: const Icon(Icons.close),
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => context.pop(),
           ),
         ),
         body: SafeArea(
@@ -109,7 +110,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                 ),
                 const SizedBox(height: 32),
                 FilledButton.icon(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => context.pop(),
                   icon: const Icon(Icons.arrow_back),
                   label: const Text('Quay lại đăng nhập'),
                   style: FilledButton.styleFrom(
@@ -182,7 +183,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         filled: true,
-                        fillColor: colorScheme.surfaceContainerHighest.withOpacity(0.3),
+                        fillColor: colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.3),
                       ),
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.done,
@@ -191,7 +193,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                         if (v == null || v.isEmpty) {
                           return 'Vui lòng nhập email';
                         }
-                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(v)) {
+                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                            .hasMatch(v)) {
                           return 'Email không hợp lệ';
                         }
                         return null;

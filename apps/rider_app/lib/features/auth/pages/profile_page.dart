@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:rider_app/app/router.dart';
 import 'package:rider_app/features/auth/services/auth_service.dart';
 
@@ -11,60 +12,76 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final _authService = AuthService();
-  Map<String, String?> _userInfo = {};
+  final _nameCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+
+  UserProfile? _profile;
   bool _loading = true;
+  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    _loadUserInfo();
+    _loadProfile();
   }
 
-  Future<void> _loadUserInfo() async {
-    final info = await _authService.getUserInfo();
-    setState(() {
-      _userInfo = info;
-      _loading = false;
-    });
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _phoneCtrl.dispose();
+    super.dispose();
   }
 
-  Future<void> _onLogout() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Đăng xuất'),
-        content: const Text('Bạn có chắc chắn muốn đăng xuất?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Hủy'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
-            child: const Text('Đăng xuất'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true) {
-      await _authService.logout();
-      if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        AppRoutes.login,
-        (route) => false,
-      );
+  Future<void> _loadProfile() async {
+    setState(() => _loading = true);
+    final profile = await _authService.me();
+    _profile = profile;
+    _nameCtrl.text = profile?.name ?? '';
+    _phoneCtrl.text = profile?.phone ?? '';
+    if (mounted) {
+      setState(() => _loading = false);
     }
+  }
+
+  Future<void> _saveProfile() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final updated = await _authService.updateMe(
+        name: _nameCtrl.text.trim(),
+        phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
+      );
+      if (!mounted) return;
+      if (updated != null) {
+        _profile = updated;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã cập nhật thông tin.')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Không thể cập nhật thông tin.')),
+        );
+      }
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  Future<void> _logout() async {
+    await _authService.logout();
+    if (!mounted) return;
+    context.goNamed(AppRouteNames.login);
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
     if (_loading) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
@@ -74,179 +91,131 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Tài khoản'),
-        centerTitle: true,
       ),
       body: SafeArea(
-        child: ListView(
-          children: [
-            // Header với avatar
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    colorScheme.primaryContainer,
-                    colorScheme.secondaryContainer,
-                  ],
-                ),
-              ),
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundColor: colorScheme.primary,
-                    child: Text(
-                      _userInfo['name']?.substring(0, 1).toUpperCase() ?? 'U',
-                      style: theme.textTheme.headlineLarge?.copyWith(
-                        color: colorScheme.onPrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    _userInfo['name'] ?? 'User',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _userInfo['email'] ?? '',
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Thông tin tài khoản
-            _buildSection(
-              context,
-              'Thông tin cá nhân',
-              [
-                _buildListTile(
-                  context,
-                  icon: Icons.person_outline,
-                  title: 'Chỉnh sửa hồ sơ',
-                  onTap: () {
-                    // TODO: Navigate to edit profile
-                  },
-                ),
-                _buildListTile(
-                  context,
-                  icon: Icons.lock_outline,
-                  title: 'Đổi mật khẩu',
-                  onTap: () {
-                    // TODO: Navigate to change password
-                  },
-                ),
-              ],
-            ),
-
-            // Cài đặt
-            _buildSection(
-              context,
-              'Cài đặt',
-              [
-                _buildListTile(
-                  context,
-                  icon: Icons.notifications_outlined,
-                  title: 'Thông báo',
-                  onTap: () {
-                    // TODO: Navigate to notifications settings
-                  },
-                ),
-                _buildListTile(
-                  context,
-                  icon: Icons.language_outlined,
-                  title: 'Ngôn ngữ',
-                  trailing: const Text('Tiếng Việt'),
-                  onTap: () {
-                    // TODO: Navigate to language settings
-                  },
-                ),
-                _buildListTile(
-                  context,
-                  icon: Icons.dark_mode_outlined,
-                  title: 'Chế độ tối',
-                  trailing: Switch(
-                    value: false,
-                    onChanged: (value) {
-                      // TODO: Toggle dark mode
-                    },
-                  ),
-                ),
-              ],
-            ),
-
-            // Hỗ trợ
-            _buildSection(
-              context,
-              'Hỗ trợ',
-              [
-                _buildListTile(
-                  context,
-                  icon: Icons.help_outline,
-                  title: 'Trung tâm trợ giúp',
-                  onTap: () {
-                    // TODO: Navigate to help center
-                  },
-                ),
-                _buildListTile(
-                  context,
-                  icon: Icons.privacy_tip_outlined,
-                  title: 'Chính sách bảo mật',
-                  onTap: () {
-                    // TODO: Navigate to privacy policy
-                  },
-                ),
-                _buildListTile(
-                  context,
-                  icon: Icons.description_outlined,
-                  title: 'Điều khoản sử dụng',
-                  onTap: () {
-                    // TODO: Navigate to terms of service
-                  },
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-
-            // Nút đăng xuất
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: FilledButton.icon(
-                onPressed: _onLogout,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(context),
+              const SizedBox(height: 24),
+              _buildProfileForm(context),
+              const SizedBox(height: 24),
+              _buildQuickLinks(context),
+              const SizedBox(height: 32),
+              OutlinedButton.icon(
+                onPressed: _logout,
                 icon: const Icon(Icons.logout),
                 label: const Text('Đăng xuất'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.red),
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    final initials = (_profile?.name.isNotEmpty == true
+            ? _profile!.name[0].toUpperCase()
+            : 'U')
+        .toUpperCase();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          colors: [
+            Theme.of(context).primaryColor.withValues(alpha: 0.12),
+            Theme.of(context).colorScheme.secondary.withValues(alpha: 0.12),
+          ],
+        ),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 36,
+            backgroundColor: Theme.of(context).primaryColor,
+            child: Text(
+              initials,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
               ),
             ),
-
-            const SizedBox(height: 8),
-
-            // Version
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  'Version 1.0.0',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _profile?.name ?? 'UIT-Go Rider',
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  _profile?.email ?? '',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileForm(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Thông tin cá nhân',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _nameCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Họ và tên',
+                prefixIcon: Icon(Icons.person_outline),
               ),
+              textCapitalization: TextCapitalization.words,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _phoneCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Số điện thoại',
+                prefixIcon: Icon(Icons.phone_outlined),
+              ),
+              keyboardType: TextInputType.phone,
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _saving ? null : _saveProfile,
+              child: _saving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Lưu thay đổi'),
             ),
           ],
         ),
@@ -254,39 +223,69 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildSection(BuildContext context, String title, List<Widget> children) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Text(
-            title,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.primary,
-            ),
+  Widget _buildQuickLinks(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Column(
+        children: [
+          _LinkTile(
+            icon: Icons.history,
+            title: 'Lịch sử chuyến đi',
+            onTap: () => context.pushNamed(AppRouteNames.tripHistory),
           ),
-        ),
-        Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(children: children),
-        ),
-      ],
+          const Divider(height: 1),
+          _LinkTile(
+            icon: Icons.notifications_none,
+            title: 'Thông báo',
+            onTap: () => context.pushNamed(AppRouteNames.notifications),
+          ),
+          const Divider(height: 1),
+          _LinkTile(
+            icon: Icons.payment,
+            title: 'Phương thức thanh toán',
+            onTap: () => context.pushNamed(AppRouteNames.payments),
+          ),
+          const Divider(height: 1),
+          _LinkTile(
+            icon: Icons.location_on_outlined,
+            title: 'Địa điểm đã lưu',
+            onTap: () => context.pushNamed(AppRouteNames.savedPlaces),
+          ),
+          const Divider(height: 1),
+          _LinkTile(
+            icon: Icons.settings_outlined,
+            title: 'Cài đặt',
+            onTap: () => context.pushNamed(AppRouteNames.settings),
+          ),
+          const Divider(height: 1),
+          _LinkTile(
+            icon: Icons.help_outline,
+            title: 'Trợ giúp & Hỗ trợ',
+            onTap: () => context.pushNamed(AppRouteNames.help),
+          ),
+        ],
+      ),
     );
   }
+}
 
-  Widget _buildListTile(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    Widget? trailing,
-    VoidCallback? onTap,
-  }) {
+class _LinkTile extends StatelessWidget {
+  const _LinkTile({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(icon),
+      leading: Icon(icon, color: Colors.grey[700]),
       title: Text(title),
-      trailing: trailing ?? const Icon(Icons.chevron_right),
+      trailing: const Icon(Icons.chevron_right),
       onTap: onTap,
     );
   }

@@ -1,43 +1,118 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:rider_app/app/welcome_page.dart';
-import 'package:rider_app/features/auth/pages/login_page.dart';
-import 'package:rider_app/features/auth/pages/register_page.dart';
 import 'package:rider_app/features/auth/pages/forgot_password_page.dart';
+import 'package:rider_app/features/auth/pages/login_page.dart';
 import 'package:rider_app/features/auth/pages/profile_page.dart';
+import 'package:rider_app/features/auth/pages/register_page.dart';
+import 'package:rider_app/features/help/pages/help_page.dart';
 import 'package:rider_app/features/home/home_page.dart';
+import 'package:rider_app/features/notifications/pages/notifications_page.dart';
+import 'package:rider_app/features/payments/pages/payment_methods_page.dart';
+import 'package:rider_app/features/places/pages/saved_places_page.dart';
+import 'package:rider_app/features/settings/pages/settings_page.dart';
+import 'package:rider_app/features/trip/pages/trip_history_page.dart';
 
-/// Tất cả route name được gom chung tại đây
-class AppRoutes {
-  static const String welcome = '/';
-  static const String login = '/login';
-  static const String register = '/register';
-  static const String forgotPassword = '/forgot-password';
-  static const String home = '/home';
-  static const String profile = '/profile';
+class AppRouteNames {
+  static const welcome = 'welcome';
+  static const login = 'login';
+  static const register = 'register';
+  static const forgotPassword = 'forgot-password';
+  static const home = 'home';
+  static const profile = 'profile';
+  static const tripHistory = 'trip-history';
+  static const payments = 'payments';
+  static const savedPlaces = 'saved-places';
+  static const settings = 'settings';
+  static const help = 'help';
+  static const notifications = 'notifications';
 }
 
-/// Factory tạo routes cho MaterialApp
-RouteFactory buildRoutes() {
-  return (settings) {
-    switch (settings.name) {
-      case AppRoutes.welcome:
-        return MaterialPageRoute(builder: (_) => const WelcomePage());
-      case AppRoutes.login:
-        return MaterialPageRoute(builder: (_) => const LoginPage());
-      case AppRoutes.register:
-        return MaterialPageRoute(builder: (_) => const RegisterPage());
-      case AppRoutes.forgotPassword:
-        return MaterialPageRoute(builder: (_) => const ForgotPasswordPage());
-      case AppRoutes.home:
-        return MaterialPageRoute(builder: (_) => const HomePage());
-      case AppRoutes.profile:
-        return MaterialPageRoute(builder: (_) => const ProfilePage());
-      default:
-        return MaterialPageRoute(
-          builder: (_) => const Scaffold(
-            body: Center(child: Text('404 - Not Found')),
-          ),
-        );
-    }
-  };
+class AppRoutePaths {
+  static const welcome = '/';
+  static const login = '/login';
+  static const register = '/register';
+  static const forgotPassword = '/forgot-password';
+  static const home = '/home';
+  static const profile = '/profile';
+  static const tripHistory = '/trip-history';
+  static const payments = '/payments';
+  static const savedPlaces = '/saved-places';
+  static const settings = '/settings';
+  static const help = '/help';
+  static const notifications = '/notifications';
 }
+
+final GoRouter appRouter = GoRouter(
+  initialLocation: AppRoutePaths.welcome,
+  routes: [
+    GoRoute(
+      name: AppRouteNames.welcome,
+      path: AppRoutePaths.welcome,
+      builder: (context, state) => const WelcomePage(),
+    ),
+    GoRoute(
+      name: AppRouteNames.login,
+      path: AppRoutePaths.login,
+      builder: (context, state) => const LoginPage(),
+    ),
+    GoRoute(
+      name: AppRouteNames.register,
+      path: AppRoutePaths.register,
+      builder: (context, state) => const RegisterPage(),
+    ),
+    GoRoute(
+      name: AppRouteNames.forgotPassword,
+      path: AppRoutePaths.forgotPassword,
+      builder: (context, state) => const ForgotPasswordPage(),
+    ),
+    GoRoute(
+      name: AppRouteNames.home,
+      path: AppRoutePaths.home,
+      builder: (context, state) => const HomePage(),
+    ),
+    GoRoute(
+      name: AppRouteNames.profile,
+      path: AppRoutePaths.profile,
+      builder: (context, state) => const ProfilePage(),
+    ),
+    GoRoute(
+      name: AppRouteNames.tripHistory,
+      path: AppRoutePaths.tripHistory,
+      builder: (context, state) => const TripHistoryPage(),
+    ),
+    GoRoute(
+      name: AppRouteNames.payments,
+      path: AppRoutePaths.payments,
+      builder: (context, state) => const PaymentMethodsPage(),
+    ),
+    GoRoute(
+      name: AppRouteNames.savedPlaces,
+      path: AppRoutePaths.savedPlaces,
+      builder: (context, state) => const SavedPlacesPage(),
+    ),
+    GoRoute(
+      name: AppRouteNames.settings,
+      path: AppRoutePaths.settings,
+      builder: (context, state) => const SettingsPage(),
+    ),
+    GoRoute(
+      name: AppRouteNames.help,
+      path: AppRoutePaths.help,
+      builder: (context, state) => const HelpPage(),
+    ),
+    GoRoute(
+      name: AppRouteNames.notifications,
+      path: AppRoutePaths.notifications,
+      builder: (context, state) => const NotificationsPage(),
+    ),
+  ],
+  errorBuilder: (context, state) => Scaffold(
+    body: Center(
+      child: Text(
+        state.error?.toString() ?? 'Trang không tồn tại',
+        textAlign: TextAlign.center,
+      ),
+    ),
+  ),
+);
