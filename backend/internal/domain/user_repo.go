@@ -28,6 +28,7 @@ type userModel struct {
 	Email        string `gorm:"uniqueIndex"`
 	Phone        string
 	PasswordHash string
+	Role         string    `gorm:"default:rider"`
 	CreatedAt    time.Time `gorm:"autoCreateTime"`
 }
 
@@ -42,6 +43,10 @@ type gormUserRepository struct {
 func (r *gormUserRepository) Create(ctx context.Context, user *User) error {
 	id := uuid.New()
 	now := time.Now().UTC()
+	role := strings.TrimSpace(strings.ToLower(user.Role))
+	if role == "" {
+		role = "rider"
+	}
 
 	model := userModel{
 		ID:           id,
@@ -49,6 +54,7 @@ func (r *gormUserRepository) Create(ctx context.Context, user *User) error {
 		Email:        strings.ToLower(user.Email),
 		Phone:        user.Phone,
 		PasswordHash: user.PasswordHash,
+		Role:         role,
 		CreatedAt:    now,
 	}
 
@@ -58,6 +64,7 @@ func (r *gormUserRepository) Create(ctx context.Context, user *User) error {
 
 	user.ID = model.ID.String()
 	user.CreatedAt = model.CreatedAt
+	user.Role = model.Role
 	return nil
 }
 
@@ -75,6 +82,7 @@ func (r *gormUserRepository) FindByEmail(ctx context.Context, email string) (*Us
 		Email:        model.Email,
 		Phone:        model.Phone,
 		PasswordHash: model.PasswordHash,
+		Role:         model.Role,
 		CreatedAt:    model.CreatedAt,
 	}, nil
 }
@@ -96,6 +104,7 @@ func (r *gormUserRepository) FindByID(ctx context.Context, id string) (*User, er
 		Email:        model.Email,
 		Phone:        model.Phone,
 		PasswordHash: model.PasswordHash,
+		Role:         model.Role,
 		CreatedAt:    model.CreatedAt,
 	}, nil
 }

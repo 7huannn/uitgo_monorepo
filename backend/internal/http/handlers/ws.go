@@ -45,13 +45,14 @@ type outboundMessage struct {
 }
 
 type Client struct {
-	hub    *Hub
-	conn   *websocket.Conn
-	send   chan []byte
-	role   string
-	userID string
-	tripID string
-	ctx    context.Context
+	hub      *Hub
+	conn     *websocket.Conn
+	send     chan []byte
+	role     string
+	userID   string
+	tripID   string
+	driverID string
+	ctx      context.Context
 }
 
 func (c *Client) readPump(service *domain.TripService) {
@@ -93,6 +94,7 @@ func (c *Client) readPump(service *domain.TripService) {
 				log.Printf("save location: %v", err)
 				continue
 			}
+			c.persistDriverLocation(service, update)
 			c.hub.broadcastJSON(outboundMessage{
 				Type:      "location",
 				TripID:    c.tripID,
@@ -116,6 +118,37 @@ func (c *Client) readPump(service *domain.TripService) {
 			})
 		}
 	}
+}
+
+func (c *Client) persistDriverLocation(service *domain.TripService, update domain.LocationUpdate) {
+	if c.hub == nil || c.hub.driverRepo == nil {
+		return
+	}
+	driverID := c.resolveDriverID(service)
+	if driverID == "" {
+		return
+	}
+	driverLocation := &domain.DriverLocation{
+		DriverID:   driverID,
+		Latitude:   update.Latitude,
+		Longitude:  update.Longitude,
+		RecordedAt: update.Timestamp,
+	}
+	if err := c.hub.driverRepo.RecordLocation(c.ctx, driverID, driverLocation); err != nil {
+		log.Printf("save driver latest location: %v", err)
+	}
+}
+
+func (c *Client) resolveDriverID(service *domain.TripService) string {
+	if c.driverID != "" {
+		return c.driverID
+	}
+	trip, err := service.Fetch(c.ctx, c.tripID)
+	if err != nil || trip == nil || trip.DriverID == nil {
+		return ""
+	}
+	c.driverID = *trip.DriverID
+	return c.driverID
 }
 
 func (c *Client) writePump() {
@@ -148,16 +181,18 @@ func (c *Client) writePump() {
 type Hub struct {
 	tripID     string
 	service    *domain.TripService
+	driverRepo domain.DriverRepository
 	clients    map[*Client]struct{}
 	register   chan *Client
 	unregister chan *Client
 	broadcast  chan []byte
 }
 
-func newHub(tripID string, service *domain.TripService) *Hub {
+func newHub(tripID string, service *domain.TripService, driverRepo domain.DriverRepository) *Hub {
 	return &Hub{
 		tripID:     tripID,
 		service:    service,
+		driverRepo: driverRepo,
 		clients:    make(map[*Client]struct{}),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
@@ -198,16 +233,18 @@ func (h *Hub) broadcastJSON(msg outboundMessage) {
 }
 
 type HubManager struct {
-	service *domain.TripService
-	hubs    map[string]*Hub
-	mu      sync.RWMutex
+	service    *domain.TripService
+	driverRepo domain.DriverRepository
+	hubs       map[string]*Hub
+	mu         sync.RWMutex
 }
 
 // NewHubManager constructs a HubManager.
-func NewHubManager(service *domain.TripService) *HubManager {
+func NewHubManager(service *domain.TripService, driverRepo domain.DriverRepository) *HubManager {
 	return &HubManager{
-		service: service,
-		hubs:    make(map[string]*Hub),
+		service:    service,
+		driverRepo: driverRepo,
+		hubs:       make(map[string]*Hub),
 	}
 }
 
@@ -224,7 +261,7 @@ func (m *HubManager) get(tripID string) *Hub {
 	if hub, exists = m.hubs[tripID]; exists {
 		return hub
 	}
-	hub = newHub(tripID, m.service)
+	hub = newHub(tripID, m.service, m.driverRepo)
 	m.hubs[tripID] = hub
 	go hub.run()
 	return hub
@@ -291,6 +328,9 @@ func (m *HubManager) HandleWebsocket(service *domain.TripService) gin.HandlerFun
 				}); err == nil {
 					client.send <- payload
 				}
+				if trip.DriverID != nil {
+					client.driverID = *trip.DriverID
+				}
 			}
 			if location, err := service.LatestLocation(c.Request.Context(), tripID); err == nil && location != nil {
 				if payload, err := json.Marshal(outboundMessage{
@@ -301,6 +341,10 @@ func (m *HubManager) HandleWebsocket(service *domain.TripService) gin.HandlerFun
 				}); err == nil {
 					client.send <- payload
 				}
+			}
+		} else {
+			if trip, err := service.Fetch(c.Request.Context(), tripID); err == nil && trip != nil && trip.DriverID != nil {
+				client.driverID = *trip.DriverID
 			}
 		}
 

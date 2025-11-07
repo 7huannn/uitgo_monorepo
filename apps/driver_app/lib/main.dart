@@ -1,2 +1,8 @@
 import 'package:flutter/material.dart';
-void main() => runApp(const MaterialApp(home: Scaffold(body: Center(child: Text('Driver App')))));
+
+import 'app/app.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const DriverApp());
+}

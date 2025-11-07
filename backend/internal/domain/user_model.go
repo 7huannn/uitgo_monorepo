@@ -9,5 +9,6 @@ type User struct {
 	Email        string
 	Phone        string
 	PasswordHash string
+	Role         string
 	CreatedAt    time.Time
 }

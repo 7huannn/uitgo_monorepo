@@ -16,6 +16,8 @@ type stubRepo struct {
 	lastLocation *domain.LocationUpdate
 }
 
+var _ domain.TripRepository = (*stubRepo)(nil)
+
 func newStubRepo() *stubRepo {
 	return &stubRepo{
 		trips:    make(map[string]*domain.Trip),
@@ -38,10 +40,21 @@ func (s *stubRepo) GetTrip(id string) (*domain.Trip, error) {
 }
 
 func (s *stubRepo) UpdateTripStatus(id string, status domain.TripStatus) error {
-	if _, ok := s.trips[id]; !ok {
+	trip, ok := s.trips[id]
+	if !ok {
 		return domain.ErrTripNotFound
 	}
 	s.statuses[id] = status
+	trip.Status = status
+	return nil
+}
+
+func (s *stubRepo) SetTripDriver(id string, driverID *string) error {
+	trip, ok := s.trips[id]
+	if !ok {
+		return domain.ErrTripNotFound
+	}
+	trip.DriverID = driverID
 	return nil
 }
 

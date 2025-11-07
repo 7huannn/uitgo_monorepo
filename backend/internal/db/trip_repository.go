@@ -133,6 +133,33 @@ func (r *tripRepository) UpdateTripStatus(id string, status domain.TripStatus) e
 	return nil
 }
 
+func (r *tripRepository) SetTripDriver(id string, driverID *string) error {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return err
+	}
+	var driverValue any
+	if driverID == nil || *driverID == "" {
+		driverValue = nil
+	} else {
+		if _, err := uuid.Parse(*driverID); err != nil {
+			return err
+		}
+		driverValue = *driverID
+	}
+	res := r.db.Model(&tripModel{}).Where("id = ?", uid).Updates(map[string]any{
+		"driver_id":  driverValue,
+		"updated_at": time.Now().UTC(),
+	})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domain.ErrTripNotFound
+	}
+	return nil
+}
+
 func (r *tripRepository) SaveLocation(tripID string, update domain.LocationUpdate) error {
 	uid, err := uuid.Parse(tripID)
 	if err != nil {

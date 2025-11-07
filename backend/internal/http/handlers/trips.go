@@ -13,15 +13,17 @@ import (
 
 // TripHandler wires HTTP endpoints for trips.
 type TripHandler struct {
-	service *domain.TripService
-	hubs    *HubManager
+	service       *domain.TripService
+	driverService *domain.DriverService
+	hubs          *HubManager
 }
 
 // RegisterTripRoutes registers trip related routes under /v1.
-func RegisterTripRoutes(router *gin.Engine, service *domain.TripService, hubs *HubManager) {
+func RegisterTripRoutes(router *gin.Engine, service *domain.TripService, driverService *domain.DriverService, hubs *HubManager) {
 	handler := &TripHandler{
-		service: service,
-		hubs:    hubs,
+		service:       service,
+		driverService: driverService,
+		hubs:          hubs,
 	}
 
 	v1 := router.Group("/v1")
@@ -30,6 +32,10 @@ func RegisterTripRoutes(router *gin.Engine, service *domain.TripService, hubs *H
 		v1.POST("/trips", handler.createTrip)
 		v1.GET("/trips/:id", handler.getTrip)
 		v1.PATCH("/trips/:id/status", handler.updateTripStatus)
+		v1.POST("/trips/:id/assign", handler.assignDriver)
+		v1.POST("/trips/:id/accept", handler.acceptTrip)
+		v1.POST("/trips/:id/decline", handler.declineTrip)
+		v1.POST("/trips/:id/status", handler.driverUpdateTripStatus)
 		v1.GET("/trips/:id/ws", hubs.HandleWebsocket(service))
 	}
 }
@@ -42,6 +48,10 @@ type createTripRequest struct {
 
 type updateStatusRequest struct {
 	Status string `json:"status" binding:"required"`
+}
+
+type assignTripRequest struct {
+	DriverID string `json:"driverId" binding:"required"`
 }
 
 type tripResponse struct {
@@ -213,4 +223,143 @@ func (h *TripHandler) updateTripStatus(c *gin.Context) {
 	location, _ := h.service.LatestLocation(c.Request.Context(), tripID)
 
 	c.JSON(http.StatusOK, toTripResponse(trip, location))
+}
+
+func (h *TripHandler) assignDriver(c *gin.Context) {
+	if h.driverService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "driver dispatch unavailable"})
+		return
+	}
+	tripID := c.Param("id")
+	if tripID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "trip id required"})
+		return
+	}
+	var req assignTripRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if _, err := h.driverService.AssignTrip(c.Request.Context(), tripID, req.DriverID); err != nil {
+		status := driverErrorStatus(err)
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	trip, err := h.service.Fetch(c.Request.Context(), tripID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch trip"})
+		return
+	}
+	location, _ := h.service.LatestLocation(c.Request.Context(), tripID)
+	c.JSON(http.StatusOK, toTripResponse(trip, location))
+}
+
+func (h *TripHandler) acceptTrip(c *gin.Context) {
+	driver, ok := h.requireDriver(c)
+	if !ok {
+		return
+	}
+	tripID := c.Param("id")
+	if tripID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "trip id required"})
+		return
+	}
+	if _, err := h.driverService.AcceptTrip(c.Request.Context(), tripID, driver.ID); err != nil {
+		status := driverErrorStatus(err)
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	h.hubs.BroadcastStatus(tripID, domain.TripStatusAccepted)
+	trip, err := h.service.Fetch(c.Request.Context(), tripID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch trip"})
+		return
+	}
+	location, _ := h.service.LatestLocation(c.Request.Context(), tripID)
+	c.JSON(http.StatusOK, toTripResponse(trip, location))
+}
+
+func (h *TripHandler) declineTrip(c *gin.Context) {
+	driver, ok := h.requireDriver(c)
+	if !ok {
+		return
+	}
+	tripID := c.Param("id")
+	if tripID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "trip id required"})
+		return
+	}
+	if _, err := h.driverService.DeclineTrip(c.Request.Context(), tripID, driver.ID); err != nil {
+		status := driverErrorStatus(err)
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	trip, err := h.service.Fetch(c.Request.Context(), tripID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch trip"})
+		return
+	}
+	location, _ := h.service.LatestLocation(c.Request.Context(), tripID)
+	c.JSON(http.StatusOK, toTripResponse(trip, location))
+}
+
+func (h *TripHandler) driverUpdateTripStatus(c *gin.Context) {
+	driver, ok := h.requireDriver(c)
+	if !ok {
+		return
+	}
+	tripID := c.Param("id")
+	if tripID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "trip id required"})
+		return
+	}
+	var req updateStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	status := domain.TripStatus(strings.ToLower(strings.TrimSpace(req.Status)))
+	trip, err := h.driverService.UpdateTripStatus(c.Request.Context(), tripID, driver.ID, status)
+	if err != nil {
+		statusCode := driverErrorStatus(err)
+		c.JSON(statusCode, gin.H{"error": err.Error()})
+		return
+	}
+	h.hubs.BroadcastStatus(tripID, status)
+	location, _ := h.service.LatestLocation(c.Request.Context(), tripID)
+	c.JSON(http.StatusOK, toTripResponse(trip, location))
+}
+
+func (h *TripHandler) requireDriver(c *gin.Context) (*domain.Driver, bool) {
+	if h.driverService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "driver dispatch unavailable"})
+		return nil, false
+	}
+	userID := userIDFromContext(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user context"})
+		return nil, false
+	}
+	driver, err := h.driverService.Me(c.Request.Context(), userID)
+	if err != nil {
+		status := driverErrorStatus(err)
+		c.JSON(status, gin.H{"error": err.Error()})
+		return nil, false
+	}
+	return driver, true
+}
+
+func driverErrorStatus(err error) int {
+	switch err {
+	case domain.ErrTripNotFound:
+		return http.StatusNotFound
+	case domain.ErrDriverNotFound, domain.ErrTripAssignmentNotFound:
+		return http.StatusNotFound
+	case domain.ErrDriverOffline, domain.ErrAssignmentConflict:
+		return http.StatusConflict
+	case domain.ErrInvalidStatus:
+		return http.StatusBadRequest
+	default:
+		return http.StatusInternalServerError
+	}
 }

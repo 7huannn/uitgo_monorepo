@@ -22,14 +22,16 @@ type AuthHandler struct {
 	users         domain.UserRepository
 	jwtSecret     string
 	notifications domain.NotificationRepository
+	driverService *domain.DriverService
 }
 
 // NewAuthHandler builds an AuthHandler.
-func NewAuthHandler(cfg *config.Config, users domain.UserRepository, notifications domain.NotificationRepository) *AuthHandler {
+func NewAuthHandler(cfg *config.Config, users domain.UserRepository, notifications domain.NotificationRepository, driverService *domain.DriverService) *AuthHandler {
 	return &AuthHandler{
 		users:         users,
 		jwtSecret:     cfg.JWTSecret,
 		notifications: notifications,
+		driverService: driverService,
 	}
 }
 
@@ -49,6 +51,7 @@ type authResponse struct {
 	ID    string `json:"id"`
 	Email string `json:"email"`
 	Name  string `json:"name,omitempty"`
+	Role  string `json:"role,omitempty"`
 	Token string `json:"token"`
 }
 
@@ -57,12 +60,29 @@ type userResponse struct {
 	Name      string    `json:"name"`
 	Email     string    `json:"email"`
 	Phone     string    `json:"phone,omitempty"`
+	Role      string    `json:"role"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
 type updateProfileRequest struct {
 	Name  *string `json:"name"`
 	Phone *string `json:"phone"`
+}
+
+type registerDriverRequest struct {
+	Name          string               `json:"name" binding:"required"`
+	Email         string               `json:"email" binding:"required,email"`
+	Phone         string               `json:"phone" binding:"required"`
+	Password      string               `json:"password" binding:"required,min=6"`
+	LicenseNumber string               `json:"licenseNumber" binding:"required"`
+	Vehicle       *driverVehicleParams `json:"vehicle"`
+}
+
+type driverVehicleParams struct {
+	Make        string `json:"make"`
+	Model       string `json:"model"`
+	Color       string `json:"color"`
+	PlateNumber string `json:"plateNumber"`
 }
 
 func userIDFromContext(c *gin.Context) string {
@@ -82,6 +102,7 @@ func toUserResponse(user *domain.User) userResponse {
 		Name:      user.Name,
 		Email:     user.Email,
 		Phone:     user.Phone,
+		Role:      user.Role,
 		CreatedAt: user.CreatedAt,
 	}
 }
@@ -122,6 +143,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		Email:        req.Email,
 		Phone:        req.Phone,
 		PasswordHash: string(hash),
+		Role:         "rider",
 	}
 
 	if err := h.users.Create(c.Request.Context(), user); err != nil {
@@ -145,6 +167,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		ID:    user.ID,
 		Email: user.Email,
 		Name:  user.Name,
+		Role:  user.Role,
 		Token: token,
 	})
 }
@@ -183,6 +206,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		ID:    user.ID,
 		Email: user.Email,
 		Name:  user.Name,
+		Role:  user.Role,
 		Token: token,
 	})
 }
@@ -239,10 +263,96 @@ func (h *AuthHandler) UpdateMe(c *gin.Context) {
 	c.JSON(http.StatusOK, toUserResponse(user))
 }
 
+// RegisterDriver creates a user plus driver profile.
+func (h *AuthHandler) RegisterDriver(c *gin.Context) {
+	if h.driverService == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "driver registration unavailable"})
+		return
+	}
+	var req registerDriverRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+	req.Name = strings.TrimSpace(req.Name)
+	req.Phone = strings.TrimSpace(req.Phone)
+
+	if h.jwtSecret == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "jwt secret not configured"})
+		return
+	}
+
+	if existing, err := h.users.FindByEmail(c.Request.Context(), req.Email); err == nil && existing != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
+		return
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check existing user"})
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		return
+	}
+
+	user := &domain.User{
+		Name:         req.Name,
+		Email:        req.Email,
+		Phone:        req.Phone,
+		PasswordHash: string(hash),
+		Role:         "driver",
+	}
+	if err := h.users.Create(c.Request.Context(), user); err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
+		return
+	}
+
+	driverInput := domain.DriverRegistrationInput{
+		FullName:      req.Name,
+		Phone:         req.Phone,
+		LicenseNumber: req.LicenseNumber,
+	}
+	if req.Vehicle != nil {
+		driverInput.Vehicle = &domain.Vehicle{
+			Make:        req.Vehicle.Make,
+			Model:       req.Vehicle.Model,
+			Color:       req.Vehicle.Color,
+			PlateNumber: req.Vehicle.PlateNumber,
+		}
+	}
+
+	if _, err := h.driverService.Register(c.Request.Context(), user.ID, driverInput); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create driver profile"})
+		return
+	}
+
+	token, err := h.signToken(user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to sign token"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, authResponse{
+		ID:    user.ID,
+		Email: user.Email,
+		Name:  user.Name,
+		Role:  user.Role,
+		Token: token,
+	})
+}
+
 func (h *AuthHandler) signToken(user *domain.User) (string, error) {
 	claims := jwt.MapClaims{
 		"sub":   user.ID,
 		"email": user.Email,
+		"role":  user.Role,
 		"iat":   time.Now().Unix(),
 		"exp":   time.Now().Add(24 * time.Hour).Unix(),
 	}
