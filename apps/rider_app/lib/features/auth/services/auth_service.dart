@@ -46,26 +46,25 @@ class AuthService {
         'password': password,
       });
 
-      if (res.statusCode == 200) {
+      if (res.statusCode == 200 && res.data is Map<String, dynamic>) {
         final data = res.data as Map<String, dynamic>;
-        final accessToken = (data['accessToken'] ?? data['token']) as String;
-        final user = (data['user'] ?? {}) as Map<String, dynamic>;
+        final token = data['token'] as String? ?? '';
+        if (token.isEmpty) return false;
 
-        await _secure.write(key: _keyToken, value: accessToken);
+        await _secure.write(key: _keyToken, value: token);
 
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_keyToken, accessToken);
-        if (user.isNotEmpty) {
-          await prefs.setString(_keyUserId, '${user['id'] ?? user['_id'] ?? ''}');
-          await prefs.setString(_keyUserEmail, '${user['email'] ?? ''}');
-          await prefs.setString(_keyUserName, '${user['name'] ?? ''}');
-        }
+        await prefs.setString(_keyToken, token);
+        await prefs.setString(_keyUserId, '${data['id'] ?? ''}');
+        await prefs.setString(_keyUserEmail, '${data['email'] ?? ''}');
+        await prefs.setString(_keyUserName, '${data['name'] ?? ''}');
         return true;
       }
       return false;
     } on DioException catch (e) {
       // Inspect e.response?.statusCode / data nếu cần show message
-      print('Login DioException: ${e.response?.statusCode} ${e.response?.data}');
+      print(
+          'Login DioException: ${e.response?.statusCode} ${e.response?.data}');
       return false;
     } catch (e) {
       print('Login error: $e');
@@ -93,9 +92,25 @@ class AuthService {
         if (phone != null) 'phone': phone,
       });
 
-      return res.statusCode == 201 || res.statusCode == 200;
+      if ((res.statusCode == 201 || res.statusCode == 200) &&
+          res.data is Map<String, dynamic>) {
+        final data = res.data as Map<String, dynamic>;
+        final token = data['token'] as String? ?? '';
+        if (token.isEmpty) return false;
+
+        await _secure.write(key: _keyToken, value: token);
+
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_keyToken, token);
+        await prefs.setString(_keyUserId, '${data['id'] ?? ''}');
+        await prefs.setString(_keyUserEmail, '${data['email'] ?? ''}');
+        await prefs.setString(_keyUserName, '${data['name'] ?? ''}');
+        return true;
+      }
+      return false;
     } on DioException catch (e) {
-      print('Register DioException: ${e.response?.statusCode} ${e.response?.data}');
+      print(
+          'Register DioException: ${e.response?.statusCode} ${e.response?.data}');
       return false;
     } catch (e) {
       print('Register error: $e');
@@ -112,10 +127,12 @@ class AuthService {
       }
 
       // Đổi endpoint theo BE của bạn (ví dụ: /auth/forgot-password)
-      final res = await _dio.post('/auth/forgot-password', data: {'email': email});
+      final res =
+          await _dio.post('/auth/forgot-password', data: {'email': email});
       return res.statusCode == 200;
     } on DioException catch (e) {
-      print('Reset password DioException: ${e.response?.statusCode} ${e.response?.data}');
+      print(
+          'Reset password DioException: ${e.response?.statusCode} ${e.response?.data}');
       return false;
     } catch (e) {
       print('Reset password error: $e');
@@ -126,10 +143,6 @@ class AuthService {
   // LOGOUT
   Future<void> logout() async {
     try {
-      if (!useMock) {
-        // Nếu BE có endpoint logout thì gọi, không có thì bỏ qua
-        await _dio.post('/auth/logout').catchError((_) {});
-      }
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_keyToken);
       await prefs.remove(_keyUserId);

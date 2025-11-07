@@ -254,6 +254,14 @@ func (m *HubManager) HandleWebsocket(service *domain.TripService) gin.HandlerFun
 		roleStr, _ := roleVal.(string)
 		userVal, _ := c.Get("userID")
 		userStr, _ := userVal.(string)
+		if roleStr == "" {
+			if queryRole := c.Query("role"); queryRole != "" {
+				roleStr = queryRole
+			}
+		}
+		if queryUser := c.Query("userId"); queryUser != "" {
+			userStr = queryUser
+		}
 		if userStr == "" {
 			userStr = "demo-user"
 		}

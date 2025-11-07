@@ -2,11 +2,14 @@ package main
 
 import (
 	"log"
+	"os"
 	"path/filepath"
 
 	"uitgo/backend/internal/config"
 	"uitgo/backend/internal/db"
 )
+
+const containerMigrationsPath = "/app/migrations"
 
 func main() {
 	cfg, err := config.Load()
@@ -25,10 +28,18 @@ func main() {
 	}
 	defer sqlDB.Close()
 
-	migrationsPath := filepath.Join("backend", "migrations")
+	migrationsPath := resolveMigrationsPath()
+
 	if err := db.Migrate(conn, migrationsPath); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
-
 	log.Println("migrations applied")
+}
+
+func resolveMigrationsPath() string {
+	if _, err := os.Stat(containerMigrationsPath); err == nil {
+		return containerMigrationsPath
+	}
+	// fallback for local execution
+	return filepath.Join("backend", "migrations")
 }

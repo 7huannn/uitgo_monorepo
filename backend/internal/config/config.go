@@ -12,6 +12,7 @@ type Config struct {
 	Port           string
 	DatabaseURL    string
 	AllowedOrigins []string
+	JWTSecret      string
 }
 
 // Load reads configuration from environment variables.
@@ -24,15 +25,27 @@ func Load() (*Config, error) {
 	}
 
 	dbURL := os.Getenv("POSTGRES_DSN")
+	jwtSecret := os.Getenv("JWT_SECRET")
 
-	origins := strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",")
-	if len(origins) == 1 && origins[0] == "" {
-		origins = []string{"*"}
+	rawOrigins := strings.TrimSpace(os.Getenv("CORS_ALLOWED_ORIGINS"))
+	var origins []string
+	if rawOrigins == "" {
+		origins = []string{"http://localhost:8080", "http://127.0.0.1:8080"}
+	} else {
+		for _, value := range strings.Split(rawOrigins, ",") {
+			if trimmed := strings.TrimSpace(value); trimmed != "" {
+				origins = append(origins, trimmed)
+			}
+		}
+		if len(origins) == 0 {
+			origins = []string{"http://localhost:8080", "http://127.0.0.1:8080"}
+		}
 	}
 
 	return &Config{
 		Port:           port,
 		DatabaseURL:    dbURL,
 		AllowedOrigins: origins,
+		JWTSecret:      jwtSecret,
 	}, nil
 }

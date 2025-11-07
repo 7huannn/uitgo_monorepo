@@ -2,6 +2,7 @@ package http
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -22,18 +23,25 @@ type Server struct {
 // NewServer configures a Gin engine with routes and middleware.
 func NewServer(cfg *config.Config, db *gorm.DB) (*Server, error) {
 	router := gin.New()
+	if err := router.SetTrustedProxies([]string{"127.0.0.1"}); err != nil {
+		log.Printf("warn: unable to set trusted proxies: %v", err)
+	}
 
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID())
 	router.Use(middleware.CORS(cfg.AllowedOrigins))
-	router.Use(middleware.Auth())
+	router.Use(middleware.Auth(cfg.JWTSecret))
 
+	userRepo := domain.NewUserRepository(db)
+	authHandler := handlers.NewAuthHandler(cfg, userRepo)
 	tripRepo := dbrepo.NewTripRepository(db)
 	tripService := domain.NewTripService(tripRepo)
 	hubManager := handlers.NewHubManager(tripService)
 
 	handlers.RegisterHealth(router)
+	router.POST("/auth/register", authHandler.Register)
+	router.POST("/auth/login", authHandler.Login)
 	handlers.RegisterTripRoutes(router, tripService, hubManager)
 
 	return &Server{

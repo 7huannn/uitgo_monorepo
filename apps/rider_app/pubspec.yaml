@@ -13,6 +13,7 @@ dependencies:
   http: ^1.1.0 
   dio: ^5.4.0
   flutter_secure_storage: ^9.2.0              # API calls (optional, để sau này)
+  web_socket_channel: ^2.4.0
 
 dev_dependencies:
   flutter_test:

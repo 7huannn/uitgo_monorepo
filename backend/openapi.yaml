@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
   title: UITGo Backend API
-  version: 0.1.0
-  description: >
-    Minimal trip API powering the UITGo rider/driver apps.
+  version: 0.2.0
+  description: |
+    Minimal trip & auth API powering the UITGo rider/driver apps.
     Realtime updates stream over WebSocket at `ws://{host}/v1/trips/{tripId}/ws`.
 servers:
   - url: http://localhost:8080
@@ -22,9 +22,51 @@ paths:
                   status:
                     type: string
                     example: ok
+  /auth/register:
+    post:
+      summary: Register user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid payload
+        '409':
+          description: Email already registered
+  /auth/login:
+    post:
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid payload
+        '401':
+          description: Invalid credentials
   /v1/trips:
     post:
       summary: Create a trip
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -38,9 +80,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TripResponse'
+        '401':
+          description: Unauthorized
   /v1/trips/{id}:
     get:
       summary: Get trip details
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/TripId'
       responses:
@@ -54,6 +100,8 @@ paths:
           description: Trip not found
     patch:
       summary: Update trip status
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/TripId'
       requestBody:
@@ -76,15 +124,33 @@ paths:
   /v1/trips/{id}/ws:
     get:
       summary: Trip realtime channel
-      description: >
+      description: |
         Upgrades to WebSocket. Drivers send `{"type":"location","lat":0,"lng":0}` messages.
         Riders receive broadcasts including driver locations and status changes.
+        Optional query parameters `role` and `userId` can be supplied when custom headers
+        are not available (e.g. browser clients).
       parameters:
         - $ref: '#/components/parameters/TripId'
+        - name: role
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [rider, driver]
+        - name: userId
+          in: query
+          required: false
+          schema:
+            type: string
       responses:
         '101':
           description: WebSocket Upgrade
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   parameters:
     TripId:
       name: id
@@ -94,6 +160,49 @@ components:
         type: string
         format: uuid
   schemas:
+    AuthResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        token:
+          type: string
+    RegisterRequest:
+      type: object
+      required:
+        - name
+        - email
+        - password
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        password:
+          type: string
+          format: password
+          minLength: 6
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
     TripResponse:
       type: object
       properties:

@@ -2,11 +2,15 @@ package main
 
 import (
 	"log"
+	"os"
+	"path/filepath"
 
 	"uitgo/backend/internal/config"
 	"uitgo/backend/internal/db"
 	"uitgo/backend/internal/http"
 )
+
+const containerMigrationsPath = "/app/migrations"
 
 func main() {
 	cfg, err := config.Load()
@@ -18,6 +22,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("connect database: %v", err)
 	}
+
+	migrationsPath := resolveMigrationsPath()
+	if err := db.Migrate(pool, migrationsPath); err != nil {
+		log.Fatalf("run migrations: %v", err)
+	}
+	log.Println("migrations applied")
+
 	sqlDB, err := pool.DB()
 	if err != nil {
 		log.Fatalf("db handle: %v", err)
@@ -32,4 +43,11 @@ func main() {
 	if err := server.Run(); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
+}
+
+func resolveMigrationsPath() string {
+	if _, err := os.Stat(containerMigrationsPath); err == nil {
+		return containerMigrationsPath
+	}
+	return filepath.Join("backend", "migrations")
 }

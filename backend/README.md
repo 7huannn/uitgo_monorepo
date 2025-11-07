@@ -51,11 +51,28 @@ Health check:
 curl http://localhost:8080/health
 ```
 
+Authentication:
+
+```bash
+# Register (201 Created)
+curl -X POST http://localhost:8080/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"UIT Rider","email":"rider@example.com","phone":"0900000000","password":"123456"}'
+
+# Login (200 OK)
+curl -X POST http://localhost:8080/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"rider@example.com","password":"123456"}'
+```
+
+The responses contain a JWT (`token`), user id, name, and email. Pass the token via `Authorization: Bearer <token>` for authenticated requests.
+
 Create a trip:
 
 ```bash
 curl -X POST http://localhost:8080/v1/trips \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
   -H "X-User-Id: rider-123" \
   -d '{"originText":"UIT Campus A","destText":"Dormitory","serviceId":"UIT-Bike"}'
 ```
@@ -87,6 +104,27 @@ wscat -c ws://localhost:8080/v1/trips/<tripId>/ws -H "X-Role: driver"
 
 Each driver location message is persisted to `trip_events` and fanned out to all connected riders and drivers on that trip.
 
+### Swagger UI
+
+Preview the OpenAPI spec via Docker:
+
+```bash
+docker run --rm -p 8081:8080 \
+  -e SWAGGER_JSON=/spec/openapi.yaml \
+  -v "$PWD/backend/openapi.yaml:/spec/openapi.yaml" \
+  swaggerapi/swagger-ui
+```
+
+Then open [http://localhost:8081](http://localhost:8081).
+
+### Admin playground
+
+A static testing console lives in [`admin/index.html`](../admin/index.html). Open it in the browser, set the API base, and you can:
+
+- Hit `/health`, `/v1/trips`, `/v1/trips/:id`, `/v1/trips/:id/status`
+- Connect to the WebSocket channel. Browsers can’t set custom headers, so the page appends `?role=` and `?userId=` query params that the backend accepts.
+- Register and log in; on success the playground keeps your JWT in `localStorage` and attaches it to subsequent requests.
+
 ## Architecture Overview
 
 - **Gin** for HTTP routing & middleware.
@@ -97,6 +135,8 @@ Each driver location message is persisted to `trip_events` and fanned out to all
 Database schema is managed with SQL files under `backend/migrations`. The bootstrap migrator (`make migrate`) runs them sequentially.
 
 OpenAPI contract lives in [`openapi.yaml`](openapi.yaml).
+
+> The Docker entrypoint runs `/app/migrate` on every boot, so the API container always applies pending migrations before serving traffic.
 
 ## Flutter Rider App Integration Notes
 

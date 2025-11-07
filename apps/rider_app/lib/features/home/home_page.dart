@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:rider_app/app/router.dart';
 import 'package:rider_app/features/auth/services/auth_service.dart';
+import 'package:rider_app/features/trip/models/trip_models.dart';
+import 'package:rider_app/features/trip/services/trip_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -10,13 +14,21 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final TextEditingController _pickupController = TextEditingController(text: 'Sảnh A, Đại học UIT');
+  final TextEditingController _pickupController =
+      TextEditingController(text: 'Sảnh A, Đại học UIT');
   final TextEditingController _destinationController = TextEditingController();
-  final PageController _promoController = PageController(viewportFraction: 0.88);
+  final PageController _promoController =
+      PageController(viewportFraction: 0.88);
 
   DateTime? _scheduledAt;
   String _selectedServiceId = _serviceOptions.first.id;
   bool _scheduleEnabled = false;
+  final TripService _tripService = TripService();
+  TripDetail? _activeTrip;
+  LocationUpdate? _liveLocation;
+  String? _liveStatus;
+  StreamSubscription<TripRealtimeEvent>? _tripSubscription;
+  bool _isBooking = false;
   late Future<_HomeSnapshot> _homeFuture;
 
   @override
@@ -29,7 +41,8 @@ class _HomePageState extends State<HomePage> {
     final userInfo = await AuthService().getUserInfo();
     final now = DateTime.now();
     return _HomeSnapshot(
-      riderName: userInfo['name']?.isNotEmpty == true ? userInfo['name']! : 'Bạn',
+      riderName:
+          userInfo['name']?.isNotEmpty == true ? userInfo['name']! : 'Bạn',
       walletBalance: 185000,
       rewardPoints: 340,
       savedPlaces: _mockSavedPlaces,
@@ -45,12 +58,15 @@ class _HomePageState extends State<HomePage> {
     _pickupController.dispose();
     _destinationController.dispose();
     _promoController.dispose();
+    _tripSubscription?.cancel();
+    unawaited(_tripService.closeChannel());
     super.dispose();
   }
 
   void _logout(BuildContext context) {
     AuthService().logout();
-    Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+    Navigator.of(context)
+        .pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
   }
 
   Future<void> _refreshHome() async {
@@ -64,14 +80,20 @@ class _HomePageState extends State<HomePage> {
     final destination = _destinationController.text.trim();
     if (destination.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bạn muốn đến đâu? Hãy nhập điểm đến trước nhé.')),
+        const SnackBar(
+            content: Text('Bạn muốn đến đâu? Hãy nhập điểm đến trước nhé.')),
       );
       return;
     }
 
-    final pickup = _pickupController.text.trim().isEmpty ? 'Vị trí hiện tại của bạn' : _pickupController.text.trim();
-    final service = _serviceOptions.firstWhere((s) => s.id == _selectedServiceId);
-    final scheduleText = _scheduleEnabled && _scheduledAt != null ? _formatSchedule(_scheduledAt!) : 'Ngay lập tức';
+    final pickup = _pickupController.text.trim().isEmpty
+        ? 'Vị trí hiện tại của bạn'
+        : _pickupController.text.trim();
+    final service =
+        _serviceOptions.firstWhere((s) => s.id == _selectedServiceId);
+    final scheduleText = _scheduleEnabled && _scheduledAt != null
+        ? _formatSchedule(_scheduledAt!)
+        : 'Ngay lập tức';
 
     showModalBottomSheet(
       context: context,
@@ -79,7 +101,7 @@ class _HomePageState extends State<HomePage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         return Padding(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
           child: Column(
@@ -99,34 +121,54 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(height: 20),
               Text(
                 'Xác nhận chuyến đi',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 16),
               _buildSummaryRow('Dịch vụ', service.title, icon: service.icon),
-              _buildSummaryRow('Điểm đón', pickup, icon: Icons.radio_button_checked),
-              _buildSummaryRow('Điểm đến', destination, icon: Icons.location_on),
+              _buildSummaryRow('Điểm đón', pickup,
+                  icon: Icons.radio_button_checked),
+              _buildSummaryRow('Điểm đến', destination,
+                  icon: Icons.location_on),
               _buildSummaryRow('Thời gian', scheduleText, icon: Icons.schedule),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Đặt chuyến thành công! Tài xế sẽ liên hệ bạn sớm.')),
-                  );
-                },
+                onPressed: _isBooking
+                    ? null
+                    : () => _bookTrip(
+                          sheetContext,
+                          service: service,
+                          pickup: pickup,
+                          destination: destination,
+                          scheduleText: scheduleText,
+                        ),
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size.fromHeight(50),
                   backgroundColor: const Color(0xFF667EEA),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
                 ),
-                child: const Text(
-                  'Xác nhận đặt chuyến',
-                  style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
-                ),
+                child: _isBooking
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text(
+                        'Xác nhận đặt chuyến',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600, color: Colors.white),
+                      ),
               ),
               const SizedBox(height: 12),
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(sheetContext),
                 child: const Text('Hủy'),
               ),
             ],
@@ -154,12 +196,16 @@ class _HomePageState extends State<HomePage> {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(fontSize: 13, color: Colors.black54, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                      fontSize: 13,
+                      color: Colors.black54,
+                      fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   value,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -190,7 +236,9 @@ class _HomePageState extends State<HomePage> {
         break;
       case 'support':
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Chúng tôi sẽ kết nối bạn với tổng đài trong giây lát.')),
+          const SnackBar(
+              content: Text(
+                  'Chúng tôi sẽ kết nối bạn với tổng đài trong giây lát.')),
         );
         break;
     }
@@ -221,12 +269,14 @@ class _HomePageState extends State<HomePage> {
                 backgroundColor: const Color(0xFF667EEA).withValues(alpha: 0.1),
                 child: Icon(place.icon, color: const Color(0xFF667EEA)),
               ),
-              title: Text(place.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+              title: Text(place.name,
+                  style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: Text(place.address),
             ),
             const Divider(),
             ListTile(
-              leading: const Icon(Icons.radio_button_checked, color: Colors.green),
+              leading:
+                  const Icon(Icons.radio_button_checked, color: Colors.green),
               title: const Text('Chọn làm điểm đón'),
               onTap: () {
                 _pickupController.text = place.address;
@@ -247,6 +297,85 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<void> _bookTrip(
+    BuildContext sheetContext, {
+    required _ServiceOption service,
+    required String pickup,
+    required String destination,
+    required String scheduleText,
+  }) async {
+    if (_isBooking) return;
+    setState(() {
+      _isBooking = true;
+    });
+
+    try {
+      final trip = await _tripService.createTrip(
+        originText: pickup,
+        destText: destination,
+        serviceId: service.id,
+      );
+
+      if (!mounted) return;
+
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      setState(() {
+        _activeTrip = trip;
+        _liveStatus = trip.status;
+        _liveLocation = trip.lastLocation;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Đặt chuyến thành công! Mã chuyến: ${trip.id} • $scheduleText'),
+        ),
+      );
+
+      await _subscribeToTrip(trip.id);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Đặt chuyến thất bại: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBooking = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _subscribeToTrip(String tripId) async {
+    final stream = await _tripService.connectToTrip(tripId);
+    await _tripSubscription?.cancel();
+    _tripSubscription = stream.listen(
+      (event) {
+        if (!mounted) return;
+        final type = event.type;
+        if (type == RealtimeEventType.location && event.location != null) {
+          setState(() {
+            _liveLocation = event.location;
+          });
+        } else if (type == RealtimeEventType.status && event.status != null) {
+          setState(() {
+            _liveStatus = event.status;
+          });
+        }
+      },
+      onError: (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Mất kết nối realtime: $error')),
+        );
+      },
+    );
+  }
+
   Future<void> _pickSchedule() async {
     final now = DateTime.now();
     final initialDate = _scheduledAt ?? now;
@@ -260,11 +389,13 @@ class _HomePageState extends State<HomePage> {
     if (date == null) return;
     final time = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(_scheduledAt ?? now.add(const Duration(minutes: 20))),
+      initialTime: TimeOfDay.fromDateTime(
+          _scheduledAt ?? now.add(const Duration(minutes: 20))),
     );
     if (!mounted) return;
     if (time == null) return;
-    final scheduled = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    final scheduled =
+        DateTime(date.year, date.month, date.day, time.hour, time.minute);
     if (!mounted) return;
     setState(() {
       _scheduledAt = scheduled;
@@ -280,7 +411,8 @@ class _HomePageState extends State<HomePage> {
         future: _homeFuture,
         builder: (context, snapshot) {
           final data = snapshot.data;
-          final hasData = snapshot.connectionState == ConnectionState.done && data != null;
+          final hasData =
+              snapshot.connectionState == ConnectionState.done && data != null;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: SizedBox(
@@ -334,6 +466,7 @@ class _HomePageState extends State<HomePage> {
                 _buildHeader(snapshot),
                 _buildWalletAndPoints(snapshot),
                 _buildSearchCard(snapshot),
+                if (_activeTrip != null) _buildLiveTripCard(),
                 _buildSavedPlaces(snapshot),
                 _buildQuickActions(),
                 _buildUpcomingTrips(snapshot),
@@ -422,7 +555,8 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(height: 6),
                 const Row(
                   children: [
-                    Icon(Icons.verified_outlined, size: 18, color: Colors.white),
+                    Icon(Icons.verified_outlined,
+                        size: 18, color: Colors.white),
                     SizedBox(width: 6),
                     Text(
                       'Tài xế tin cậy gần bạn',
@@ -438,10 +572,13 @@ class _HomePageState extends State<HomePage> {
             clipBehavior: Clip.none,
             children: [
               IconButton(
-                icon: const Icon(Icons.notifications_none, color: Colors.white, size: 28),
+                icon: const Icon(Icons.notifications_none,
+                    color: Colors.white, size: 28),
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Bạn đang xem bản demo, tính năng thông báo sẽ có sớm!')),
+                    const SnackBar(
+                        content: Text(
+                            'Bạn đang xem bản demo, tính năng thông báo sẽ có sớm!')),
                   );
                 },
               ),
@@ -456,7 +593,8 @@ class _HomePageState extends State<HomePage> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Center(
-                    child: Text('3', style: TextStyle(fontSize: 10, color: Colors.white)),
+                    child: Text('3',
+                        style: TextStyle(fontSize: 10, color: Colors.white)),
                   ),
                 ),
               ),
@@ -488,17 +626,21 @@ class _HomePageState extends State<HomePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('UITGo Pay', style: TextStyle(fontSize: 14, color: Colors.black54)),
+                const Text('UITGo Pay',
+                    style: TextStyle(fontSize: 14, color: Colors.black54)),
                 const SizedBox(height: 6),
                 Text(
                   '${_formatCurrency(snapshot.walletBalance)} đ',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 12),
                 TextButton.icon(
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Nạp tiền sẽ được kích hoạt khi kết nối ví điện tử.')),
+                      const SnackBar(
+                          content: Text(
+                              'Nạp tiền sẽ được kích hoạt khi kết nối ví điện tử.')),
                     );
                   },
                   icon: const Icon(Icons.add_circle_outline, size: 18),
@@ -512,14 +654,17 @@ class _HomePageState extends State<HomePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Điểm thưởng', style: TextStyle(fontSize: 14, color: Colors.black54)),
+                const Text('Điểm thưởng',
+                    style: TextStyle(fontSize: 14, color: Colors.black54)),
                 const SizedBox(height: 6),
                 Text(
                   '${snapshot.rewardPoints}',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 12),
-                Text('Đổi km miễn phí', style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                Text('Đổi km miễn phí',
+                    style: TextStyle(fontSize: 13, color: Colors.grey[600])),
               ],
             ),
           ),
@@ -528,8 +673,108 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildLiveTripCard() {
+    final trip = _activeTrip;
+    if (trip == null) {
+      return const SizedBox.shrink();
+    }
+    final status = (_liveStatus ?? trip.status).toLowerCase();
+    final location = _liveLocation ?? trip.lastLocation;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.directions_bike,
+                      color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Chuyến của bạn',
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w700),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${trip.originText} → ${trip.destText}',
+                        style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                      ),
+                    ],
+                  ),
+                ),
+                _buildStatusChipFromString(status),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Icon(Icons.access_time,
+                    size: 16, color: Color(0xFF667EEA)),
+                const SizedBox(width: 6),
+                Text(
+                  'Khởi tạo: ${_formatSchedule(trip.createdAt.toLocal())}',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+            if (location != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.my_location,
+                      size: 16, color: Color(0xFF38B000)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Tài xế gần đây: ${_formatLocation(location)}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 12),
+            Text(
+              'Mã chuyến: ${trip.id}',
+              style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSearchCard(_HomeSnapshot snapshot) {
-    final selectedService = _serviceOptions.firstWhere((s) => s.id == _selectedServiceId);
+    final selectedService =
+        _serviceOptions.firstWhere((s) => s.id == _selectedServiceId);
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -555,7 +800,8 @@ class _HomePageState extends State<HomePage> {
               ),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: const Color(0xFF667EEA).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
@@ -563,11 +809,14 @@ class _HomePageState extends State<HomePage> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(selectedService.icon, color: const Color(0xFF667EEA), size: 18),
+                    Icon(selectedService.icon,
+                        color: const Color(0xFF667EEA), size: 18),
                     const SizedBox(width: 6),
                     Text(
                       selectedService.title,
-                      style: const TextStyle(color: Color(0xFF667EEA), fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                          color: Color(0xFF667EEA),
+                          fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -588,7 +837,8 @@ class _HomePageState extends State<HomePage> {
                   onTap: () => _selectService(service.id),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
                     decoration: BoxDecoration(
                       gradient: isSelected
                           ? LinearGradient(colors: service.gradient)
@@ -614,9 +864,13 @@ class _HomePageState extends State<HomePage> {
                         if (service.badge != null) ...[
                           const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
                             decoration: BoxDecoration(
-                            color: isSelected ? Colors.white : const Color(0xFF667EEA).withValues(alpha: 0.1),
+                              color: isSelected
+                                  ? Colors.white
+                                  : const Color(0xFF667EEA)
+                                      .withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
@@ -624,7 +878,9 @@ class _HomePageState extends State<HomePage> {
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
-                                color: isSelected ? const Color(0xFF667EEA) : const Color(0xFF667EEA),
+                                color: isSelected
+                                    ? const Color(0xFF667EEA)
+                                    : const Color(0xFF667EEA),
                               ),
                             ),
                           ),
@@ -674,10 +930,12 @@ class _HomePageState extends State<HomePage> {
                 style: ElevatedButton.styleFrom(
                   // Override global theme minimumSize to avoid infinite width in Row
                   minimumSize: const Size(0, 40),
-                  backgroundColor: const Color(0xFF667EEA).withValues(alpha: 0.08),
+                  backgroundColor:
+                      const Color(0xFF667EEA).withValues(alpha: 0.08),
                   foregroundColor: const Color(0xFF667EEA),
                   elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18)),
                 ),
               ),
               const SizedBox(width: 16),
@@ -709,11 +967,14 @@ class _HomePageState extends State<HomePage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Đặt lịch', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                          const Text('Đặt lịch',
+                              style: TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w600)),
                           if (_scheduleEnabled && _scheduledAt != null)
                             Text(
                               _formatSchedule(_scheduledAt!),
-                              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.grey[600]),
                             ),
                         ],
                       ),
@@ -772,7 +1033,7 @@ class _HomePageState extends State<HomePage> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+              color: color.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(icon, color: color, size: 18),
@@ -806,7 +1067,8 @@ class _HomePageState extends State<HomePage> {
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
           child: Row(
             children: const [
-              Text('Địa điểm yêu thích', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              Text('Địa điểm yêu thích',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             ],
           ),
         ),
@@ -845,7 +1107,8 @@ class _HomePageState extends State<HomePage> {
                               place.name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w600),
                             ),
                           ),
                         ],
@@ -876,7 +1139,8 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Tiện ích nhanh', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          const Text('Tiện ích nhanh',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 14,
@@ -886,7 +1150,8 @@ class _HomePageState extends State<HomePage> {
                 onTap: () => _handleQuickAction(action),
                 child: Container(
                   width: 150,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   decoration: BoxDecoration(
                     color: action.color.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(18),
@@ -938,12 +1203,16 @@ class _HomePageState extends State<HomePage> {
           children: [
             Row(
               children: [
-                const Text('Chuyến đã đặt', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                const Text('Chuyến đã đặt',
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                 const Spacer(),
                 TextButton(
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Màn hình quản lý chuyến chưa khả dụng trong bản demo.')),
+                      const SnackBar(
+                          content: Text(
+                              'Màn hình quản lý chuyến chưa khả dụng trong bản demo.')),
                     );
                   },
                   child: const Text('Quản lý'),
@@ -954,7 +1223,9 @@ class _HomePageState extends State<HomePage> {
               _buildEmptyState('Chưa có chuyến nào, đặt ngay để trải nghiệm.')
             else
               Column(
-                children: trips.map((trip) => _buildTripTile(trip, highlight: true)).toList(),
+                children: trips
+                    .map((trip) => _buildTripTile(trip, highlight: true))
+                    .toList(),
               ),
           ],
         ),
@@ -974,7 +1245,8 @@ class _HomePageState extends State<HomePage> {
         children: [
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 20),
-            child: Text('Ưu đãi nổi bật', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            child: Text('Ưu đãi nổi bật',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
           ),
           const SizedBox(height: 16),
           SizedBox(
@@ -985,7 +1257,9 @@ class _HomePageState extends State<HomePage> {
               itemBuilder: (context, index) {
                 final promo = promotions[index];
                 return Padding(
-                  padding: EdgeInsets.only(right: index == promotions.length - 1 ? 20 : 10, left: index == 0 ? 20 : 0),
+                  padding: EdgeInsets.only(
+                      right: index == promotions.length - 1 ? 20 : 10,
+                      left: index == 0 ? 20 : 0),
                   child: Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(colors: promo.gradient),
@@ -1013,26 +1287,31 @@ class _HomePageState extends State<HomePage> {
                         const SizedBox(height: 8),
                         Text(
                           promo.description,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.92)),
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.92)),
                         ),
                         const Spacer(),
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
                                 color: Colors.white.withValues(alpha: 0.88),
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Text(
                                 promo.code,
-                                style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF667EEA)),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF667EEA)),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Text(
                               promo.expiry,
-                              style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              style: const TextStyle(
+                                  color: Colors.white70, fontSize: 12),
                             ),
                           ],
                         ),
@@ -1070,18 +1349,23 @@ class _HomePageState extends State<HomePage> {
           children: [
             Row(
               children: [
-                const Text('Chuyến gần đây', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                const Text('Chuyến gần đây',
+                    style:
+                        TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                 const Spacer(),
                 TextButton(
                   onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Lịch sử chuyến sẽ được đồng bộ khi kết nối backend.')),
+                    const SnackBar(
+                        content: Text(
+                            'Lịch sử chuyến sẽ được đồng bộ khi kết nối backend.')),
                   ),
                   child: const Text('Xem tất cả'),
                 ),
               ],
             ),
             if (trips.isEmpty)
-              _buildEmptyState('Bạn chưa thực hiện chuyến đi nào. Khám phá UITGo ngay!')
+              _buildEmptyState(
+                  'Bạn chưa thực hiện chuyến đi nào. Khám phá UITGo ngay!')
             else
               Column(
                 children: trips.map(_buildTripTile).toList(),
@@ -1102,7 +1386,8 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Tin tức UITGo', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          const Text('Tin tức UITGo',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
           ...items.map((item) {
             return Container(
@@ -1141,12 +1426,14 @@ class _HomePageState extends State<HomePage> {
                         const SizedBox(height: 6),
                         Text(
                           item.description,
-                          style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                          style:
+                              TextStyle(fontSize: 13, color: Colors.grey[600]),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           item.timeAgo,
-                          style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[500]),
                         ),
                       ],
                     ),
@@ -1161,12 +1448,15 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildTripTile(_TripSummary trip, {bool highlight = false}) {
-    final service = _serviceOptions.firstWhere((s) => s.id == trip.serviceId, orElse: () => _serviceOptions.first);
+    final service = _serviceOptions.firstWhere((s) => s.id == trip.serviceId,
+        orElse: () => _serviceOptions.first);
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: highlight ? const Color(0xFF667EEA).withValues(alpha: 0.05) : Colors.grey[50],
+        color: highlight
+            ? const Color(0xFF667EEA).withValues(alpha: 0.05)
+            : Colors.grey[50],
         borderRadius: BorderRadius.circular(18),
       ),
       child: Column(
@@ -1187,9 +1477,13 @@ class _HomePageState extends State<HomePage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(service.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    Text(service.title,
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 4),
-                    Text(_formatSchedule(trip.dateTime), style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                    Text(_formatSchedule(trip.dateTime),
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.grey[600])),
                   ],
                 ),
               ),
@@ -1199,12 +1493,14 @@ class _HomePageState extends State<HomePage> {
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.radio_button_checked, size: 16, color: Colors.green),
+              const Icon(Icons.radio_button_checked,
+                  size: 16, color: Colors.green),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   trip.origin,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600),
                 ),
               ),
             ],
@@ -1217,7 +1513,8 @@ class _HomePageState extends State<HomePage> {
               Expanded(
                 child: Text(
                   trip.destination,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600),
                 ),
               ),
             ],
@@ -1236,7 +1533,9 @@ class _HomePageState extends State<HomePage> {
                 TextButton(
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Bạn có thể sửa chuyến khi kết nối backend.')),
+                      const SnackBar(
+                          content: Text(
+                              'Bạn có thể sửa chuyến khi kết nối backend.')),
                     );
                   },
                   child: const Text('Sửa chuyến'),
@@ -1258,7 +1557,24 @@ class _HomePageState extends State<HomePage> {
       ),
       child: Text(
         _statusLabel(status),
-        style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+        style:
+            TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+
+  Widget _buildStatusChipFromString(String status) {
+    final color = _statusColorFromBackend(status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        _statusLabelFromBackend(status),
+        style:
+            TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -1674,6 +1990,12 @@ String _formatSchedule(DateTime time) {
   return '$day/$month • $hour:$minute';
 }
 
+String _formatLocation(LocationUpdate update) {
+  final lat = update.latitude.toStringAsFixed(5);
+  final lng = update.longitude.toStringAsFixed(5);
+  return '$lat, $lng';
+}
+
 String _formatCurrency(int amount) {
   final digits = amount.toString();
   final buffer = StringBuffer();
@@ -1710,5 +2032,43 @@ String _statusLabel(TripStatus status) {
       return 'Hoàn thành';
     case TripStatus.cancelled:
       return 'Đã hủy';
+  }
+}
+
+String _statusLabelFromBackend(String status) {
+  switch (status.toLowerCase()) {
+    case 'requested':
+      return 'Đang yêu cầu';
+    case 'accepted':
+      return 'Đã nhận chuyến';
+    case 'arriving':
+      return 'Tài xế đang tới';
+    case 'in_ride':
+      return 'Đang di chuyển';
+    case 'completed':
+      return 'Hoàn thành';
+    case 'cancelled':
+      return 'Đã hủy';
+    default:
+      return status;
+  }
+}
+
+Color _statusColorFromBackend(String status) {
+  switch (status.toLowerCase()) {
+    case 'requested':
+      return const Color(0xFF667EEA);
+    case 'accepted':
+      return const Color(0xFF11998E);
+    case 'arriving':
+      return const Color(0xFFFFA751);
+    case 'in_ride':
+      return const Color(0xFF764BA2);
+    case 'completed':
+      return const Color(0xFF38EF7D);
+    case 'cancelled':
+      return const Color(0xFFFF6B6B);
+    default:
+      return Colors.grey;
   }
 }

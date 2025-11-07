@@ -2,8 +2,10 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
@@ -13,15 +15,25 @@ const (
 	defaultUser  = "demo-user"
 )
 
-// Auth attaches mock authentication info to the request context.
-func Auth() gin.HandlerFunc {
+// Auth attaches authentication info to the request context.
+func Auth(jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.GetHeader(userIDHeader)
+		role := c.GetHeader(roleHeader)
+		if jwtSecret != "" {
+			if sub, r := parseBearer(c.GetHeader("Authorization"), jwtSecret); sub != "" {
+				userID = sub
+				if role == "" && r != "" {
+					role = r
+				}
+			}
+		}
 		if userID == "" {
 			userID = defaultUser
 		}
 		c.Set("userID", userID)
-		c.Set("role", c.GetHeader(roleHeader))
+		c.Set("role", role)
+		c.Set("userID", userID)
 		c.Next()
 	}
 }
@@ -69,4 +81,31 @@ func CORS(allowedOrigins []string) gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+func parseBearer(header, secret string) (string, string) {
+	header = strings.TrimSpace(header)
+	const prefix = "Bearer "
+	if header == "" || !strings.HasPrefix(header, prefix) {
+		return "", ""
+	}
+	tokenString := strings.TrimSpace(header[len(prefix):])
+	if tokenString == "" {
+		return "", ""
+	}
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrTokenSignatureInvalid
+		}
+		return []byte(secret), nil
+	})
+	if err != nil || token == nil || !token.Valid {
+		return "", ""
+	}
+	if claims, ok := token.Claims.(jwt.MapClaims); ok {
+		sub, _ := claims["sub"].(string)
+		role, _ := claims["role"].(string)
+		return sub, role
+	}
+	return "", ""
 }
