@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/network/dio_client.dart';
 import '../models/home_models.dart';
@@ -11,11 +12,13 @@ class HomeService {
   final Dio _dio = DioClient().dio;
 
   Future<WalletSummary> fetchWallet() async {
+    if (debugFetchWallet != null) return debugFetchWallet!();
     final response = await _dio.get('/wallet');
     return WalletSummary.fromJson(response.data as Map<String, dynamic>);
   }
 
   Future<List<SavedPlaceModel>> fetchSavedPlaces() async {
+    if (debugFetchSavedPlaces != null) return debugFetchSavedPlaces!();
     final response = await _dio.get('/saved_places');
     final data = response.data as List<dynamic>? ?? [];
     return data
@@ -47,6 +50,7 @@ class HomeService {
   }
 
   Future<List<PromotionBanner>> fetchPromotions() async {
+    if (debugFetchPromotions != null) return debugFetchPromotions!();
     final response = await _dio.get('/promotions');
     final data = response.data as List<dynamic>? ?? [];
     return data
@@ -56,6 +60,7 @@ class HomeService {
   }
 
   Future<List<HomeNewsItem>> fetchNews({int limit = 5}) async {
+    if (debugFetchNews != null) return debugFetchNews!(limit: limit);
     final response = await _dio.get('/news', queryParameters: {'limit': limit});
     final data = response.data as List<dynamic>? ?? [];
     return data
@@ -64,3 +69,22 @@ class HomeService {
         .toList();
   }
 }
+
+// Test injection hooks
+@visibleForTesting
+typedef DebugFetchWallet = Future<WalletSummary> Function();
+@visibleForTesting
+typedef DebugFetchSavedPlaces = Future<List<SavedPlaceModel>> Function();
+@visibleForTesting
+typedef DebugFetchPromotions = Future<List<PromotionBanner>> Function();
+@visibleForTesting
+typedef DebugFetchNews = Future<List<HomeNewsItem>> Function({int limit});
+
+@visibleForTesting
+DebugFetchWallet? debugFetchWallet;
+@visibleForTesting
+DebugFetchSavedPlaces? debugFetchSavedPlaces;
+@visibleForTesting
+DebugFetchPromotions? debugFetchPromotions;
+@visibleForTesting
+DebugFetchNews? debugFetchNews;

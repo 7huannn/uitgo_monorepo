@@ -22,6 +22,10 @@ type Trip struct {
 	ServiceID  string     `json:"serviceId"`
 	OriginText string     `json:"originText"`
 	DestText   string     `json:"destText"`
+	OriginLat  *float64   `json:"originLat,omitempty"`
+	OriginLng  *float64   `json:"originLng,omitempty"`
+	DestLat    *float64   `json:"destLat,omitempty"`
+	DestLng    *float64   `json:"destLng,omitempty"`
 	Status     TripStatus `json:"status"`
 	CreatedAt  time.Time  `json:"createdAt"`
 	UpdatedAt  time.Time  `json:"updatedAt"`

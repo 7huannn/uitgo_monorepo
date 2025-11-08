@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../models/trip_models.dart';
 import '../services/trip_service.dart';
+import '../services/routing_service.dart';
 
 class TripTrackingPage extends StatefulWidget {
   const TripTrackingPage({
@@ -25,6 +26,7 @@ class TripTrackingPage extends StatefulWidget {
 class _TripTrackingPageState extends State<TripTrackingPage> {
   final TripService _tripService = TripService();
   final MapController _mapController = MapController();
+  final RoutingService _routingService = RoutingService();
 
   StreamSubscription<TripRealtimeEvent>? _subscription;
   TripDetail? _trip;
@@ -39,6 +41,8 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
 
   LatLng? _pickupLatLng;
   LatLng? _destinationLatLng;
+  RouteOverview? _tripRoute;
+  bool _routeLoading = false;
 
   static const LatLng _defaultCenter = LatLng(10.8705, 106.8032);
   static const double _defaultZoom = 15;
@@ -49,12 +53,15 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
     _trip = widget.initialTrip;
     _status = _trip?.status;
     _latestLocation = _trip?.lastLocation;
-    _pickupLatLng = _guessLatLng(_trip?.originText);
-    _destinationLatLng = _guessLatLng(_trip?.destText);
+    _pickupLatLng = _coordsFromTrip(_trip?.originLat, _trip?.originLng) ??
+        _guessLatLng(_trip?.originText);
+    _destinationLatLng = _coordsFromTrip(_trip?.destLat, _trip?.destLng) ??
+        _guessLatLng(_trip?.destText);
     _loadingTrip = _trip == null;
 
     unawaited(_loadTripIfNeeded());
     unawaited(_connectToTrip());
+    unawaited(_loadTripRoute());
   }
 
   @override
@@ -80,11 +87,15 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
         _trip = detail;
         _status = detail.status;
         _loadingTrip = false;
-        _pickupLatLng ??= _guessLatLng(detail.originText);
-        _destinationLatLng ??= _guessLatLng(detail.destText);
+        _pickupLatLng ??= _coordsFromTrip(detail.originLat, detail.originLng) ??
+            _guessLatLng(detail.originText);
+        _destinationLatLng ??=
+            _coordsFromTrip(detail.destLat, detail.destLng) ??
+                _guessLatLng(detail.destText);
         _latestLocation = detail.lastLocation ?? _latestLocation;
       });
       _moveCameraToCurrentLocation();
+      unawaited(_loadTripRoute());
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -121,6 +132,34 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
       setState(() {
         _socketError = 'Không thể kết nối realtime: $error';
         _connecting = false;
+      });
+    }
+  }
+
+  Future<void> _loadTripRoute() async {
+    final pickup = _pickupLatLng;
+    final destination = _destinationLatLng;
+    if (pickup == null || destination == null) {
+      setState(() {
+        _tripRoute = null;
+      });
+      return;
+    }
+    setState(() {
+      _routeLoading = true;
+    });
+    try {
+      final overview = await _routingService.fetchRoute(pickup, destination);
+      if (!mounted) return;
+      setState(() {
+        _tripRoute = overview;
+        _routeLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _tripRoute = null;
+        _routeLoading = false;
       });
     }
   }
@@ -185,6 +224,11 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
     return null;
   }
 
+  LatLng? _coordsFromTrip(double? lat, double? lng) {
+    if (lat == null || lng == null) return null;
+    return LatLng(lat, lng);
+  }
+
   @override
   Widget build(BuildContext context) {
     final trip = _trip;
@@ -195,7 +239,8 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
           IconButton(
             icon: const Icon(Icons.my_location),
             tooltip: 'Đưa tới vị trí tài xế',
-            onPressed: _driverLatLng != null ? () => _centerMap(_driverLatLng!) : null,
+            onPressed:
+                _driverLatLng != null ? () => _centerMap(_driverLatLng!) : null,
           ),
         ],
       ),
@@ -333,20 +378,30 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
   }
 
   List<Polyline> _buildPolylines() {
+    if (_tripRoute != null && _tripRoute!.polylinePoints.isNotEmpty) {
+      return [
+        Polyline(
+          points: _tripRoute!.polylinePoints,
+          color: Colors.indigo.shade400.withValues(alpha: 0.7),
+          strokeWidth: 4,
+        ),
+      ];
+    }
     if (_pickupLatLng == null || _destinationLatLng == null) {
       return const <Polyline>[];
     }
     return [
       Polyline(
         points: [_pickupLatLng!, _destinationLatLng!],
-        color: Colors.indigo.shade400.withValues(alpha: 0.7),
-        strokeWidth: 4,
+        color: Colors.indigo.shade400.withValues(alpha: 0.5),
+        strokeWidth: 3,
       ),
     ];
   }
 
   Widget _buildTripDetails(TripDetail? trip) {
-    final statusText = _status != null ? _statusLabel(_status!) : 'Đang cập nhật';
+    final statusText =
+        _status != null ? _statusLabel(_status!) : 'Đang cập nhật';
     final originText = trip?.originText ?? 'Đang tải...';
     final destText = trip?.destText ?? 'Đang tải...';
 
@@ -409,6 +464,26 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
               ),
             ],
           ),
+          if (_tripRoute != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.alt_route, color: Color(0xFF667EEA)),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${_tripRoute!.formattedDistance} • ETA ${_tripRoute!.formattedEta}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, color: Color(0xFF667EEA)),
+                  ),
+                ],
+              ),
+            ),
+          if (_routeLoading)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: LinearProgressIndicator(minHeight: 3),
+            ),
           const SizedBox(height: 16),
           _buildLocationRow(
             icon: Icons.radio_button_checked,

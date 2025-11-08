@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../../core/config/config.dart';
@@ -22,6 +23,10 @@ class TripService {
     required String originText,
     required String destText,
     required String serviceId,
+    double? originLat,
+    double? originLng,
+    double? destLat,
+    double? destLng,
   }) async {
     final now = DateTime.now().toUtc();
 
@@ -32,6 +37,10 @@ class TripService {
         serviceId: serviceId,
         originText: originText,
         destText: destText,
+        originLat: originLat,
+        originLng: originLng,
+        destLat: destLat,
+        destLng: destLng,
         status: 'requested',
         createdAt: now,
         updatedAt: now,
@@ -44,6 +53,10 @@ class TripService {
         'originText': originText,
         'destText': destText,
         'serviceId': serviceId,
+        if (originLat != null) 'originLat': originLat,
+        if (originLng != null) 'originLng': originLng,
+        if (destLat != null) 'destLat': destLat,
+        if (destLng != null) 'destLng': destLng,
       },
     );
 
@@ -57,6 +70,15 @@ class TripService {
     int? page,
     int? pageSize,
   }) async {
+    if (debugListTrips != null) {
+      return debugListTrips!(
+        role: role,
+        limit: limit,
+        offset: offset,
+        page: page,
+        pageSize: pageSize,
+      );
+    }
     if (useMock) {
       final now = DateTime.now();
       final trips = List.generate(
@@ -211,3 +233,16 @@ class TripService {
     );
   }
 }
+
+// Test injection hook
+@visibleForTesting
+typedef DebugListTripsFn = Future<PagedTrips> Function({
+  required String role,
+  int limit,
+  int offset,
+  int? page,
+  int? pageSize,
+});
+
+@visibleForTesting
+DebugListTripsFn? debugListTrips;

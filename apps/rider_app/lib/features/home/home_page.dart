@@ -1,43 +1,119 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:rider_app/app/router.dart';
 import 'package:rider_app/features/auth/services/auth_service.dart';
 import 'package:rider_app/features/home/models/home_models.dart';
 import 'package:rider_app/features/home/services/home_service.dart';
+import 'package:rider_app/features/notifications/services/notification_service.dart';
+import 'package:rider_app/features/places/models/place_suggestion.dart';
+import 'package:rider_app/features/places/services/geocoding_service.dart';
 import 'package:rider_app/features/trip/models/trip_models.dart';
 import 'package:rider_app/features/trip/services/trip_service.dart';
+import 'package:rider_app/features/trip/services/routing_service.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  const HomePage({super.key, this.debugStartReady = false});
+
+  // Test-only: bypass loading services and render the ready state immediately.
+  final bool debugStartReady;
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final TextEditingController _pickupController =
       TextEditingController(text: 'Sảnh A, Đại học UIT');
   final TextEditingController _destinationController = TextEditingController();
   final PageController _promoController =
       PageController(viewportFraction: 0.88);
+  final FocusNode _pickupFocus = FocusNode();
+  final FocusNode _destinationFocus = FocusNode();
+  final LayerLink _pickupLayerLink = LayerLink();
+  final LayerLink _destinationLayerLink = LayerLink();
+  final GlobalKey _pickupFieldKey = GlobalKey();
+  final GlobalKey _destinationFieldKey = GlobalKey();
+  final NotificationService _notificationService = NotificationService();
+  final ScrollController _scrollController = ScrollController();
+  OverlayEntry? _pickupOverlayEntry;
+  OverlayEntry? _destinationOverlayEntry;
 
   DateTime? _scheduledAt;
   String _selectedServiceId = _serviceOptions.first.id;
   bool _scheduleEnabled = false;
   final TripService _tripService = TripService();
   final HomeService _homeService = HomeService();
+  final GeocodingService _geocodingService = GeocodingService();
+  final RoutingService _routingService = RoutingService();
   TripDetail? _activeTrip;
   LocationUpdate? _liveLocation;
   String? _liveStatus;
   bool _isBooking = false;
   late Future<_HomeSnapshot> _homeFuture;
+  PlaceSuggestion? _pickupPlace;
+  PlaceSuggestion? _destinationPlace;
+  LatLng? _pickupLatLng;
+  LatLng? _destinationLatLng;
+  List<PlaceSuggestion> _pickupSuggestions = const [];
+  List<PlaceSuggestion> _destinationSuggestions = const [];
+  Timer? _pickupDebounce;
+  Timer? _destinationDebounce;
+  bool _searchingPickup = false;
+  bool _searchingDestination = false;
+  RouteOverview? _routeOverview;
+  bool _loadingRoutePreview = false;
+  String? _routeError;
+  bool _suppressPickupTextChange = false;
+  bool _suppressDestinationTextChange = false;
+  bool _interactingWithPickupOverlay = false;
+  bool _interactingWithDestinationOverlay = false;
+  bool _overlayRebuildPending = false;
+  Size _pickupFieldSize = Size.zero;
+  Size _destinationFieldSize = Size.zero;
+  int _unreadNotifications = 0;
 
   @override
   void initState() {
     super.initState();
-    _homeFuture = _loadHomeSnapshot();
+    WidgetsBinding.instance.addObserver(this);
+    _scrollController.addListener(_handleViewportChange);
+    _pickupPlace = const PlaceSuggestion(
+      name: 'Sảnh A, Đại học UIT',
+      latitude: 10.8705,
+      longitude: 106.8032,
+      address: 'Khu phố 6, Linh Trung',
+    );
+    _pickupLatLng = const LatLng(10.8705, 106.8032);
+    _setPickupText(_pickupPlace!.displayName, suppressOnChanged: true);
+    _pickupFocus.addListener(_onPickupFocusChange);
+    _destinationFocus.addListener(_onDestinationFocusChange);
+    if (widget.debugStartReady) {
+      _homeFuture = Future.value(
+        _HomeSnapshot(
+          riderName: 'Bạn',
+          wallet: WalletSummary(balance: 0, rewardPoints: 0),
+          savedPlaces: const [],
+          promotions: const [],
+          upcomingTrips: const [],
+          recentTrips: const [],
+          news: const [],
+        ),
+      );
+    } else {
+      _homeFuture = _loadHomeSnapshot();
+    }
+    unawaited(_refreshUnreadNotifications());
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    _handleViewportChange();
   }
 
   Future<_HomeSnapshot> _loadHomeSnapshot() async {
@@ -78,9 +154,24 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _removePickupOverlay();
+    _removeDestinationOverlay();
+    _pickupFocus.removeListener(_onPickupFocusChange);
+    _destinationFocus.removeListener(_onDestinationFocusChange);
     _pickupController.dispose();
     _destinationController.dispose();
     _promoController.dispose();
+    _scrollController.removeListener(_handleViewportChange);
+    _scrollController.dispose();
+    _cancelPickupDebounce(reason: 'dispose');
+    _cancelDestinationDebounce(reason: 'dispose');
+    _scheduleSuppressionRelease(
+        isPickup: true, reason: 'dispose', immediate: true);
+    _scheduleSuppressionRelease(
+        isPickup: false, reason: 'dispose', immediate: true);
+    _pickupFocus.dispose();
+    _destinationFocus.dispose();
     unawaited(_tripService.closeChannel());
     super.dispose();
   }
@@ -91,11 +182,497 @@ class _HomePageState extends State<HomePage> {
     context.goNamed(AppRouteNames.login);
   }
 
+  void _refreshFocusState() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _handleViewportChange() {
+    if (!mounted) return;
+    _pickupOverlayEntry?.markNeedsBuild();
+    _destinationOverlayEntry?.markNeedsBuild();
+    if (_overlayRebuildPending) return;
+    _overlayRebuildPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _overlayRebuildPending = false;
+      if (!mounted) return;
+      _pickupOverlayEntry?.markNeedsBuild();
+      _destinationOverlayEntry?.markNeedsBuild();
+    });
+  }
+
+  void _onPickupFocusChange() {
+    _refreshFocusState();
+    _refreshPickupOverlay();
+  }
+
+  void _onDestinationFocusChange() {
+    _refreshFocusState();
+    _refreshDestinationOverlay();
+  }
+
+  bool get _canBook =>
+      _pickupLatLng != null && _destinationLatLng != null;
+
+  void _cancelPickupDebounce({required String reason}) {
+    if (_pickupDebounce == null) return;
+    if (_pickupDebounce!.isActive) {
+      debugPrint('[SUGGESTION_TAP][pickup] cancel debounce (reason: $reason)');
+    }
+    _pickupDebounce?.cancel();
+    _pickupDebounce = null;
+  }
+
+  void _cancelDestinationDebounce({required String reason}) {
+    if (_destinationDebounce == null) return;
+    if (_destinationDebounce!.isActive) {
+      debugPrint(
+          '[SUGGESTION_TAP][destination] cancel debounce (reason: $reason)');
+    }
+    _destinationDebounce?.cancel();
+    _destinationDebounce = null;
+  }
+
+  void _logCtaState(String source) {
+    debugPrint(
+      '[SUGGESTION_TAP][CTA] $source pickupReady=${_pickupLatLng != null} '
+      'destReady=${_destinationLatLng != null} canBook=$_canBook',
+    );
+  }
+
   Future<void> _refreshHome() async {
     setState(() {
       _homeFuture = _loadHomeSnapshot();
     });
     await _homeFuture;
+    await _refreshUnreadNotifications();
+  }
+
+  Future<void> _refreshUnreadNotifications() async {
+    try {
+      final page = await _notificationService.listNotifications(
+        unreadOnly: true,
+        limit: 1,
+      );
+      if (!mounted) return;
+      setState(() {
+        _unreadNotifications = page.total;
+      });
+    } catch (e) {
+      debugPrint('Failed to load unread notifications: $e');
+      if (!mounted) return;
+      setState(() {
+        _unreadNotifications = 0;
+      });
+    }
+  }
+
+  Future<void> _markAllNotificationsAsRead() async {
+    try {
+      final page = await _notificationService.listNotifications(
+        unreadOnly: true,
+        limit: 50,
+      );
+      if (page.items.isEmpty) return;
+      await Future.wait(
+        page.items.map((notification) async {
+          try {
+            await _notificationService.markAsRead(notification.id);
+          } catch (error) {
+            debugPrint('Failed to mark notification ${notification.id}: $error');
+          }
+        }),
+      );
+    } catch (e) {
+      debugPrint('Failed to mark notifications as read: $e');
+    }
+  }
+
+  Future<void> _openNotifications() async {
+    await context.pushNamed(AppRouteNames.notifications);
+    if (!mounted) return;
+    setState(() {
+      _unreadNotifications = 0;
+    });
+    unawaited(() async {
+      await _markAllNotificationsAsRead();
+      await _refreshUnreadNotifications();
+    }());
+  }
+
+  void _setOverlayPointerInteraction({
+    required bool isPickup,
+    required bool active,
+  }) {
+    final label = isPickup ? 'pickup' : 'destination';
+    final previous = isPickup
+        ? _interactingWithPickupOverlay
+        : _interactingWithDestinationOverlay;
+    if (previous == active) return;
+    if (isPickup) {
+      _interactingWithPickupOverlay = active;
+    } else {
+      _interactingWithDestinationOverlay = active;
+    }
+    debugPrint(
+      '[SUGGESTION_TAP][$label] overlay pointer ${active ? 'down' : 'up'}',
+    );
+    if (!active) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (isPickup) {
+          _refreshPickupOverlay();
+        } else {
+          _refreshDestinationOverlay();
+        }
+      });
+    }
+  }
+
+  void _refreshPickupOverlay() {
+    final shouldShow = _pickupFocus.hasFocus && _pickupSuggestions.isNotEmpty;
+    if (shouldShow) {
+      _showPickupOverlay();
+    } else if (!_interactingWithPickupOverlay) {
+      _removePickupOverlay();
+    }
+  }
+
+  void _refreshDestinationOverlay() {
+    final shouldShow =
+        _destinationFocus.hasFocus && _destinationSuggestions.isNotEmpty;
+    if (shouldShow) {
+      _showDestinationOverlay();
+    } else if (!_interactingWithDestinationOverlay) {
+      _removeDestinationOverlay();
+    }
+  }
+
+  void _setPickupText(
+    String text, {
+    bool suppressOnChanged = false,
+    String reason = 'setPickupText',
+  }) {
+    if (suppressOnChanged) {
+      _beginSuppression(isPickup: true, reason: reason);
+    }
+    _applySuggestionToController(
+      controller: _pickupController,
+      text: text,
+      debugLabel: 'pickup',
+    );
+    if (suppressOnChanged) {
+      _scheduleSuppressionRelease(isPickup: true, reason: reason);
+    }
+  }
+
+  void _setDestinationText(
+    String text, {
+    bool suppressOnChanged = false,
+    String reason = 'setDestinationText',
+  }) {
+    if (suppressOnChanged) {
+      _beginSuppression(isPickup: false, reason: reason);
+    }
+    _applySuggestionToController(
+      controller: _destinationController,
+      text: text,
+      debugLabel: 'destination',
+    );
+    if (suppressOnChanged) {
+      _scheduleSuppressionRelease(isPickup: false, reason: reason);
+    }
+  }
+
+  void _applySuggestionToController({
+    required TextEditingController controller,
+    required String text,
+    required String debugLabel,
+  }) {
+    final trimmed = text.trim();
+    final resolvedText = trimmed.isEmpty ? text : trimmed;
+    debugPrint(
+      '[SUGGESTION_TAP][$debugLabel] preApply controller="${controller.text}" '
+      'target="$resolvedText"',
+    );
+    controller.value = TextEditingValue(
+      text: resolvedText,
+      selection: TextSelection.collapsed(offset: resolvedText.length),
+      composing: TextRange.empty,
+    );
+    debugPrint(
+      '[SUGGESTION_TAP][$debugLabel] postApply controller="${controller.text}"',
+    );
+    debugPrint(
+      '[APPLY_HELPER][$debugLabel] commit="$resolvedText" composingCleared',
+    );
+    assert(() {
+      final ok = controller.text == resolvedText;
+      if (!ok) {
+        debugPrint(
+          '[SUGGESTION_TAP][ASSERT][$debugLabel] Controller text mismatch '
+          '(expected "$resolvedText", got "${controller.text}")',
+        );
+      }
+      return ok;
+    }());
+  }
+
+  void _beginSuppression({required bool isPickup, required String reason}) {
+    if (isPickup) {
+      if (!_suppressPickupTextChange) {
+        debugPrint(
+            '[SUGGESTION_TAP][pickup] begin suppression (reason: $reason)');
+      } else {
+        debugPrint(
+            '[SUGGESTION_TAP][pickup] suppression already active (reason: $reason)');
+      }
+      _suppressPickupTextChange = true;
+    } else {
+      if (!_suppressDestinationTextChange) {
+        debugPrint(
+            '[SUGGESTION_TAP][destination] begin suppression (reason: $reason)');
+      } else {
+        debugPrint(
+            '[SUGGESTION_TAP][destination] suppression already active (reason: $reason)');
+      }
+      _suppressDestinationTextChange = true;
+    }
+  }
+
+  void _scheduleSuppressionRelease({
+    required bool isPickup,
+    required String reason,
+    bool immediate = false,
+  }) {
+    void release() {
+      if (isPickup) {
+        if (_suppressPickupTextChange) {
+          debugPrint(
+              '[SUGGESTION_TAP][pickup] release suppression (reason: $reason)');
+          _suppressPickupTextChange = false;
+        }
+      } else {
+        if (_suppressDestinationTextChange) {
+          debugPrint(
+              '[SUGGESTION_TAP][destination] release suppression (reason: $reason)');
+          _suppressDestinationTextChange = false;
+        }
+      }
+    }
+
+    if (immediate) {
+      release();
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) => release());
+  }
+
+  void _onPickupChanged(String value) {
+    if (_suppressPickupTextChange) {
+      debugPrint('[SUGGESTION_TAP][pickup] skip onChanged (suppressed)');
+      return;
+    }
+    _cancelPickupDebounce(reason: 'onChanged');
+    final trimmed = value.trim();
+    setState(() {
+      _pickupPlace = null;
+      _pickupLatLng = null;
+      _routeOverview = null;
+      _routeError = null;
+      _searchingPickup = trimmed.length >= 2;
+    });
+    if (trimmed.length < 2) {
+      setState(() {
+        _pickupSuggestions = const [];
+        _searchingPickup = false;
+      });
+      _refreshPickupOverlay();
+      _logCtaState('pickup:onChanged<2');
+      return;
+    }
+    _pickupDebounce = Timer(const Duration(milliseconds: 350), () async {
+      try {
+        final results = await _geocodingService.search(trimmed);
+        if (!mounted) return;
+        setState(() {
+          _pickupSuggestions = results;
+          _searchingPickup = false;
+        });
+        _refreshPickupOverlay();
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _pickupSuggestions = const [];
+          _searchingPickup = false;
+        });
+        _refreshPickupOverlay();
+      }
+    });
+  }
+
+  void _onDestinationChanged(String value) {
+    if (_suppressDestinationTextChange) {
+      debugPrint('[SUGGESTION_TAP][destination] skip onChanged (suppressed)');
+      return;
+    }
+    _cancelDestinationDebounce(reason: 'onChanged');
+    final trimmed = value.trim();
+    setState(() {
+      _destinationPlace = null;
+      _destinationLatLng = null;
+      _routeOverview = null;
+      _routeError = null;
+      _searchingDestination = trimmed.length >= 2;
+    });
+    if (trimmed.length < 2) {
+      setState(() {
+        _destinationSuggestions = const [];
+        _searchingDestination = false;
+      });
+      _refreshDestinationOverlay();
+      _logCtaState('destination:onChanged<2');
+      return;
+    }
+    _destinationDebounce =
+        Timer(const Duration(milliseconds: 350), () async {
+      try {
+        final results = await _geocodingService.search(trimmed);
+        if (!mounted) return;
+        setState(() {
+          _destinationSuggestions = results;
+          _searchingDestination = false;
+        });
+        _refreshDestinationOverlay();
+      } catch (_) {
+        if (!mounted) return;
+        setState(() {
+          _destinationSuggestions = const [];
+          _searchingDestination = false;
+        });
+        _refreshDestinationOverlay();
+      }
+    });
+  }
+
+  void _selectPickupSuggestion(PlaceSuggestion suggestion) {
+    debugPrint(
+        '[SUGGESTION_TAP][pickup] select label="${suggestion.name}" display="${suggestion.displayName}"');
+    _commitSuggestion(suggestion, isPickup: true);
+  }
+
+  void _selectDestinationSuggestion(PlaceSuggestion suggestion) {
+    debugPrint(
+        '[SUGGESTION_TAP][destination] select label="${suggestion.name}" display="${suggestion.displayName}"');
+    _commitSuggestion(suggestion, isPickup: false);
+  }
+
+  void _commitSuggestion(PlaceSuggestion suggestion, {required bool isPickup}) {
+    final label = isPickup ? 'pickup' : 'destination';
+    final controller =
+        isPickup ? _pickupController : _destinationController;
+    final focusNode = isPickup ? _pickupFocus : _destinationFocus;
+    final removeOverlay = isPickup ? _removePickupOverlay : _removeDestinationOverlay;
+    final cancelDebounce =
+        isPickup ? _cancelPickupDebounce : _cancelDestinationDebounce;
+
+    cancelDebounce(reason: 'selection');
+    _beginSuppression(isPickup: isPickup, reason: 'selection');
+
+    setState(() {
+      if (isPickup) {
+        _pickupPlace = suggestion;
+        _pickupLatLng = LatLng(suggestion.latitude, suggestion.longitude);
+        _pickupSuggestions = const [];
+        _searchingPickup = false;
+      } else {
+        _destinationPlace = suggestion;
+        _destinationLatLng =
+            LatLng(suggestion.latitude, suggestion.longitude);
+        _destinationSuggestions = const [];
+        _searchingDestination = false;
+      }
+    });
+
+    final displayName = suggestion.displayName;
+    final sanitizedLabel = displayName.trim();
+    final committedLabel =
+        sanitizedLabel.isEmpty ? suggestion.name : sanitizedLabel;
+
+    _applySuggestionToController(
+      controller: controller,
+      text: committedLabel,
+      debugLabel: label,
+    );
+
+    debugPrint('[$label] ${suggestion.name} -> '
+        '${suggestion.latitude}, ${suggestion.longitude}');
+
+    focusNode.unfocus();
+    removeOverlay();
+
+    _scheduleSuppressionRelease(isPickup: isPickup, reason: 'selection');
+
+    _tryLoadRouteOverview();
+    _logCtaState('$label:selection');
+  }
+
+  Future<void> _tryLoadRouteOverview() async {
+    final pickup = _pickupLatLng;
+    final dest = _destinationLatLng;
+    if (pickup == null || dest == null) {
+      debugPrint(
+        '[SUGGESTION_TAP][route] missing coords pickup=$pickup dest=$dest '
+        'canBook=$_canBook',
+      );
+      setState(() {
+        _routeOverview = null;
+        _routeError = null;
+      });
+      _logCtaState('route:missing-coords');
+      return;
+    }
+    debugPrint(
+      '[SUGGESTION_TAP][route] fetching preview pickup=$pickup dest=$dest',
+    );
+    setState(() {
+      _loadingRoutePreview = true;
+      _routeError = null;
+    });
+    try {
+      final overview = await _routingService.fetchRoute(
+        pickup,
+        dest,
+      );
+      if (!mounted) return;
+      if (overview == null) {
+        setState(() {
+          _routeOverview = null;
+          _loadingRoutePreview = false;
+          _routeError = 'Không tính được tuyến đường';
+        });
+        debugPrint('[SUGGESTION_TAP][route] preview null from service');
+        return;
+      }
+      setState(() {
+        _routeOverview = overview;
+        _loadingRoutePreview = false;
+      });
+      debugPrint(
+        '[SUGGESTION_TAP][route] preview ready '
+        'distance=${overview.formattedDistance} ETA=${overview.formattedEta}',
+      );
+      _logCtaState('route:ready');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _routeOverview = null;
+        _loadingRoutePreview = false;
+        _routeError = 'Không tính được tuyến đường';
+      });
+      debugPrint('[SUGGESTION_TAP][route] error $e');
+    }
   }
 
   void _handlePrimaryAction(_HomeSnapshot snapshot) {
@@ -104,6 +681,12 @@ class _HomePageState extends State<HomePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Bạn muốn đến đâu? Hãy nhập điểm đến trước nhé.')),
+      );
+      return;
+    }
+    if (_pickupLatLng == null || _destinationLatLng == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng chọn vị trí hợp lệ từ gợi ý.')),
       );
       return;
     }
@@ -155,9 +738,28 @@ class _HomePageState extends State<HomePage> {
               _buildSummaryRow('Điểm đến', destination,
                   icon: Icons.location_on),
               _buildSummaryRow('Thời gian', scheduleText, icon: Icons.schedule),
+              if (_loadingRoutePreview)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: LinearProgressIndicator(minHeight: 3),
+                )
+              else if (_routeOverview != null)
+                _buildSummaryRow(
+                  'Quãng đường',
+                  '${_routeOverview!.formattedDistance} • ETA ${_routeOverview!.formattedEta}',
+                  icon: Icons.alt_route,
+                ),
+              if (_routeError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    _routeError!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: _isBooking
+                onPressed: _isBooking || !_canBook
                     ? null
                     : () => _bookTrip(
                           sheetContext,
@@ -165,6 +767,8 @@ class _HomePageState extends State<HomePage> {
                           pickup: pickup,
                           destination: destination,
                           scheduleText: scheduleText,
+                          pickupPlace: _pickupPlace!,
+                          destinationPlace: _destinationPlace!,
                         ),
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size.fromHeight(50),
@@ -244,25 +848,51 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _handleQuickAction(_QuickAction action) {
-    switch (action.id) {
-      case 'popular-uit':
-        _destinationController.text = 'Cổng chính Đại học UIT';
-        break;
-      case 'home-trip':
-        _pickupController.text = '12 Võ Oanh, Bình Thạnh';
-        _destinationController.text = 'UIT, Linh Trung, Thủ Đức';
-        break;
-      case 'express':
-        _selectService('express');
-        _destinationController.text = 'Bưu cục UIT-Express, Q.Thủ Đức';
-        break;
-      case 'support':
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text(
-                  'Chúng tôi sẽ kết nối bạn với tổng đài trong giây lát.')),
-        );
-        break;
+    setState(() {
+      switch (action.id) {
+        case 'popular-uit':
+          _setDestinationText(
+            'Cổng chính Đại học UIT',
+            suppressOnChanged: false,
+          );
+          _destinationPlace = null;
+          _destinationLatLng = null;
+          break;
+        case 'home-trip':
+          _setPickupText(
+            '12 Võ Oanh, Bình Thạnh',
+            suppressOnChanged: false,
+          );
+          _setDestinationText(
+            'UIT, Linh Trung, Thủ Đức',
+            suppressOnChanged: false,
+          );
+          _pickupPlace = null;
+          _destinationPlace = null;
+          _pickupLatLng = null;
+          _destinationLatLng = null;
+          break;
+        case 'express':
+          _selectService('express');
+          _setDestinationText(
+            'Bưu cục UIT-Express, Q.Thủ Đức',
+            suppressOnChanged: false,
+          );
+          _destinationPlace = null;
+          _destinationLatLng = null;
+          break;
+        case 'support':
+          break;
+      }
+      _routeOverview = null;
+      _routeError = null;
+    });
+    if (action.id == 'support') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content:
+                Text('Chúng tôi sẽ kết nối bạn với tổng đài trong giây lát.')),
+      );
     }
   }
 
@@ -302,7 +932,7 @@ class _HomePageState extends State<HomePage> {
                   const Icon(Icons.radio_button_checked, color: Colors.green),
               title: const Text('Chọn làm điểm đón'),
               onTap: () {
-                _pickupController.text = place.address;
+                _applySavedPlace(place, isPickup: true);
                 Navigator.pop(context);
               },
             ),
@@ -310,7 +940,7 @@ class _HomePageState extends State<HomePage> {
               leading: const Icon(Icons.location_on, color: Color(0xFFFF6B6B)),
               title: const Text('Chọn làm điểm đến'),
               onTap: () {
-                _destinationController.text = place.address;
+                _applySavedPlace(place, isPickup: false);
                 Navigator.pop(context);
               },
             ),
@@ -320,12 +950,35 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  void _applySavedPlace(SavedPlaceModel place, {required bool isPickup}) {
+    final suggestion = PlaceSuggestion(
+      name: place.name,
+      address: place.address,
+      latitude: place.latitude,
+      longitude: place.longitude,
+    );
+    setState(() {
+      if (isPickup) {
+        _pickupPlace = suggestion;
+        _pickupLatLng = LatLng(place.latitude, place.longitude);
+        _setPickupText(suggestion.displayName);
+      } else {
+        _destinationPlace = suggestion;
+        _destinationLatLng = LatLng(place.latitude, place.longitude);
+        _setDestinationText(suggestion.displayName);
+      }
+    });
+    _tryLoadRouteOverview();
+  }
+
   Future<void> _bookTrip(
     BuildContext sheetContext, {
     required _ServiceOption service,
     required String pickup,
     required String destination,
     required String scheduleText,
+    required PlaceSuggestion pickupPlace,
+    required PlaceSuggestion destinationPlace,
   }) async {
     if (_isBooking) return;
     setState(() {
@@ -337,6 +990,10 @@ class _HomePageState extends State<HomePage> {
         originText: pickup,
         destText: destination,
         serviceId: service.id,
+        originLat: pickupPlace.latitude,
+        originLng: pickupPlace.longitude,
+        destLat: destinationPlace.latitude,
+        destLng: destinationPlace.longitude,
       );
 
       if (!mounted) return;
@@ -414,13 +1071,18 @@ class _HomePageState extends State<HomePage> {
           final data = snapshot.data;
           final hasData =
               snapshot.connectionState == ConnectionState.done && data != null;
+          final canBook = hasData && _canBook;
+          final resolvedData = data;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: SizedBox(
               width: double.infinity,
               child: FloatingActionButton.extended(
-                onPressed: hasData ? () => _handlePrimaryAction(data) : null,
-                backgroundColor: const Color(0xFF667EEA),
+                onPressed: canBook && resolvedData != null
+                    ? () => _handlePrimaryAction(resolvedData)
+                    : null,
+                backgroundColor:
+                    canBook ? const Color(0xFF667EEA) : Colors.grey[400],
                 elevation: 4,
                 label: const Text(
                   'Đặt chuyến ngay',
@@ -454,12 +1116,14 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildBody(_HomeSnapshot snapshot) {
     return Stack(
+      clipBehavior: Clip.none,
       children: [
         _buildBackground(),
         SafeArea(
           child: RefreshIndicator(
             onRefresh: _refreshHome,
             child: ListView(
+              controller: _scrollController,
               padding: EdgeInsets.zero,
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
@@ -484,16 +1148,23 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildBackground() {
-    return Container(
-      height: 320,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF667EEA),
-            Color(0xFF764BA2),
-          ],
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: IgnorePointer(
+        child: Container(
+          height: 320,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF667EEA),
+                Color(0xFF764BA2),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -521,6 +1192,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildHeader(_HomeSnapshot snapshot) {
+    final unreadCount = _unreadNotifications.clamp(0, 999);
+    final hasUnread = unreadCount > 0;
+    final badgeLabel = unreadCount > 99 ? '99+' : '$unreadCount';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -575,24 +1249,35 @@ class _HomePageState extends State<HomePage> {
               IconButton(
                 icon: const Icon(Icons.notifications_none,
                     color: Colors.white, size: 28),
-                onPressed: () => context.pushNamed(AppRouteNames.notifications),
+                onPressed: _openNotifications,
               ),
-              Positioned(
-                right: 6,
-                top: 6,
-                child: Container(
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: Colors.redAccent,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Center(
-                    child: Text('3',
-                        style: TextStyle(fontSize: 10, color: Colors.white)),
+              if (hasUnread)
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Container(
+                    constraints: const BoxConstraints(
+                      minWidth: 18,
+                      minHeight: 18,
+                    ),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent,
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Center(
+                      child: Text(
+                        badgeLabel,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         ],
@@ -890,36 +1575,114 @@ class _HomePageState extends State<HomePage> {
           ),
           const SizedBox(height: 20),
           _buildLocationField(
+            fieldKey: _pickupFieldKey,
+            layerLink: _pickupLayerLink,
             controller: _pickupController,
             icon: Icons.radio_button_checked,
             hintText: 'Điểm đón',
             color: const Color(0xFF38B000),
+            focusNode: _pickupFocus,
+            onChanged: _onPickupChanged,
+            isSearching: _searchingPickup,
+            inputKey: const Key('pickupInput'),
+            isPickupField: true,
             suffix: IconButton(
-              onPressed: () => _pickupController.clear(),
+              onPressed: () {
+                setState(() {
+                  _pickupController.clear();
+                  _pickupPlace = null;
+                  _pickupLatLng = null;
+                  _pickupSuggestions = const [];
+                  _routeOverview = null;
+                  _routeError = null;
+                });
+                _removePickupOverlay();
+              },
               icon: const Icon(Icons.close, size: 18),
               color: Colors.grey[500],
             ),
           ),
           const SizedBox(height: 12),
           _buildLocationField(
+            fieldKey: _destinationFieldKey,
+            layerLink: _destinationLayerLink,
             controller: _destinationController,
             icon: Icons.location_on,
             hintText: 'Bạn muốn đến đâu?',
             color: const Color(0xFFFF6B6B),
+            focusNode: _destinationFocus,
+            onChanged: _onDestinationChanged,
+            isSearching: _searchingDestination,
+            inputKey: const Key('destinationInput'),
+            isPickupField: false,
             suffix: IconButton(
-              onPressed: () => _destinationController.clear(),
+              onPressed: () {
+                setState(() {
+                  _destinationController.clear();
+                  _destinationPlace = null;
+                  _destinationLatLng = null;
+                  _destinationSuggestions = const [];
+                  _routeOverview = null;
+                  _routeError = null;
+                });
+                _removeDestinationOverlay();
+              },
               icon: const Icon(Icons.close, size: 18),
               color: Colors.grey[500],
             ),
           ),
           const SizedBox(height: 16),
+          if (_loadingRoutePreview)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: LinearProgressIndicator(minHeight: 3),
+            )
+          else if (_routeOverview != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.alt_route, color: Color(0xFF667EEA)),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${_routeOverview!.formattedDistance} • ETA ${_routeOverview!.formattedEta}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, color: Color(0xFF667EEA)),
+                  ),
+                ],
+              ),
+            )
+          else if (_routeError != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                _routeError!,
+                style: const TextStyle(color: Colors.red),
+              ),
+            ),
+          const SizedBox(height: 4),
           Row(
             children: [
               ElevatedButton.icon(
                 onPressed: () {
                   final currentPickup = _pickupController.text;
-                  _pickupController.text = _destinationController.text;
-                  _destinationController.text = currentPickup;
+                  setState(() {
+                    _setPickupText(
+                      _destinationController.text,
+                      suppressOnChanged: true,
+                    );
+                    _setDestinationText(
+                      currentPickup,
+                      suppressOnChanged: true,
+                    );
+                    final temp = _pickupPlace;
+                    _pickupPlace = _destinationPlace;
+                    _destinationPlace = temp;
+                    final tempLat = _pickupLatLng;
+                    _pickupLatLng = _destinationLatLng;
+                    _destinationLatLng = tempLat;
+                  });
+                  _tryLoadRouteOverview();
                 },
                 icon: const Icon(Icons.swap_vert_rounded, size: 20),
                 label: const Text('Đổi vị trí'),
@@ -1012,45 +1775,268 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildLocationField({
+    GlobalKey? fieldKey,
+    required LayerLink layerLink,
     required TextEditingController controller,
     required IconData icon,
     required String hintText,
     required Color color,
     Widget? suffix,
+    FocusNode? focusNode,
+    ValueChanged<String>? onChanged,
+    bool isSearching = false,
+    Key? inputKey,
+    required bool isPickupField,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Icon(icon, color: color, size: 18),
+    return CompositedTransformTarget(
+      link: layerLink,
+      child: KeyedSubtree(
+        key: ValueKey(
+            isPickupField ? 'pickupFieldContainer' : 'destinationFieldContainer'),
+        child: Container(
+          key: fieldKey,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.shade200),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              decoration: InputDecoration(
-                border: InputBorder.none,
-                hintText: hintText,
-                hintStyle: TextStyle(color: Colors.grey[500]),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(icon, color: color, size: 18),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Focus(
+                      onKeyEvent: (node, event) {
+                        if (event.logicalKey == LogicalKeyboardKey.escape &&
+                            event is KeyDownEvent) {
+                          focusNode?.unfocus();
+                          return KeyEventResult.handled;
+                        }
+                        return KeyEventResult.ignored;
+                      },
+                      child: TextField(
+                        key: inputKey,
+                        controller: controller,
+                        focusNode: focusNode,
+                        onChanged: onChanged,
+                        decoration: InputDecoration(
+                          border: InputBorder.none,
+                          hintText: hintText,
+                          hintStyle: TextStyle(color: Colors.grey[500]),
+                        ),
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                  if (suffix != null) suffix,
+                ],
               ),
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-            ),
+              if (isSearching) const LinearProgressIndicator(minHeight: 2),
+            ],
           ),
-          if (suffix != null) suffix,
-        ],
+        ),
       ),
     );
+  }
+
+  OverlayEntry _buildSuggestionOverlay({
+    required LayerLink link,
+    required List<PlaceSuggestion> suggestions,
+    required Color color,
+    required ValueChanged<PlaceSuggestion> onSelect,
+    required Size Function() fieldSizeResolver,
+    required bool isPickup,
+  }) {
+    return OverlayEntry(
+      builder: (context) {
+        final fieldSize = fieldSizeResolver();
+        final width = fieldSize.width > 0 ? fieldSize.width : 320.0;
+        final verticalOffset =
+            (fieldSize.height > 0 ? fieldSize.height : 56.0) + 8.0;
+        final overlayWidth = MediaQuery.sizeOf(context).width;
+        final normalizedWidth = width <= 0 || overlayWidth <= 0
+            ? null
+            : (width / overlayWidth).clamp(0.0, 1.0);
+        return CompositedTransformFollower(
+          link: link,
+          showWhenUnlinked: false,
+          offset: Offset(0, verticalOffset),
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (_) =>
+                _setOverlayPointerInteraction(isPickup: isPickup, active: true),
+            onPointerUp: (_) => _setOverlayPointerInteraction(
+                isPickup: isPickup, active: false),
+            onPointerCancel: (_) => _setOverlayPointerInteraction(
+                isPickup: isPickup, active: false),
+            child: PointerInterceptor(
+              child: Align(
+                alignment: Alignment.topLeft,
+                widthFactor:
+                    normalizedWidth != null && normalizedWidth > 0
+                        ? normalizedWidth
+                        : null,
+                child: SizedBox(
+                  key: ValueKey(isPickup
+                      ? 'pickupSuggestionsOverlay'
+                      : 'destinationSuggestionsOverlay'),
+                  width: width,
+                  child: _buildSuggestionPanel(
+                    suggestions: suggestions,
+                    color: color,
+                    onSelect: onSelect,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSuggestionPanel({
+    required List<PlaceSuggestion> suggestions,
+    required Color color,
+    required ValueChanged<PlaceSuggestion> onSelect,
+  }) {
+    return Material(
+      color: Colors.white,
+      elevation: 12,
+      borderRadius: BorderRadius.circular(12),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 300),
+        child: ListView.separated(
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          physics: const ClampingScrollPhysics(),
+          itemCount: suggestions.length,
+          separatorBuilder: (_, __) => const Divider(height: 1),
+          itemBuilder: (context, index) {
+            final suggestion = suggestions[index];
+            return InkWell(
+              onTap: () {
+                debugPrint(
+                  '[SUGGESTION_TAP] onTap label="${suggestion.name}" '
+                  'display="${suggestion.displayName}" index=$index',
+                );
+                onSelect(suggestion);
+              },
+              child: ListTile(
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                title: Text(
+                  suggestion.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: suggestion.address != null
+                    ? Text(
+                        suggestion.address!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      )
+                    : null,
+                leading: Icon(Icons.place,
+                    color: color.withValues(alpha: 0.8)),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Size _fieldSize(GlobalKey key) {
+    final renderObject = key.currentContext?.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return Size.zero;
+    }
+    return renderObject.size;
+  }
+
+  Size _resolveFieldSize({required bool isPickup}) {
+    final key = isPickup ? _pickupFieldKey : _destinationFieldKey;
+    final lastSize =
+        isPickup ? _pickupFieldSize : _destinationFieldSize;
+    final measured = _fieldSize(key);
+    if (measured != Size.zero) {
+      if (isPickup) {
+        _pickupFieldSize = measured;
+      } else {
+        _destinationFieldSize = measured;
+      }
+      return measured;
+    }
+    return lastSize;
+  }
+
+  void _showPickupOverlay() {
+    final overlay = Overlay.of(context, rootOverlay: true);
+    _pickupOverlayEntry?.remove();
+    final size = _resolveFieldSize(isPickup: true);
+    final widthLog = size.width > 0 ? size.width : 360.0;
+    final offsetLog = (size.height > 0 ? size.height : 56.0) + 8.0;
+    debugPrint(
+        '[SUGGESTION_TAP][pickup] show overlay width=$widthLog offset=$offsetLog');
+    _pickupOverlayEntry = _buildSuggestionOverlay(
+      link: _pickupLayerLink,
+      suggestions: _pickupSuggestions,
+      color: const Color(0xFF38B000),
+      onSelect: _selectPickupSuggestion,
+      fieldSizeResolver: () => _resolveFieldSize(isPickup: true),
+      isPickup: true,
+    );
+    overlay.insert(_pickupOverlayEntry!);
+  }
+
+  void _removePickupOverlay() {
+    if (_pickupOverlayEntry != null) {
+      debugPrint('[SUGGESTION_TAP][pickup] removing overlay');
+      _pickupOverlayEntry?.remove();
+      _pickupOverlayEntry = null;
+      _interactingWithPickupOverlay = false;
+    }
+  }
+
+  void _showDestinationOverlay() {
+    final overlay = Overlay.of(context, rootOverlay: true);
+    _destinationOverlayEntry?.remove();
+    final size = _resolveFieldSize(isPickup: false);
+    final widthLog = size.width > 0 ? size.width : 360.0;
+    final offsetLog = (size.height > 0 ? size.height : 56.0) + 8.0;
+    debugPrint(
+        '[SUGGESTION_TAP][destination] show overlay width=$widthLog offset=$offsetLog');
+    _destinationOverlayEntry = _buildSuggestionOverlay(
+      link: _destinationLayerLink,
+      suggestions: _destinationSuggestions,
+      color: const Color(0xFFFF6B6B),
+      onSelect: _selectDestinationSuggestion,
+      fieldSizeResolver: () => _resolveFieldSize(isPickup: false),
+      isPickup: false,
+    );
+    overlay.insert(_destinationOverlayEntry!);
+  }
+
+  void _removeDestinationOverlay() {
+    if (_destinationOverlayEntry != null) {
+      debugPrint('[SUGGESTION_TAP][destination] removing overlay');
+      _destinationOverlayEntry?.remove();
+      _destinationOverlayEntry = null;
+      _interactingWithDestinationOverlay = false;
+    }
   }
 
   Widget _buildSavedPlaces(_HomeSnapshot snapshot) {

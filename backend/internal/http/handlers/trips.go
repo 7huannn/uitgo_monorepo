@@ -41,9 +41,13 @@ func RegisterTripRoutes(router *gin.Engine, service *domain.TripService, driverS
 }
 
 type createTripRequest struct {
-	OriginText string `json:"originText" binding:"required"`
-	DestText   string `json:"destText" binding:"required"`
-	ServiceID  string `json:"serviceId" binding:"required"`
+	OriginText string   `json:"originText" binding:"required"`
+	DestText   string   `json:"destText" binding:"required"`
+	ServiceID  string   `json:"serviceId" binding:"required"`
+	OriginLat  *float64 `json:"originLat"`
+	OriginLng  *float64 `json:"originLng"`
+	DestLat    *float64 `json:"destLat"`
+	DestLng    *float64 `json:"destLng"`
 }
 
 type updateStatusRequest struct {
@@ -61,6 +65,10 @@ type tripResponse struct {
 	ServiceID    string                 `json:"serviceId"`
 	OriginText   string                 `json:"originText"`
 	DestText     string                 `json:"destText"`
+	OriginLat    *float64               `json:"originLat,omitempty"`
+	OriginLng    *float64               `json:"originLng,omitempty"`
+	DestLat      *float64               `json:"destLat,omitempty"`
+	DestLng      *float64               `json:"destLng,omitempty"`
 	Status       domain.TripStatus      `json:"status"`
 	CreatedAt    time.Time              `json:"createdAt"`
 	UpdatedAt    time.Time              `json:"updatedAt"`
@@ -82,6 +90,10 @@ func toTripResponse(trip *domain.Trip, location *domain.LocationUpdate) tripResp
 		ServiceID:    trip.ServiceID,
 		OriginText:   trip.OriginText,
 		DestText:     trip.DestText,
+		OriginLat:    trip.OriginLat,
+		OriginLng:    trip.OriginLng,
+		DestLat:      trip.DestLat,
+		DestLng:      trip.DestLng,
 		Status:       trip.Status,
 		CreatedAt:    trip.CreatedAt,
 		UpdatedAt:    trip.UpdatedAt,
@@ -151,6 +163,10 @@ func (h *TripHandler) createTrip(c *gin.Context) {
 		ServiceID:  req.ServiceID,
 		OriginText: req.OriginText,
 		DestText:   req.DestText,
+		OriginLat:  req.OriginLat,
+		OriginLng:  req.OriginLng,
+		DestLat:    req.DestLat,
+		DestLng:    req.DestLng,
 	}
 
 	if err := h.service.Create(c.Request.Context(), trip); err != nil {

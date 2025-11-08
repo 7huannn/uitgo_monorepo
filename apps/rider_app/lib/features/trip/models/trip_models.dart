@@ -5,6 +5,10 @@ class TripDetail {
     required this.serviceId,
     required this.originText,
     required this.destText,
+    this.originLat,
+    this.originLng,
+    this.destLat,
+    this.destLng,
     required this.status,
     required this.createdAt,
     required this.updatedAt,
@@ -17,6 +21,10 @@ class TripDetail {
   final String serviceId;
   final String originText;
   final String destText;
+  final double? originLat;
+  final double? originLng;
+  final double? destLat;
+  final double? destLng;
   final String status;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -30,6 +38,10 @@ class TripDetail {
       serviceId: json['serviceId'] as String? ?? '',
       originText: json['originText'] as String? ?? '',
       destText: json['destText'] as String? ?? '',
+      originLat: (json['originLat'] as num?)?.toDouble(),
+      originLng: (json['originLng'] as num?)?.toDouble(),
+      destLat: (json['destLat'] as num?)?.toDouble(),
+      destLng: (json['destLng'] as num?)?.toDouble(),
       status: json['status'] as String? ?? 'requested',
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.now(),

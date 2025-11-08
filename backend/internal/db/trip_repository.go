@@ -27,6 +27,10 @@ type tripModel struct {
 	ServiceID  string
 	OriginText string
 	DestText   string
+	OriginLat  *float64
+	OriginLng  *float64
+	DestLat    *float64
+	DestLng    *float64
 	Status     string
 	CreatedAt  time.Time `gorm:"autoCreateTime"`
 	UpdatedAt  time.Time `gorm:"autoUpdateTime"`
@@ -71,6 +75,10 @@ func (r *tripRepository) CreateTrip(trip *domain.Trip) error {
 		ServiceID:  trip.ServiceID,
 		OriginText: trip.OriginText,
 		DestText:   trip.DestText,
+		OriginLat:  trip.OriginLat,
+		OriginLng:  trip.OriginLng,
+		DestLat:    trip.DestLat,
+		DestLng:    trip.DestLng,
 		Status:     string(trip.Status),
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -107,6 +115,10 @@ func (r *tripRepository) GetTrip(id string) (*domain.Trip, error) {
 		ServiceID:  model.ServiceID,
 		OriginText: model.OriginText,
 		DestText:   model.DestText,
+		OriginLat:  model.OriginLat,
+		OriginLng:  model.OriginLng,
+		DestLat:    model.DestLat,
+		DestLng:    model.DestLng,
 		Status:     domain.TripStatus(model.Status),
 		CreatedAt:  model.CreatedAt,
 		UpdatedAt:  model.UpdatedAt,
@@ -254,6 +266,10 @@ func (r *tripRepository) ListTrips(userID string, role string, limit, offset int
 			ServiceID:  model.ServiceID,
 			OriginText: model.OriginText,
 			DestText:   model.DestText,
+			OriginLat:  model.OriginLat,
+			OriginLng:  model.OriginLng,
+			DestLat:    model.DestLat,
+			DestLng:    model.DestLng,
 			Status:     domain.TripStatus(model.Status),
 			CreatedAt:  model.CreatedAt,
 			UpdatedAt:  model.UpdatedAt,

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../../core/config/config.dart';
 import '../../../core/network/dio_client.dart';
@@ -16,6 +17,13 @@ class NotificationService {
     int limit = 20,
     int offset = 0,
   }) async {
+    if (debugListNotifications != null) {
+      return debugListNotifications!(
+        unreadOnly: unreadOnly,
+        limit: limit,
+        offset: offset,
+      );
+    }
     if (useMock) {
       final now = DateTime.now();
       final items = List<AppNotification>.generate(
@@ -54,3 +62,14 @@ class NotificationService {
     await _dio.patch('/notifications/$id/read');
   }
 }
+
+// Test injection hook
+@visibleForTesting
+typedef DebugListNotificationsFn = Future<NotificationPageResult> Function({
+  bool unreadOnly,
+  int limit,
+  int offset,
+});
+
+@visibleForTesting
+DebugListNotificationsFn? debugListNotifications;
