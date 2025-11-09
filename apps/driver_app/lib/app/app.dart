@@ -1,3 +1,4 @@
+import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -18,17 +19,27 @@ class DriverApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(
+          create: (_) => ThemeModeController(initialMode: ThemeMode.system),
+        ),
+        ChangeNotifierProvider(
           create: (_) => AuthController(AuthService())..bootstrap(),
         ),
         ChangeNotifierProvider(
-          create: (_) => DriverHomeController(DriverService(), TripService()),
+          create: (_) => DriverHomeController(
+            DriverService(),
+            TripService(),
+          ),
         ),
       ],
-      child: MaterialApp(
-        title: 'UIT-Go Driver',
-        debugShowCheckedModeBanner: false,
-        theme: buildLightTheme(),
-        home: const _AuthGate(),
+      child: Consumer<ThemeModeController>(
+        builder: (_, themeController, __) => MaterialApp(
+          title: 'UIT-Go Driver',
+          debugShowCheckedModeBanner: false,
+          theme: buildLightTheme(),
+          darkTheme: buildDarkTheme(),
+          themeMode: themeController.themeMode,
+          home: const _AuthGate(),
+        ),
       ),
     );
   }

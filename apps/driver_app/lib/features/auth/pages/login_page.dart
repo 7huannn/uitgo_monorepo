@@ -1,7 +1,7 @@
+import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/widgets/primary_button.dart';
 import '../controllers/auth_controller.dart';
 import 'sign_up_page.dart';
 
@@ -15,127 +15,77 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _submitting = false;
-  String? _error;
+  static const _accentColor = Color(0xFF00BFA5);
 
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleLogin() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() {
-      _submitting = true;
-      _error = null;
-    });
+  Future<bool> _handleLogin(String email, String password) async {
     final auth = context.read<AuthController>();
-    final success =
-        await auth.login(_emailController.text.trim(), _passwordController.text);
-    if (!success) {
-      setState(() => _error = 'Sai thông tin đăng nhập.');
-    }
-    if (mounted) {
-      setState(() => _submitting = false);
-    }
+    final success = await auth.login(email.trim(), password);
+    return success;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Card(
-            elevation: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'UIT-Go Driver',
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        labelText: 'Email',
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Nhập email';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Mật khẩu',
-                      ),
-                      validator: (value) {
-                        if (value == null || value.length < 6) {
-                          return 'Mật khẩu tối thiểu 6 ký tự';
-                        }
-                        return null;
-                      },
-                    ),
-                    if (_error != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        _error!,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ],
-                    const SizedBox(height: 20),
-                  PrimaryButton(
-                    label: 'Đăng nhập',
-                    loading: _submitting,
-                    onPressed: _submitting ? null : _handleLogin,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text("Chưa có tài khoản?"),
-                      TextButton(
-                        onPressed: _submitting
-                            ? null
-                            : () async {
-                                final created = await Navigator.push<bool>(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const SignUpPage(),
-                                  ),
-                                );
-                                if (created == true && mounted) {
-                                  setState(() => _error = null);
-                                }
-                              },
-                        child: const Text('Đăng ký'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          ),
+  void _handleForgotPassword() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Liên hệ điều phối viên để hỗ trợ đặt lại mật khẩu.',
         ),
       ),
     );
   }
+
+  void _handleRegister() {
+    Navigator.of(context).push(_fadeRoute(const SignUpPage()));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final themeController = context.watch<ThemeModeController?>();
+
+    return UitGoLoginScreen(
+      logo: Icon(
+        Icons.directions_car,
+        size: 56,
+        color: Theme.of(context).colorScheme.primary,
+        semanticLabel: 'UIT-Go Driver',
+      ),
+      appName: 'UIT-Go Driver',
+      tagline: 'Đăng nhập tài xế',
+      accentColor: _accentColor,
+      onLogin: _handleLogin,
+      onForgotPassword: _handleForgotPassword,
+      onRegister: _handleRegister,
+      loginButtonLabel: 'Bắt đầu ca làm',
+      registerLabel: 'Đăng ký',
+      registerMessage: 'Chưa có tài khoản?',
+      forgotPasswordLabel: 'Quên mật khẩu?',
+      failureMessage: 'Sai thông tin đăng nhập. Thử lại nhé.',
+      themeMode: themeController?.themeMode,
+      onToggleTheme: themeController?.toggle,
+    );
+  }
+}
+
+PageRouteBuilder<bool> _fadeRoute(Widget page) {
+  return PageRouteBuilder<bool>(
+    pageBuilder: (_, __, ___) => page,
+    transitionDuration: const Duration(milliseconds: 220),
+    transitionsBuilder: (_, animation, __, child) {
+      final curve = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      );
+      return FadeTransition(
+        opacity: curve,
+        child: SlideTransition(
+          position: curve.drive(
+            Tween<Offset>(
+              begin: const Offset(0, 0.04),
+              end: Offset.zero,
+            ),
+          ),
+          child: child,
+        ),
+      );
+    },
+  );
 }

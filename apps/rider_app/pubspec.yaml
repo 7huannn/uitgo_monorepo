@@ -8,8 +8,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  design_system:
+    path: ../../packages/design_system
   lottie: ^3.3.0
   go_router: ^14.2.0
+  provider: ^6.1.2
   shared_preferences: ^2.2.2  # Lưu trữ local
   http: ^1.1.0 
   dio: ^5.4.0
