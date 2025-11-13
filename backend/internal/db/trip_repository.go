@@ -15,6 +15,11 @@ type tripRepository struct {
 	db *gorm.DB
 }
 
+var (
+	_ domain.TripRepository     = (*tripRepository)(nil)
+	_ domain.TripSyncRepository = (*tripRepository)(nil)
+)
+
 // NewTripRepository returns a GORM-backed TripRepository.
 func NewTripRepository(db *gorm.DB) domain.TripRepository {
 	return &tripRepository{db: db}

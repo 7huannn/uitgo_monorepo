@@ -22,11 +22,16 @@ type AuthHandler struct {
 	users         domain.UserRepository
 	jwtSecret     string
 	notifications domain.NotificationRepository
-	driverService *domain.DriverService
+	driverService DriverProvisioner
+}
+
+// DriverProvisioner provisions driver profiles during onboarding.
+type DriverProvisioner interface {
+	Register(ctx context.Context, userID string, input domain.DriverRegistrationInput) (*domain.Driver, error)
 }
 
 // NewAuthHandler builds an AuthHandler.
-func NewAuthHandler(cfg *config.Config, users domain.UserRepository, notifications domain.NotificationRepository, driverService *domain.DriverService) *AuthHandler {
+func NewAuthHandler(cfg *config.Config, users domain.UserRepository, notifications domain.NotificationRepository, driverService DriverProvisioner) *AuthHandler {
 	return &AuthHandler{
 		users:         users,
 		jwtSecret:     cfg.JWTSecret,

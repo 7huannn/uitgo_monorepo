@@ -9,10 +9,13 @@ import (
 
 // Config holds runtime configuration for the API server.
 type Config struct {
-	Port           string
-	DatabaseURL    string
-	AllowedOrigins []string
-	JWTSecret      string
+	Port             string
+	DatabaseURL      string
+	AllowedOrigins   []string
+	JWTSecret        string
+	InternalAPIKey   string
+	DriverServiceURL string
+	TripServiceURL   string
 }
 
 // Load reads configuration from environment variables.
@@ -26,6 +29,9 @@ func Load() (*Config, error) {
 
 	dbURL := os.Getenv("POSTGRES_DSN")
 	jwtSecret := os.Getenv("JWT_SECRET")
+	internalAPIKey := os.Getenv("INTERNAL_API_KEY")
+	driverServiceURL := strings.TrimSpace(os.Getenv("DRIVER_SERVICE_URL"))
+	tripServiceURL := strings.TrimSpace(os.Getenv("TRIP_SERVICE_URL"))
 
 	rawOrigins := strings.TrimSpace(os.Getenv("CORS_ALLOWED_ORIGINS"))
 	var origins []string
@@ -43,9 +49,12 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		Port:           port,
-		DatabaseURL:    dbURL,
-		AllowedOrigins: origins,
-		JWTSecret:      jwtSecret,
+		Port:             port,
+		DatabaseURL:      dbURL,
+		AllowedOrigins:   origins,
+		JWTSecret:        jwtSecret,
+		InternalAPIKey:   internalAPIKey,
+		DriverServiceURL: driverServiceURL,
+		TripServiceURL:   tripServiceURL,
 	}, nil
 }

@@ -29,11 +29,11 @@ type DriverProfileUpdate struct {
 type DriverService struct {
 	drivers     DriverRepository
 	assignments TripAssignmentRepository
-	trips       TripRepository
+	trips       TripSyncRepository
 }
 
 // NewDriverService wires repositories for driver operations.
-func NewDriverService(drivers DriverRepository, assignments TripAssignmentRepository, trips TripRepository) *DriverService {
+func NewDriverService(drivers DriverRepository, assignments TripAssignmentRepository, trips TripSyncRepository) *DriverService {
 	return &DriverService{
 		drivers:     drivers,
 		assignments: assignments,

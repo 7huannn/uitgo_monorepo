@@ -10,9 +10,10 @@ import (
 )
 
 const (
-	userIDHeader = "X-User-Id"
-	roleHeader   = "X-Role"
-	defaultUser  = "demo-user"
+	userIDHeader        = "X-User-Id"
+	roleHeader          = "X-Role"
+	defaultUser         = "demo-user"
+	internalTokenHeader = "X-Internal-Token"
 )
 
 // Auth attaches authentication info to the request context.
@@ -80,6 +81,22 @@ func CORS(allowedOrigins []string) gin.HandlerFunc {
 			return
 		}
 		c.Next()
+	}
+}
+
+// InternalOnly restricts a route to internal callers by validating a static token.
+func InternalOnly(secret string) gin.HandlerFunc {
+	secret = strings.TrimSpace(secret)
+	return func(c *gin.Context) {
+		if secret == "" {
+			c.Next()
+			return
+		}
+		if token := c.GetHeader(internalTokenHeader); token != "" && token == secret {
+			c.Next()
+			return
+		}
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "internal access only"})
 	}
 }
 

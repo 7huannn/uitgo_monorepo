@@ -121,7 +121,7 @@ func (c *Client) readPump(service *domain.TripService) {
 }
 
 func (c *Client) persistDriverLocation(service *domain.TripService, update domain.LocationUpdate) {
-	if c.hub == nil || c.hub.driverRepo == nil {
+	if c.hub == nil || c.hub.driverLocations == nil {
 		return
 	}
 	driverID := c.resolveDriverID(service)
@@ -134,7 +134,7 @@ func (c *Client) persistDriverLocation(service *domain.TripService, update domai
 		Longitude:  update.Longitude,
 		RecordedAt: update.Timestamp,
 	}
-	if err := c.hub.driverRepo.RecordLocation(c.ctx, driverID, driverLocation); err != nil {
+	if err := c.hub.driverLocations.RecordLocation(c.ctx, driverID, driverLocation); err != nil {
 		log.Printf("save driver latest location: %v", err)
 	}
 }
@@ -178,25 +178,29 @@ func (c *Client) writePump() {
 	}
 }
 
-type Hub struct {
-	tripID     string
-	service    *domain.TripService
-	driverRepo domain.DriverRepository
-	clients    map[*Client]struct{}
-	register   chan *Client
-	unregister chan *Client
-	broadcast  chan []byte
+type DriverLocationWriter interface {
+	RecordLocation(ctx context.Context, driverID string, location *domain.DriverLocation) error
 }
 
-func newHub(tripID string, service *domain.TripService, driverRepo domain.DriverRepository) *Hub {
+type Hub struct {
+	tripID          string
+	service         *domain.TripService
+	driverLocations DriverLocationWriter
+	clients         map[*Client]struct{}
+	register        chan *Client
+	unregister      chan *Client
+	broadcast       chan []byte
+}
+
+func newHub(tripID string, service *domain.TripService, driverRepo DriverLocationWriter) *Hub {
 	return &Hub{
-		tripID:     tripID,
-		service:    service,
-		driverRepo: driverRepo,
-		clients:    make(map[*Client]struct{}),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		broadcast:  make(chan []byte, 16),
+		tripID:          tripID,
+		service:         service,
+		driverLocations: driverRepo,
+		clients:         make(map[*Client]struct{}),
+		register:        make(chan *Client),
+		unregister:      make(chan *Client),
+		broadcast:       make(chan []byte, 16),
 	}
 }
 
@@ -233,18 +237,18 @@ func (h *Hub) broadcastJSON(msg outboundMessage) {
 }
 
 type HubManager struct {
-	service    *domain.TripService
-	driverRepo domain.DriverRepository
-	hubs       map[string]*Hub
-	mu         sync.RWMutex
+	service         *domain.TripService
+	driverLocations DriverLocationWriter
+	hubs            map[string]*Hub
+	mu              sync.RWMutex
 }
 
 // NewHubManager constructs a HubManager.
-func NewHubManager(service *domain.TripService, driverRepo domain.DriverRepository) *HubManager {
+func NewHubManager(service *domain.TripService, driverRepo DriverLocationWriter) *HubManager {
 	return &HubManager{
-		service:    service,
-		driverRepo: driverRepo,
-		hubs:       make(map[string]*Hub),
+		service:         service,
+		driverLocations: driverRepo,
+		hubs:            make(map[string]*Hub),
 	}
 }
 
@@ -261,7 +265,7 @@ func (m *HubManager) get(tripID string) *Hub {
 	if hub, exists = m.hubs[tripID]; exists {
 		return hub
 	}
-	hub = newHub(tripID, m.service, m.driverRepo)
+	hub = newHub(tripID, m.service, m.driverLocations)
 	m.hubs[tripID] = hub
 	go hub.run()
 	return hub

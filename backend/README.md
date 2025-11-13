@@ -8,24 +8,18 @@ Go service powering the UITGo rider and driver applications. It exposes a minima
 - Docker & Docker Compose v2 for containerised development.
 - `make`
 
-## Getting Started
+## Stage 1 microservices
+
+The monolith is now split into three Go services that run behind an API gateway. The easiest way to run the full stack (gateway + 3× Postgres) is via the top-level `docker-compose.yml`:
 
 ```bash
-cp backend/.env.example backend/.env   # adjust credentials if needed
-cd backend
-make dev                               # builds the image, starts postgres + api
+cd <repo-root>
+docker compose up --build
 ```
 
-Services start on:
+The gateway listens on `http://localhost:8080`, so the Flutter apps can keep their existing `API_BASE`. Each service still loads configuration from the same environment variables listed below (`POSTGRES_DSN`, `JWT_SECRET`, etc.) and runs its own migrations automatically.
 
-- HTTP API: `http://localhost:8080`
-- PostgreSQL: `localhost:5432` (user/pass `uitgo/uitgo`, db `uitgo`)
-
-To stop the stack:
-
-```bash
-make down
-```
+You can still work on a single service by building its Dockerfile (e.g. `backend/user_service/Dockerfile`) or by running `go run ./user_service/cmd/server` with an appropriate `.env`.
 
 ### Local development without Docker
 

@@ -52,6 +52,11 @@ func (s *TripService) UpdateStatus(ctx context.Context, id string, status TripSt
 	return s.repo.UpdateTripStatus(id, status)
 }
 
+// AssignDriver links/unlinks a driver to the trip.
+func (s *TripService) AssignDriver(ctx context.Context, id string, driverID *string) error {
+	return s.repo.SetTripDriver(id, driverID)
+}
+
 // RecordLocation saves a location update.
 func (s *TripService) RecordLocation(ctx context.Context, tripID string, update LocationUpdate) error {
 	return s.repo.SaveLocation(tripID, update)
