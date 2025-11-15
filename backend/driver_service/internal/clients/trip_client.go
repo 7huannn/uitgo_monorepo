@@ -2,7 +2,6 @@ package clients
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"

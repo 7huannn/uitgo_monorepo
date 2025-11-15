@@ -13,7 +13,7 @@ class HomeService {
 
   Future<WalletSummary> fetchWallet() async {
     if (debugFetchWallet != null) return debugFetchWallet!();
-    final response = await _dio.get('/wallet');
+    final response = await _dio.get('/v1/wallet');
     return WalletSummary.fromJson(response.data as Map<String, dynamic>);
   }
 

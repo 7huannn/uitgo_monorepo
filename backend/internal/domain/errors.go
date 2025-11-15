@@ -13,4 +13,6 @@ var (
 	ErrDriverOffline          = errors.New("driver offline")
 	ErrTripAssignmentNotFound = errors.New("trip assignment not found")
 	ErrAssignmentConflict     = errors.New("assignment conflict")
+	ErrWalletInvalidAmount    = errors.New("invalid wallet amount")
+	ErrWalletInsufficientFunds = errors.New("insufficient wallet balance")
 )

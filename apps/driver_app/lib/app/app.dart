@@ -11,6 +11,9 @@ import '../features/home/pages/home_page.dart';
 import '../features/trips/services/trip_service.dart';
 import 'theme.dart';
 
+final GlobalKey<NavigatorState> driverNavigatorKey =
+    GlobalKey<NavigatorState>();
+
 class DriverApp extends StatelessWidget {
   const DriverApp({super.key});
 
@@ -33,6 +36,7 @@ class DriverApp extends StatelessWidget {
       ],
       child: Consumer<ThemeModeController>(
         builder: (_, themeController, __) => MaterialApp(
+          navigatorKey: driverNavigatorKey,
           title: 'UIT-Go Driver',
           debugShowCheckedModeBanner: false,
           theme: buildLightTheme(),

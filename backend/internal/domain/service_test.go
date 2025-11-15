@@ -77,7 +77,7 @@ func (s *stubRepo) ListTrips(userID string, role string, limit, offset int) ([]*
 
 func TestTripServiceCreate(t *testing.T) {
 	repo := newStubRepo()
-	service := domain.NewTripService(repo)
+	service := domain.NewTripService(repo, nil, nil)
 
 	trip := &domain.Trip{
 		RiderID:    "rider-1",
@@ -95,7 +95,7 @@ func TestTripServiceCreate(t *testing.T) {
 
 func TestTripServiceUpdateStatusValidation(t *testing.T) {
 	repo := newStubRepo()
-	service := domain.NewTripService(repo)
+	service := domain.NewTripService(repo, nil, nil)
 
 	err := service.UpdateStatus(context.Background(), "trip-1", domain.TripStatus("invalid"))
 	require.ErrorIs(t, err, domain.ErrInvalidStatus)
@@ -103,7 +103,7 @@ func TestTripServiceUpdateStatusValidation(t *testing.T) {
 
 func TestTripServiceRecordLocation(t *testing.T) {
 	repo := newStubRepo()
-	service := domain.NewTripService(repo)
+	service := domain.NewTripService(repo, nil, nil)
 
 	repo.trips["trip-1"] = &domain.Trip{ID: "trip-1"}
 

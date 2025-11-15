@@ -4,10 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:provider/provider.dart';
 
 import '../models/trip_models.dart';
 import '../services/trip_service.dart';
 import '../services/routing_service.dart';
+import '../../wallet/state/wallet_notifier.dart';
 
 class TripTrackingPage extends StatefulWidget {
   const TripTrackingPage({
@@ -85,7 +87,6 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
       if (!mounted) return;
       setState(() {
         _trip = detail;
-        _status = detail.status;
         _loadingTrip = false;
         _pickupLatLng ??= _coordsFromTrip(detail.originLat, detail.originLng) ??
             _guessLatLng(detail.originText);
@@ -94,6 +95,7 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
                 _guessLatLng(detail.destText);
         _latestLocation = detail.lastLocation ?? _latestLocation;
       });
+      _applyStatus(detail.status);
       _moveCameraToCurrentLocation();
       unawaited(_loadTripRoute());
     } catch (error) {
@@ -172,9 +174,34 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
       });
       _moveCameraToCurrentLocation();
     } else if (event.type == RealtimeEventType.status && event.status != null) {
-      setState(() {
-        _status = event.status;
-      });
+      _applyStatus(event.status);
+    }
+  }
+
+  void _applyStatus(String? status, {bool silent = false}) {
+    if (status == null || status.isEmpty) return;
+    final previous = _status;
+    if (previous == status) return;
+    setState(() {
+      _status = status;
+    });
+    final becameCompleted =
+        _isCompletedStatus(status) && !_isCompletedStatus(previous);
+    if (!silent && becameCompleted) {
+      _refreshWalletSummary();
+    }
+  }
+
+  bool _isCompletedStatus(String? status) {
+    return (status ?? '').toLowerCase() == 'completed';
+  }
+
+  Future<void> _refreshWalletSummary() async {
+    if (!mounted) return;
+    try {
+      await context.read<WalletNotifier>().refresh();
+    } catch (_) {
+      // ignore wallet refresh errors; UI can retry later
     }
   }
 
@@ -331,12 +358,14 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
 
   List<Marker> _buildMarkers() {
     final markers = <Marker>[];
+    const double markerWidth = 110;
+    const double markerHeight = 80;
     if (_pickupLatLng != null) {
       markers.add(
         Marker(
           point: _pickupLatLng!,
-          width: 44,
-          height: 44,
+          width: markerWidth,
+          height: markerHeight,
           alignment: Alignment.topCenter,
           child: _MapMarker(
             label: 'Điểm đón',
@@ -350,8 +379,8 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
       markers.add(
         Marker(
           point: _destinationLatLng!,
-          width: 44,
-          height: 44,
+          width: markerWidth,
+          height: markerHeight,
           alignment: Alignment.topCenter,
           child: _MapMarker(
             label: 'Điểm đến',

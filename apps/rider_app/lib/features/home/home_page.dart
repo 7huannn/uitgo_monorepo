@@ -15,6 +15,8 @@ import 'package:rider_app/features/places/services/geocoding_service.dart';
 import 'package:rider_app/features/trip/models/trip_models.dart';
 import 'package:rider_app/features/trip/services/trip_service.dart';
 import 'package:rider_app/features/trip/services/routing_service.dart';
+import 'package:rider_app/features/wallet/state/wallet_notifier.dart';
+import 'package:provider/provider.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, this.debugStartReady = false});
@@ -134,12 +136,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final promotions = results[2] as List<PromotionBanner>;
     final news = results[3] as List<HomeNewsItem>;
     final pagedTrips = results[4] as PagedTrips;
-    final trips = pagedTrips.items;
+    final trips = [...pagedTrips.items]
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    if (mounted) {
+      context.read<WalletNotifier>().replace(wallet);
+    }
 
-    final upcoming =
-        trips.where((trip) => !_isTerminalStatus(trip.status)).take(3).toList();
-    final recent =
-        trips.where((trip) => _isTerminalStatus(trip.status)).take(5).toList();
+    final upcoming = trips
+        .where((trip) => !_isTerminalStatus(trip.status))
+        .take(3)
+        .toList();
+    final recent = trips
+        .where((trip) => _isTerminalStatus(trip.status))
+        .take(5)
+        .toList();
 
     return _HomeSnapshot(
       riderName: riderName,
@@ -182,6 +192,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     context.goNamed(AppRouteNames.login);
   }
 
+  Future<void> _openWalletPage() async {
+    if (!mounted) return;
+    await context.pushNamed(AppRouteNames.payments);
+  }
+
   void _refreshFocusState() {
     if (mounted) {
       setState(() {});
@@ -212,8 +227,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _refreshDestinationOverlay();
   }
 
-  bool get _canBook =>
-      _pickupLatLng != null && _destinationLatLng != null;
+  bool get _canBook => _pickupLatLng != null && _destinationLatLng != null;
 
   void _cancelPickupDebounce({required String reason}) {
     if (_pickupDebounce == null) return;
@@ -280,7 +294,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           try {
             await _notificationService.markAsRead(notification.id);
           } catch (error) {
-            debugPrint('Failed to mark notification ${notification.id}: $error');
+            debugPrint(
+                'Failed to mark notification ${notification.id}: $error');
           }
         }),
       );
@@ -535,8 +550,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       _logCtaState('destination:onChanged<2');
       return;
     }
-    _destinationDebounce =
-        Timer(const Duration(milliseconds: 350), () async {
+    _destinationDebounce = Timer(const Duration(milliseconds: 350), () async {
       try {
         final results = await _geocodingService.search(trimmed);
         if (!mounted) return;
@@ -570,10 +584,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   void _commitSuggestion(PlaceSuggestion suggestion, {required bool isPickup}) {
     final label = isPickup ? 'pickup' : 'destination';
-    final controller =
-        isPickup ? _pickupController : _destinationController;
+    final controller = isPickup ? _pickupController : _destinationController;
     final focusNode = isPickup ? _pickupFocus : _destinationFocus;
-    final removeOverlay = isPickup ? _removePickupOverlay : _removeDestinationOverlay;
+    final removeOverlay =
+        isPickup ? _removePickupOverlay : _removeDestinationOverlay;
     final cancelDebounce =
         isPickup ? _cancelPickupDebounce : _cancelDestinationDebounce;
 
@@ -588,8 +602,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         _searchingPickup = false;
       } else {
         _destinationPlace = suggestion;
-        _destinationLatLng =
-            LatLng(suggestion.latitude, suggestion.longitude);
+        _destinationLatLng = LatLng(suggestion.latitude, suggestion.longitude);
         _destinationSuggestions = const [];
         _searchingDestination = false;
       }
@@ -1115,57 +1128,50 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Widget _buildBody(_HomeSnapshot snapshot) {
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        _buildBackground(),
-        SafeArea(
-          child: RefreshIndicator(
-            onRefresh: _refreshHome,
-            child: ListView(
-              controller: _scrollController,
-              padding: EdgeInsets.zero,
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: [
-                const SizedBox(height: 18),
-                _buildHeader(snapshot),
-                _buildWalletAndPoints(snapshot),
-                _buildSearchCard(snapshot),
-                if (_activeTrip != null) _buildLiveTripCard(),
-                _buildSavedPlaces(snapshot),
-                _buildQuickActions(),
-                _buildUpcomingTrips(snapshot),
-                _buildPromotions(snapshot),
-                _buildRecentTrips(snapshot),
-                _buildNews(snapshot),
-                const SizedBox(height: 140),
-              ],
-            ),
-          ),
+    return SafeArea(
+      child: RefreshIndicator(
+        onRefresh: _refreshHome,
+        child: ListView(
+          key: const ValueKey('homeListView'),
+          controller: _scrollController,
+          padding: EdgeInsets.zero,
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            _buildHeroSection(snapshot),
+            if (_activeTrip != null) _buildLiveTripCard(),
+            _buildSavedPlaces(snapshot),
+            _buildQuickActions(),
+            _buildUpcomingTrips(snapshot),
+            _buildPromotions(snapshot),
+            _buildRecentTrips(snapshot),
+            _buildNews(snapshot),
+            const SizedBox(height: 140),
+          ],
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildBackground() {
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: IgnorePointer(
-        child: Container(
-          height: 320,
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF667EEA),
-                Color(0xFF764BA2),
-              ],
-            ),
-          ),
+  Widget _buildHeroSection(_HomeSnapshot snapshot) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFF667EEA),
+            Color(0xFF764BA2),
+          ],
         ),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 18),
+          _buildHeader(snapshot),
+          _buildWalletAndPoints(snapshot),
+          _buildSearchCard(snapshot),
+          const SizedBox(height: 28),
+        ],
       ),
     );
   }
@@ -1286,71 +1292,70 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Widget _buildWalletAndPoints(_HomeSnapshot snapshot) {
-    final wallet = snapshot.wallet;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+    return Consumer<WalletNotifier>(
+      builder: (context, notifier, _) {
+        final wallet = notifier.summary ?? snapshot.wallet;
+        return Container(
+          margin: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.06),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('UITGo Pay',
-                    style: TextStyle(fontSize: 14, color: Colors.black54)),
-                const SizedBox(height: 6),
-                Text(
-                  '${_formatCurrency(wallet.balance)} đ',
-                  style: const TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.w700),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('UITGo Pay',
+                        style: TextStyle(fontSize: 14, color: Colors.black54)),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${_formatCurrency(wallet.balance)} đ',
+                      style: const TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: _openWalletPage,
+                      icon: const Icon(Icons.add_circle_outline, size: 18),
+                      label: const Text('Nạp thêm'),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                TextButton.icon(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text(
-                              'Nạp tiền sẽ được kích hoạt khi kết nối ví điện tử.')),
-                    );
-                  },
-                  icon: const Icon(Icons.add_circle_outline, size: 18),
-                  label: const Text('Nạp thêm'),
+              ),
+              Container(width: 1, height: 72, color: Colors.grey[200]),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Điểm thưởng',
+                        style: TextStyle(fontSize: 14, color: Colors.black54)),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${wallet.rewardPoints}',
+                      style: const TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 12),
+                    Text('Đổi km miễn phí',
+                        style:
+                            TextStyle(fontSize: 13, color: Colors.grey[600])),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-          Container(width: 1, height: 72, color: Colors.grey[200]),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Điểm thưởng',
-                    style: TextStyle(fontSize: 14, color: Colors.black54)),
-                const SizedBox(height: 6),
-                Text(
-                  '${wallet.rewardPoints}',
-                  style: const TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 12),
-                Text('Đổi km miễn phí',
-                    style: TextStyle(fontSize: 13, color: Colors.grey[600])),
-              ],
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1791,8 +1796,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return CompositedTransformTarget(
       link: layerLink,
       child: KeyedSubtree(
-        key: ValueKey(
-            isPickupField ? 'pickupFieldContainer' : 'destinationFieldContainer'),
+        key: ValueKey(isPickupField
+            ? 'pickupFieldContainer'
+            : 'destinationFieldContainer'),
         child: Container(
           key: fieldKey,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -1883,10 +1889,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             child: PointerInterceptor(
               child: Align(
                 alignment: Alignment.topLeft,
-                widthFactor:
-                    normalizedWidth != null && normalizedWidth > 0
-                        ? normalizedWidth
-                        : null,
+                widthFactor: normalizedWidth != null && normalizedWidth > 0
+                    ? normalizedWidth
+                    : null,
                 child: SizedBox(
                   key: ValueKey(isPickup
                       ? 'pickupSuggestionsOverlay'
@@ -1949,8 +1954,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                         overflow: TextOverflow.ellipsis,
                       )
                     : null,
-                leading: Icon(Icons.place,
-                    color: color.withValues(alpha: 0.8)),
+                leading: Icon(Icons.place, color: color.withValues(alpha: 0.8)),
               ),
             );
           },
@@ -1969,8 +1973,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   Size _resolveFieldSize({required bool isPickup}) {
     final key = isPickup ? _pickupFieldKey : _destinationFieldKey;
-    final lastSize =
-        isPickup ? _pickupFieldSize : _destinationFieldSize;
+    final lastSize = isPickup ? _pickupFieldSize : _destinationFieldSize;
     final measured = _fieldSize(key);
     if (measured != Size.zero) {
       if (isPickup) {
@@ -2277,64 +2280,89 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 final promo = promotions[index];
                 return Padding(
                   padding: EdgeInsets.only(
-                      right: index == promotions.length - 1 ? 20 : 10,
-                      left: index == 0 ? 20 : 0),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: promo.gradient),
+                    right: index == promotions.length - 1 ? 20 : 10,
+                    left: index == 0 ? 20 : 0,
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(24),
+                    child: InkWell(
                       borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(
-                          color: promo.gradient.last.withValues(alpha: 0.25),
-                          blurRadius: 18,
-                          offset: const Offset(0, 6),
-                        ),
-                      ],
-                    ),
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          promo.title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          promo.description,
-                          style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.92)),
-                        ),
-                        const Spacer(),
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.88),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Text(
-                                promo.code,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF667EEA)),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              promo.expiryLabel,
-                              style: const TextStyle(
-                                  color: Colors.white70, fontSize: 12),
+                      onTap: () => _showPromotionDetails(promo),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: promo.gradient),
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: promo.gradient.last.withValues(alpha: 0.25),
+                              blurRadius: 18,
+                              offset: const Offset(0, 6),
                             ),
                           ],
                         ),
-                      ],
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              promo.title,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              promo.description,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.92),
+                              ),
+                            ),
+                            const Spacer(),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color:
+                                        Colors.white.withValues(alpha: 0.88),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: Text(
+                                    promo.code,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF667EEA),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                TextButton.icon(
+                                  onPressed: () => _copyPromoCode(promo.code),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  icon: const Icon(Icons.copy, size: 16),
+                                  label: const Text('Sao chép mã'),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  promo.expiryLabel,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 );
@@ -2343,6 +2371,144 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _copyPromoCode(String code) async {
+    await Clipboard.setData(ClipboardData(text: code));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Đã sao chép mã $code')),
+    );
+  }
+
+  Future<void> _showPromotionDetails(PromotionBanner promo) async {
+    if (!mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  promo.title,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  promo.description,
+                  style: TextStyle(fontSize: 15, color: Colors.grey[700]),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF667EEA).withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF667EEA),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          promo.code,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Nhập mã này ở bước thanh toán.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  promo.expiryLabel,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Áp dụng khi đặt chuyến bằng UITGo Pay.',
+                  style: TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      await _copyPromoCode(promo.code);
+                      if (Navigator.of(sheetContext).canPop()) {
+                        Navigator.of(sheetContext).pop();
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF667EEA),
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    icon: const Icon(Icons.copy, color: Colors.white),
+                    label: const Text(
+                      'Sao chép & đóng',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(sheetContext).pop(),
+                  child: const Text('Đóng'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -2652,7 +2818,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
       _MenuItemData(
         icon: Icons.payment,
-        title: 'Phương thức thanh toán',
+        title: 'Ví & Thanh toán',
         routeName: AppRouteNames.payments,
       ),
       _MenuItemData(

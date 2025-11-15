@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,53 +9,6 @@ import (
 
 	"uitgo/backend/internal/domain"
 )
-
-// Wallet repository --------------------------------------------------------
-
-type walletRepository struct {
-	db *gorm.DB
-}
-
-// NewWalletRepository wires a GORM-backed wallet repository.
-func NewWalletRepository(db *gorm.DB) domain.WalletRepository {
-	return &walletRepository{db: db}
-}
-
-type walletModel struct {
-	UserID       string `gorm:"primaryKey"`
-	Balance      int64
-	RewardPoints int64
-	UpdatedAt    time.Time `gorm:"autoUpdateTime"`
-}
-
-func (walletModel) TableName() string {
-	return "wallets"
-}
-
-func (r *walletRepository) Get(ctx context.Context, userID string) (*domain.WalletSummary, error) {
-	var model walletModel
-	err := r.db.WithContext(ctx).First(&model, "user_id = ?", userID).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		model = walletModel{
-			UserID:       userID,
-			Balance:      0,
-			RewardPoints: 0,
-			UpdatedAt:    time.Now().UTC(),
-		}
-		if err := r.db.WithContext(ctx).Create(&model).Error; err != nil {
-			return nil, err
-		}
-	} else if err != nil {
-		return nil, err
-	}
-
-	return &domain.WalletSummary{
-		UserID:       model.UserID,
-		Balance:      model.Balance,
-		RewardPoints: model.RewardPoints,
-		UpdatedAt:    model.UpdatedAt,
-	}, nil
-}
 
 // Saved places repository --------------------------------------------------
 

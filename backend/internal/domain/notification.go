@@ -24,3 +24,9 @@ type NotificationRepository interface {
 	List(ctx context.Context, userID string, unreadOnly bool, limit, offset int) ([]*Notification, int64, error)
 	MarkAsRead(ctx context.Context, id, userID string) error
 }
+
+// TripEventNotifier dispatches push notifications for trip lifecycle events.
+type TripEventNotifier interface {
+	NotifyDriverTripAssigned(ctx context.Context, driver *Driver, trip *Trip) error
+	NotifyRiderStatusChange(ctx context.Context, trip *Trip, status TripStatus) error
+}

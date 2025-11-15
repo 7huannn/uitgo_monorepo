@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"log"
 	"strings"
 	"time"
 )
@@ -30,14 +31,16 @@ type DriverService struct {
 	drivers     DriverRepository
 	assignments TripAssignmentRepository
 	trips       TripSyncRepository
+	notifier    TripEventNotifier
 }
 
 // NewDriverService wires repositories for driver operations.
-func NewDriverService(drivers DriverRepository, assignments TripAssignmentRepository, trips TripSyncRepository) *DriverService {
+func NewDriverService(drivers DriverRepository, assignments TripAssignmentRepository, trips TripSyncRepository, notifier TripEventNotifier) *DriverService {
 	return &DriverService{
 		drivers:     drivers,
 		assignments: assignments,
 		trips:       trips,
+		notifier:    notifier,
 	}
 }
 
@@ -161,10 +164,12 @@ func (s *DriverService) AssignTrip(ctx context.Context, tripID, driverID string)
 	if tripID == "" || driverID == "" {
 		return nil, errors.New("trip id and driver id required")
 	}
-	if _, err := s.trips.GetTrip(tripID); err != nil {
+	trip, err := s.trips.GetTrip(tripID)
+	if err != nil {
 		return nil, err
 	}
-	if _, err := s.drivers.FindByID(ctx, driverID); err != nil {
+	driver, err := s.drivers.FindByID(ctx, driverID)
+	if err != nil {
 		return nil, err
 	}
 	status, err := s.drivers.GetAvailability(ctx, driverID)
@@ -186,6 +191,11 @@ func (s *DriverService) AssignTrip(ctx context.Context, tripID, driverID string)
 	}
 	if err := s.trips.SetTripDriver(tripID, &driverID); err != nil {
 		return nil, err
+	}
+	if s.notifier != nil {
+		if err := s.notifier.NotifyDriverTripAssigned(ctx, driver, trip); err != nil {
+			log.Printf("notify driver assignment: %v", err)
+		}
 	}
 	return assignment, nil
 }
@@ -251,6 +261,11 @@ func (s *DriverService) UpdateTripStatus(ctx context.Context, tripID, driverID s
 	}
 
 	trip.Status = next
+	if s.notifier != nil {
+		if err := s.notifier.NotifyRiderStatusChange(ctx, trip, next); err != nil {
+			log.Printf("notify rider status: %v", err)
+		}
+	}
 	return trip, nil
 }
 

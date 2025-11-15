@@ -25,12 +25,6 @@ func RegisterHomeRoutes(router gin.IRoutes, service *domain.HomeService) {
 	router.GET("/news", handler.news)
 }
 
-type walletResponse struct {
-	Balance      int64  `json:"balance"`
-	RewardPoints int64  `json:"rewardPoints"`
-	UpdatedAt    string `json:"updatedAt"`
-}
-
 func (h *HomeHandler) wallet(c *gin.Context) {
 	userID := userIDFromContext(c)
 	if userID == "" {

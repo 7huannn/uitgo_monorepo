@@ -47,20 +47,28 @@ class TripService {
       );
     }
 
-    final response = await _dio.post(
-      '/v1/trips',
-      data: {
-        'originText': originText,
-        'destText': destText,
-        'serviceId': serviceId,
-        if (originLat != null) 'originLat': originLat,
-        if (originLng != null) 'originLng': originLng,
-        if (destLat != null) 'destLat': destLat,
-        if (destLng != null) 'destLng': destLng,
-      },
-    );
+    try {
+      final response = await _dio.post(
+        '/v1/trips',
+        data: {
+          'originText': originText,
+          'destText': destText,
+          'serviceId': serviceId,
+          if (originLat != null) 'originLat': originLat,
+          if (originLng != null) 'originLng': originLng,
+          if (destLat != null) 'destLat': destLat,
+          if (destLng != null) 'destLng': destLng,
+        },
+      );
 
-    return TripDetail.fromJson(response.data as Map<String, dynamic>);
+      return TripDetail.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 402) {
+        throw Exception(
+            'Ví UITGo Pay không đủ số dư. Vui lòng nạp thêm để tiếp tục.');
+      }
+      rethrow;
+    }
   }
 
   Future<PagedTrips> listTrips({

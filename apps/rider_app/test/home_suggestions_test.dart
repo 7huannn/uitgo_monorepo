@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:rider_app/features/home/home_page.dart';
 import 'package:rider_app/features/home/models/home_models.dart';
@@ -14,11 +16,13 @@ import 'package:rider_app/features/places/services/geocoding_service.dart'
     as geo_svc;
 import 'package:rider_app/features/trip/models/trip_models.dart';
 import 'package:rider_app/features/trip/services/trip_service.dart' as trip_svc;
+import 'package:rider_app/features/wallet/state/wallet_notifier.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     // Stub HomeService endpoints to avoid network.
     home_svc.debugFetchWallet = () async => WalletSummary(
           balance: 0,
@@ -33,7 +37,8 @@ void main() {
       bool unreadOnly = true,
       int limit = 20,
       int offset = 0,
-    }) async => NotificationPageResult(
+    }) async =>
+        NotificationPageResult(
           items: const <AppNotification>[],
           total: 0,
           limit: limit,
@@ -47,7 +52,8 @@ void main() {
       int offset = 0,
       int? page,
       int? pageSize,
-    }) async => PagedTrips(
+    }) async =>
+        PagedTrips(
           items: const <TripDetail>[],
           total: 0,
           limit: limit,
@@ -66,7 +72,10 @@ void main() {
     geo_svc.debugSearch = null;
   });
 
-  Future<void> _pumpHome(WidgetTester tester) async {
+  Future<void> _pumpHome(
+    WidgetTester tester, {
+    bool debugStartReady = true,
+  }) async {
     final binding = tester.binding;
     binding.window.physicalSizeTestValue = const Size(1280, 1024);
     binding.window.devicePixelRatioTestValue = 1.0;
@@ -74,7 +83,15 @@ void main() {
       binding.window.clearPhysicalSizeTestValue();
       binding.window.clearDevicePixelRatioTestValue();
     });
-    await tester.pumpWidget(const MaterialApp(home: HomePage(debugStartReady: true)));
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => WalletNotifier()),
+        ],
+        child:
+            MaterialApp(home: HomePage(debugStartReady: debugStartReady)),
+      ),
+    );
     // Wait until the destination input appears.
     final finder = find.byKey(const Key('destinationInput'));
     for (var i = 0; i < 30; i++) {
@@ -113,7 +130,25 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   }
 
-  testWidgets('Selecting Tây Ninh commits label, sets coords and closes overlay',
+  TripDetail _testTrip({
+    required String id,
+    required String status,
+    required DateTime createdAt,
+  }) {
+    return TripDetail(
+      id: id,
+      riderId: 'rider',
+      serviceId: 'bike',
+      originText: 'Điểm đón $id',
+      destText: 'Điểm đến $id',
+      status: status,
+      createdAt: createdAt,
+      updatedAt: createdAt,
+    );
+  }
+
+  testWidgets(
+      'Selecting Tây Ninh commits label, sets coords and closes overlay',
       (tester) async {
     int geocodeCalls = 0;
     geo_svc.debugSearch = (rawQuery, {LatLng? proximity}) async {
@@ -200,7 +235,8 @@ void main() {
     final destController = _controllerOf(tester, destField);
     expect(destController.text, equals('Gò Dầu'));
     expect(destController.selection.isCollapsed, isTrue);
-    expect(destController.selection.extentOffset, equals(destController.text.length));
+    expect(destController.selection.extentOffset,
+        equals(destController.text.length));
     expect(destController.value.composing.isValid, isFalse);
 
     // Overlay removed.
@@ -283,7 +319,8 @@ void main() {
     );
     expect(destController.value.composing.isValid, isTrue);
 
-    await tester.pump(); // process widget updates without letting debounce fire again
+    await tester
+        .pump(); // process widget updates without letting debounce fire again
 
     await _tapSuggestion(tester, 'Gò Dầu');
     await tester.pump();
@@ -295,6 +332,62 @@ void main() {
         equals(destController.text.length));
     expect(destController.value.composing.isValid, isFalse);
     expect(geocodeCalls, equals(1));
+  });
+
+  testWidgets('Recent trips render when terminal trips exist', (tester) async {
+    final now = DateTime.now();
+    trip_svc.debugListTrips = ({
+      required String role,
+      int limit = 20,
+      int offset = 0,
+      int? page,
+      int? pageSize,
+    }) async {
+      return PagedTrips(
+        items: [
+          _testTrip(
+            id: 'recent-newest',
+            status: 'completed',
+            createdAt: now,
+          ),
+          _testTrip(
+            id: 'recent-older',
+            status: 'cancelled',
+            createdAt: now.subtract(const Duration(hours: 1)),
+          ),
+          _testTrip(
+            id: 'upcoming-trip',
+            status: 'requested',
+            createdAt: now.subtract(const Duration(hours: 2)),
+          ),
+        ],
+        total: 3,
+        limit: limit,
+        offset: offset,
+      );
+    };
+
+    await _pumpHome(tester, debugStartReady: false);
+    await tester.pumpAndSettle();
+
+    final listView = find.byKey(const ValueKey('homeListView'));
+    await tester.dragUntilVisible(
+      find.text('Chuyến gần đây'),
+      listView,
+      const Offset(0, -200),
+    );
+    await tester.dragUntilVisible(
+      find.text('recent-newest'),
+      listView,
+      const Offset(0, -200),
+    );
+
+    expect(
+      find.text('Bạn chưa thực hiện chuyến đi nào. Khám phá UITGo ngay!'),
+      findsNothing,
+    );
+    expect(find.text('recent-newest'), findsOneWidget);
+    expect(find.text('recent-older'), findsOneWidget);
   });
 
   testWidgets('Destination overlay anchors directly under the input field',
@@ -329,7 +422,8 @@ void main() {
     expect(gap, closeTo(8, 2));
   });
 
-  testWidgets('Destination overlay realigns after window resize', (tester) async {
+  testWidgets('Destination overlay realigns after window resize',
+      (tester) async {
     geo_svc.debugSearch = (rawQuery, {LatLng? proximity}) async {
       final q = rawQuery.toLowerCase();
       if (q.contains('gò') || q.contains('go')) {
@@ -351,8 +445,7 @@ void main() {
         find.byKey(const ValueKey('destinationSuggestionsOverlay'));
     expect(overlayFinder, findsOneWidget);
     final initialRect = tester.getRect(overlayFinder);
-    final fieldFinder =
-        find.byKey(const ValueKey('destinationFieldContainer'));
+    final fieldFinder = find.byKey(const ValueKey('destinationFieldContainer'));
     final initialFieldRect = tester.getRect(fieldFinder);
     final initialGap = initialRect.top - initialFieldRect.bottom;
     expect(initialGap, closeTo(8, 2));

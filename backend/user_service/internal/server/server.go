@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/gin-gonic/gin"
@@ -11,6 +12,7 @@ import (
 	"uitgo/backend/internal/domain"
 	"uitgo/backend/internal/http/handlers"
 	"uitgo/backend/internal/http/middleware"
+	"uitgo/backend/internal/notification"
 )
 
 // Server wraps the Gin engine for the user-service.
@@ -32,6 +34,12 @@ func New(cfg *config.Config, db *gorm.DB, driverProvisioner handlers.DriverProvi
 
 	userRepo := domain.NewUserRepository(db)
 	notificationRepo := dbrepo.NewNotificationRepository(db)
+	deviceTokenRepo := dbrepo.NewDeviceTokenRepository(db)
+	pushSender, err := notification.BuildSenderFromConfig(context.Background(), cfg)
+	if err != nil {
+		fmt.Printf("warn: unable to initialize FCM: %v\n", err)
+	}
+	notificationSvc := notification.NewService(notificationRepo, deviceTokenRepo, pushSender)
 	authHandler := handlers.NewAuthHandler(cfg, userRepo, notificationRepo, driverProvisioner)
 
 	router.POST("/auth/register", authHandler.Register)
@@ -40,13 +48,15 @@ func New(cfg *config.Config, db *gorm.DB, driverProvisioner handlers.DriverProvi
 	router.PATCH("/users/me", authHandler.UpdateMe)
 	router.POST("/v1/drivers/register", authHandler.RegisterDriver)
 
-	handlers.RegisterNotificationRoutes(router, notificationRepo)
+	handlers.RegisterNotificationRoutes(router, notificationRepo, notificationSvc)
 
 	walletRepo := dbrepo.NewWalletRepository(db)
+	walletService := domain.NewWalletService(walletRepo)
 	savedRepo := dbrepo.NewSavedPlaceRepository(db)
 	promoRepo := dbrepo.NewPromotionRepository(db)
 	newsRepo := dbrepo.NewNewsRepository(db)
 	homeService := domain.NewHomeService(walletRepo, savedRepo, promoRepo, newsRepo)
+	handlers.RegisterWalletRoutes(router, walletService)
 	handlers.RegisterHomeRoutes(router, homeService)
 
 	return &Server{engine: router, cfg: cfg}, nil

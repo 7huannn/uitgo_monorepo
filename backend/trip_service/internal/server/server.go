@@ -1,8 +1,10 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -14,6 +16,7 @@ import (
 	"uitgo/backend/internal/domain"
 	"uitgo/backend/internal/http/handlers"
 	"uitgo/backend/internal/http/middleware"
+	"uitgo/backend/internal/notification"
 )
 
 // Server represents the trip-service HTTP server.
@@ -33,8 +36,17 @@ func New(cfg *config.Config, db *gorm.DB, driverLocations handlers.DriverLocatio
 
 	handlers.RegisterHealth(router)
 
+	walletRepo := dbrepo.NewWalletRepository(db)
+	walletService := domain.NewWalletService(walletRepo)
 	tripRepo := dbrepo.NewTripRepository(db)
-	tripService := domain.NewTripService(tripRepo)
+	notificationRepo := dbrepo.NewNotificationRepository(db)
+	deviceTokenRepo := dbrepo.NewDeviceTokenRepository(db)
+	pushSender, err := notification.BuildSenderFromConfig(context.Background(), cfg)
+	if err != nil {
+		log.Printf("warn: unable to initialize FCM: %v", err)
+	}
+	notificationSvc := notification.NewService(notificationRepo, deviceTokenRepo, pushSender)
+	tripService := domain.NewTripService(tripRepo, walletService, notificationSvc)
 	hubManager := handlers.NewHubManager(tripService, driverLocations)
 
 	handlers.RegisterTripRoutes(router, tripService, nil, hubManager)
@@ -111,6 +123,8 @@ func registerInternalRoutes(router gin.IRouter, cfg *config.Config, trips *domai
 				statusCode = http.StatusNotFound
 			} else if errors.Is(err, domain.ErrInvalidStatus) {
 				statusCode = http.StatusBadRequest
+			} else if errors.Is(err, domain.ErrWalletInsufficientFunds) {
+				statusCode = http.StatusPaymentRequired
 			}
 			c.JSON(statusCode, gin.H{"error": err.Error()})
 			return

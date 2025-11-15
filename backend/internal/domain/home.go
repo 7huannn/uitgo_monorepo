@@ -6,14 +6,6 @@ import (
 	"time"
 )
 
-// WalletSummary represents rider credits and points.
-type WalletSummary struct {
-	UserID       string    `json:"-"`
-	Balance      int64     `json:"balance"`
-	RewardPoints int64     `json:"rewardPoints"`
-	UpdatedAt    time.Time `json:"updatedAt"`
-}
-
 // SavedPlace stores quick access pickup/destination info.
 type SavedPlace struct {
 	ID        string    `json:"id"`
@@ -47,11 +39,6 @@ type NewsItem struct {
 	Category    string    `json:"category"`
 	Icon        string    `json:"icon"`
 	PublishedAt time.Time `json:"publishedAt"`
-}
-
-// WalletRepository provides wallet persistence.
-type WalletRepository interface {
-	Get(ctx context.Context, userID string) (*WalletSummary, error)
 }
 
 // SavedPlaceRepository handles CRUD for saved places.

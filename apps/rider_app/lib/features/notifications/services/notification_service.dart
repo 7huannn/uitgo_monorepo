@@ -61,6 +61,17 @@ class NotificationService {
     if (useMock) return;
     await _dio.patch('/notifications/$id/read');
   }
+
+  Future<void> registerDeviceToken({
+    required String platform,
+    required String token,
+  }) async {
+    if (useMock) return;
+    await _dio.post('/v1/notifications/register', data: {
+      'platform': platform,
+      'token': token,
+    });
+  }
 }
 
 // Test injection hook

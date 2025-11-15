@@ -8,18 +8,23 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"uitgo/backend/internal/domain"
+	"uitgo/backend/internal/notification"
 )
 
 // NotificationHandler exposes notification endpoints.
 type NotificationHandler struct {
-	repo domain.NotificationRepository
+	repo    domain.NotificationRepository
+	service *notification.Service
 }
 
 // RegisterNotificationRoutes wires notification endpoints.
-func RegisterNotificationRoutes(router gin.IRoutes, repo domain.NotificationRepository) {
-	handler := &NotificationHandler{repo: repo}
+func RegisterNotificationRoutes(router gin.IRoutes, repo domain.NotificationRepository, service *notification.Service) {
+	handler := &NotificationHandler{repo: repo, service: service}
 	router.GET("/notifications", handler.list)
 	router.PATCH("/notifications/:id/read", handler.markAsRead)
+	if service != nil {
+		router.POST("/v1/notifications/register", handler.registerDevice)
+	}
 }
 
 type notificationResponse struct {
@@ -90,6 +95,40 @@ func (h *NotificationHandler) markAsRead(c *gin.Context) {
 		return
 	}
 
+	c.Status(http.StatusNoContent)
+}
+
+type registerDeviceRequest struct {
+	Platform string `json:"platform" binding:"required"`
+	Token    string `json:"token" binding:"required"`
+}
+
+func (h *NotificationHandler) registerDevice(c *gin.Context) {
+	if h.service == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "notification service unavailable"})
+		return
+	}
+	userID := userIDFromContext(c)
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user context"})
+		return
+	}
+	var req registerDeviceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	platform := strings.ToLower(strings.TrimSpace(req.Platform))
+	switch platform {
+	case "ios", "android", "web":
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported platform"})
+		return
+	}
+	if _, err := h.service.RegisterDevice(c.Request.Context(), userID, platform, req.Token); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to register device"})
+		return
+	}
 	c.Status(http.StatusNoContent)
 }
 

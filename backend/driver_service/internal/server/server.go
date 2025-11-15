@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"uitgo/backend/internal/domain"
 	"uitgo/backend/internal/http/handlers"
 	"uitgo/backend/internal/http/middleware"
+	"uitgo/backend/internal/notification"
 )
 
 // Server hosts the driver-service HTTP API.
@@ -34,7 +37,14 @@ func New(cfg *config.Config, db *gorm.DB, tripSync domain.TripSyncRepository) (*
 
 	driverRepo := dbrepo.NewDriverRepository(db)
 	assignmentRepo := dbrepo.NewTripAssignmentRepository(db)
-	driverService := domain.NewDriverService(driverRepo, assignmentRepo, tripSync)
+	notificationRepo := dbrepo.NewNotificationRepository(db)
+	deviceTokenRepo := dbrepo.NewDeviceTokenRepository(db)
+	pushSender, err := notification.BuildSenderFromConfig(context.Background(), cfg)
+	if err != nil {
+		log.Printf("warn: unable to initialize FCM: %v", err)
+	}
+	notificationSvc := notification.NewService(notificationRepo, deviceTokenRepo, pushSender)
+	driverService := domain.NewDriverService(driverRepo, assignmentRepo, tripSync, notificationSvc)
 
 	handlers.RegisterDriverRoutes(router, driverService)
 

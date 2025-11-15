@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,12 +11,18 @@ import (
 
 // TripService provides business logic for trip workflows.
 type TripService struct {
-	repo TripRepository
+	repo     TripRepository
+	wallets  WalletOperations
+	notifier TripEventNotifier
 }
 
 // NewTripService creates a TripService.
-func NewTripService(repo TripRepository) *TripService {
-	return &TripService{repo: repo}
+func NewTripService(repo TripRepository, wallets WalletOperations, notifier TripEventNotifier) *TripService {
+	return &TripService{
+		repo:     repo,
+		wallets:  wallets,
+		notifier: notifier,
+	}
 }
 
 // Create registers a new trip for a rider.
@@ -28,6 +35,11 @@ func (s *TripService) Create(ctx context.Context, trip *Trip) error {
 	}
 	if trip.ServiceID == "" {
 		return errors.New("service id required")
+	}
+	if s.wallets != nil {
+		if _, err := s.wallets.EnsureBalanceForTrip(ctx, trip.RiderID, trip.ServiceID); err != nil {
+			return err
+		}
 	}
 	if trip.ID == "" {
 		trip.ID = uuid.NewString()
@@ -49,7 +61,38 @@ func (s *TripService) UpdateStatus(ctx context.Context, id string, status TripSt
 	if !isValidStatus(status) {
 		return ErrInvalidStatus
 	}
-	return s.repo.UpdateTripStatus(id, status)
+	var trip *Trip
+	var err error
+	needsWallet := s.wallets != nil && status == TripStatusCompleted
+	needsTripForNotification := s.notifier != nil && (status == TripStatusArriving || status == TripStatusCompleted)
+	if needsWallet || needsTripForNotification {
+		trip, err = s.repo.GetTrip(id)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := s.repo.UpdateTripStatus(id, status); err != nil {
+		return err
+	}
+
+	if needsWallet && trip != nil && trip.Status != TripStatusCompleted {
+		if _, _, err := s.wallets.DeductTripFare(ctx, trip.RiderID, trip.ServiceID); err != nil {
+			return err
+		}
+		if _, _, err := s.wallets.RewardTripCompletion(ctx, trip.RiderID); err != nil {
+			return err
+		}
+	}
+	if trip != nil {
+		trip.Status = status
+	}
+	if s.notifier != nil && trip != nil {
+		if err := s.notifier.NotifyRiderStatusChange(ctx, trip, status); err != nil {
+			log.Printf("notify rider status: %v", err)
+		}
+	}
+	return nil
 }
 
 // AssignDriver links/unlinks a driver to the trip.

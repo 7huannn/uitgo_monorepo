@@ -170,6 +170,10 @@ func (h *TripHandler) createTrip(c *gin.Context) {
 	}
 
 	if err := h.service.Create(c.Request.Context(), trip); err != nil {
+		if errors.Is(err, domain.ErrWalletInsufficientFunds) {
+			c.JSON(http.StatusPaymentRequired, gin.H{"error": "insufficient wallet balance"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -219,6 +223,10 @@ func (h *TripHandler) updateTripStatus(c *gin.Context) {
 		}
 		if errors.Is(err, domain.ErrInvalidStatus) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
+			return
+		}
+		if errors.Is(err, domain.ErrWalletInsufficientFunds) {
+			c.JSON(http.StatusPaymentRequired, gin.H{"error": "insufficient wallet balance"})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -369,6 +377,8 @@ func driverErrorStatus(err error) int {
 	switch err {
 	case domain.ErrTripNotFound:
 		return http.StatusNotFound
+	case domain.ErrWalletInsufficientFunds:
+		return http.StatusPaymentRequired
 	case domain.ErrDriverNotFound, domain.ErrTripAssignmentNotFound:
 		return http.StatusNotFound
 	case domain.ErrDriverOffline, domain.ErrAssignmentConflict:

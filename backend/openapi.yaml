@@ -288,7 +288,9 @@ paths:
           description: Notification not found
   /wallet:
     get:
-      summary: Get rider wallet summary
+      summary: '[Deprecated] Get rider wallet summary'
+      description: This legacy endpoint is kept for backward compatibility. Use `/v1/wallet` instead.
+      deprecated: true
       security:
         - bearerAuth: []
       responses:
@@ -298,6 +300,71 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Wallet'
+        '401':
+          description: Unauthorized
+  /v1/wallet:
+    get:
+      summary: Get wallet balance and rewards
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Wallet summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+        '401':
+          description: Unauthorized
+  /v1/wallet/transactions:
+    get:
+      summary: List wallet transactions
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Paginated transactions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletTransactionListResponse'
+        '401':
+          description: Unauthorized
+  /v1/wallet/topup:
+    post:
+      summary: Mock wallet top-up
+      description: Validates the amount and instantly credits the rider wallet.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WalletTopUpRequest'
+      responses:
+        '201':
+          description: Updated wallet summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+        '400':
+          description: Invalid amount
         '401':
           description: Unauthorized
   /saved_places:
@@ -627,6 +694,45 @@ components:
         updatedAt:
           type: string
           format: date-time
+    WalletTopUpRequest:
+      type: object
+      required:
+        - amount
+      properties:
+        amount:
+          type: integer
+          format: int64
+          minimum: 10000
+          description: Amount in VND to credit immediately.
+    WalletTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [topup, reward, deduction]
+        amount:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+    WalletTransactionListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WalletTransaction'
+        total:
+          type: integer
+          format: int64
+        limit:
+          type: integer
+        offset:
+          type: integer
     SavedPlace:
       type: object
       properties:
