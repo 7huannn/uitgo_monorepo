@@ -55,7 +55,8 @@ services:
       PORT: 8081
       POSTGRES_DSN: postgres://uitgo:uitgo@user-db:5432/user_service?sslmode=disable
       JWT_SECRET: uitgo-dev-secret
-      CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+      REFRESH_TOKEN_ENCRYPTION_KEY: uitgo-dev-refresh-key-32bytes!!!
+      CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:*,http://127.0.0.1:*
       DRIVER_SERVICE_URL: http://driver-service:8083
       INTERNAL_API_KEY: uitgo-internal-secret
     depends_on:
@@ -72,7 +73,8 @@ services:
       PORT: 8082
       POSTGRES_DSN: postgres://uitgo:uitgo@trip-db:5432/trip_service?sslmode=disable
       JWT_SECRET: uitgo-dev-secret
-      CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+      REFRESH_TOKEN_ENCRYPTION_KEY: uitgo-dev-refresh-key-32bytes!!!
+      CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:*,http://127.0.0.1:*
       DRIVER_SERVICE_URL: http://driver-service:8083
       INTERNAL_API_KEY: uitgo-internal-secret
     depends_on:
@@ -89,7 +91,8 @@ services:
       PORT: 8083
       POSTGRES_DSN: postgres://uitgo:uitgo@driver-db:5432/driver_service?sslmode=disable
       JWT_SECRET: uitgo-dev-secret
-      CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+      REFRESH_TOKEN_ENCRYPTION_KEY: uitgo-dev-refresh-key-32bytes!!!
+      CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:*,http://127.0.0.1:*
       TRIP_SERVICE_URL: http://trip-service:8082
       INTERNAL_API_KEY: uitgo-internal-secret
     depends_on:
@@ -116,10 +119,46 @@ services:
     networks:
       - uitgo-net
 
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    ports:
+      - "9090:9090"
+    networks:
+      - uitgo-net
+    depends_on:
+      user-service:
+        condition: service_started
+      trip-service:
+        condition: service_started
+      driver-service:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana:10.4.5
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: uitgo
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - uitgo-net
+    depends_on:
+      prometheus:
+        condition: service_started
+
 volumes:
   user-db-data:
   trip-db-data:
   driver-db-data:
+  grafana-data:
 
 networks:
   uitgo-net:

@@ -10,6 +10,8 @@ import (
 	"uitgo/backend/internal/config"
 	"uitgo/backend/internal/db"
 	"uitgo/backend/internal/domain"
+	"uitgo/backend/internal/logging"
+	"uitgo/backend/internal/observability"
 )
 
 const containerMigrationsPath = "/app/migrations"
@@ -19,6 +21,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
+	logging.Configure(cfg.LogFormat, "driver-service")
+	flushSentry := observability.InitSentry(cfg.SentryDSN, "driver-service")
+	defer flushSentry()
 
 	pool, err := db.Connect(cfg.DatabaseURL)
 	if err != nil {

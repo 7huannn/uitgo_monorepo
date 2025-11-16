@@ -21,6 +21,14 @@ The gateway listens on `http://localhost:8080`, so the Flutter apps can keep the
 
 You can still work on a single service by building its Dockerfile (e.g. `backend/user_service/Dockerfile`) or by running `go run ./user_service/cmd/server` with an appropriate `.env`.
 
+## Security & telemetry snapshot
+
+- Access tokens now expire after 15 minutes; refresh tokens (stored encrypted) last 30 days and are rotated on every `/auth/refresh`.
+- Login, registration, refresh, and trip creation endpoints are rate limited to 10 requests per minute per IP.
+- All requests are written to the `audit_logs` table (user ID, method, path, status, latency, error message).
+- Prometheus scrapes `/metrics` from every service and Grafana automatically provisions the provided dashboard when using `docker compose up`.
+- Sentry captures Go panics and Flutter crashes—trigger a test event via `curl -H "X-Internal-Token: $INTERNAL_API_KEY" http://localhost:8080/internal/debug/panic`.
+
 ### Local development without Docker
 
 ```bash
@@ -57,6 +65,11 @@ curl -X POST http://localhost:8080/auth/register \
 curl -X POST http://localhost:8080/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"rider@example.com","password":"123456"}'
+
+# Refresh (200 OK)
+curl -X POST http://localhost:8080/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"<refresh token from login>"}'
 ```
 
 The responses contain a JWT (`token`), user id, name, and email. Pass the token via `Authorization: Bearer <token>` for authenticated requests.
@@ -81,7 +94,6 @@ Create a trip:
 curl -X POST http://localhost:8080/v1/trips \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <token>" \
-  -H "X-User-Id: rider-123" \
   -d '{"originText":"UIT Campus A","destText":"Dormitory","serviceId":"UIT-Bike"}'
 ```
 
@@ -154,10 +166,13 @@ WebSocket (requires `wscat` or similar):
 
 ```bash
 # Rider subscriber
-wscat -c ws://localhost:8080/v1/trips/<tripId>/ws
+wscat -c ws://localhost:8080/v1/trips/<tripId>/ws \
+  -H "Authorization: Bearer <rider token>"
 
 # Driver publishing locations
-wscat -c ws://localhost:8080/v1/trips/<tripId>/ws -H "X-Role: driver"
+wscat -c ws://localhost:8080/v1/trips/<tripId>/ws \
+  -H "Authorization: Bearer <driver token>" \
+  -H "X-Role: driver"
 > {"type":"location","lat":10.8705,"lng":106.8032}
 ```
 
@@ -200,18 +215,18 @@ OpenAPI contract lives in [`openapi.yaml`](openapi.yaml).
 
 ## Flutter Rider App Integration Notes
 
-- **Create Trip:** `POST /v1/trips` with body `{originText, destText, serviceId}`. Include `X-User-Id` header until real auth arrives.
+- **Create Trip:** `POST /v1/trips` with body `{originText, destText, serviceId}` and `Authorization: Bearer <accessToken>`.
 - **Fetch Trip:** `GET /v1/trips/{id}` returns the trip plus `lastLocation` (if the driver has reported one).
 - **Realtime Channel:** connect to `ws://{API_BASE_HOST}/v1/trips/{id}/ws`.
-  - Riders simply listen for messages.
-  - Drivers connect with header `X-Role: driver` and push `{"type":"location","lat":10.1,"lng":106.2}`.
+  - Riders simply listen for messages with `Authorization: Bearer <accessToken>` (Flutter web automatically appends `?accessToken=...`).
+  - Drivers rely on the `role` claim in their JWT but may additionally include `X-Role: driver` along with the Authorization header when testing manually.
 
 Minimal Dart snippet:
 
 ```dart
 final socket = WebSocketChannel.connect(
   Uri.parse('ws://localhost:8080/v1/trips/$tripId/ws'),
-  headers: {'X-User-Id': riderId},
+  headers: {'Authorization': 'Bearer $accessToken'},
 );
 
 socket.stream.listen((event) {

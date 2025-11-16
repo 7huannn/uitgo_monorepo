@@ -64,3 +64,11 @@ module "driver_db" {
   allowed_cidrs = [module.network.cidr_block]
   tags          = merge(local.tags, { Service = "driver" })
 }
+
+resource "aws_cloudwatch_log_group" "service_logs" {
+  for_each = toset(["api", "user", "driver", "trip"])
+
+  name              = "/${var.project}/${local.tags.Env}/${each.key}"
+  retention_in_days = 30
+  tags              = merge(local.tags, { Service = each.key })
+}

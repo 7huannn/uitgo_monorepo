@@ -15,6 +15,7 @@ import (
 
 	"uitgo/backend/internal/config"
 	"uitgo/backend/internal/domain"
+	"uitgo/backend/internal/security"
 )
 
 // AuthHandler handles register/login flows.
@@ -23,6 +24,10 @@ type AuthHandler struct {
 	jwtSecret     string
 	notifications domain.NotificationRepository
 	driverService DriverProvisioner
+	refreshTokens domain.RefreshTokenRepository
+	accessTTL     time.Duration
+	refreshTTL    time.Duration
+	refreshKey    []byte
 }
 
 // DriverProvisioner provisions driver profiles during onboarding.
@@ -31,13 +36,40 @@ type DriverProvisioner interface {
 }
 
 // NewAuthHandler builds an AuthHandler.
-func NewAuthHandler(cfg *config.Config, users domain.UserRepository, notifications domain.NotificationRepository, driverService DriverProvisioner) *AuthHandler {
+func NewAuthHandler(cfg *config.Config, users domain.UserRepository, notifications domain.NotificationRepository, driverService DriverProvisioner, refreshRepo domain.RefreshTokenRepository) (*AuthHandler, error) {
+	if refreshRepo == nil {
+		return nil, errors.New("refresh token repository not configured")
+	}
+
+	jwtSecret := strings.TrimSpace(cfg.JWTSecret)
+	if jwtSecret == "" {
+		return nil, errors.New("jwt secret not configured")
+	}
+
+	refreshSecret := strings.TrimSpace(cfg.RefreshTokenKey)
+	if refreshSecret == "" {
+		return nil, errors.New("refresh token encryption key missing")
+	}
+
+	accessTTL := cfg.AccessTokenTTL
+	if accessTTL <= 0 {
+		accessTTL = 15 * time.Minute
+	}
+	refreshTTL := cfg.RefreshTokenTTL
+	if refreshTTL <= 0 {
+		refreshTTL = 30 * 24 * time.Hour
+	}
+
 	return &AuthHandler{
 		users:         users,
-		jwtSecret:     cfg.JWTSecret,
+		jwtSecret:     jwtSecret,
 		notifications: notifications,
 		driverService: driverService,
-	}
+		refreshTokens: refreshRepo,
+		accessTTL:     accessTTL,
+		refreshTTL:    refreshTTL,
+		refreshKey:    security.DeriveKey(refreshSecret),
+	}, nil
 }
 
 type registerRequest struct {
@@ -52,12 +84,19 @@ type loginRequest struct {
 	Password string `json:"password" binding:"required"`
 }
 
+type refreshRequest struct {
+	RefreshToken string `json:"refreshToken" binding:"required"`
+}
+
 type authResponse struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
-	Name  string `json:"name,omitempty"`
-	Role  string `json:"role,omitempty"`
-	Token string `json:"token"`
+	ID           string `json:"id"`
+	Email        string `json:"email"`
+	Name         string `json:"name,omitempty"`
+	Role         string `json:"role,omitempty"`
+	AccessToken  string `json:"accessToken"`
+	RefreshToken string `json:"refreshToken"`
+	ExpiresIn    int64  `json:"expiresIn"`
+	Token        string `json:"token,omitempty"`
 }
 
 type userResponse struct {
@@ -162,19 +201,13 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	go h.seedWelcomeNotifications(context.Background(), user.ID, user.Name)
 
-	token, err := h.signToken(user)
+	accessToken, refreshToken, err := h.issueSession(c.Request.Context(), user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to sign token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, authResponse{
-		ID:    user.ID,
-		Email: user.Email,
-		Name:  user.Name,
-		Role:  user.Role,
-		Token: token,
-	})
+	c.JSON(http.StatusCreated, h.buildAuthResponse(user, accessToken, refreshToken))
 }
 
 // Login authenticates an existing user.
@@ -201,19 +234,69 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := h.signToken(user)
+	accessToken, refreshToken, err := h.issueSession(c.Request.Context(), user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to sign token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
 		return
 	}
 
-	c.JSON(http.StatusOK, authResponse{
-		ID:    user.ID,
-		Email: user.Email,
-		Name:  user.Name,
-		Role:  user.Role,
-		Token: token,
-	})
+	c.JSON(http.StatusOK, h.buildAuthResponse(user, accessToken, refreshToken))
+}
+
+// Refresh exchanges a refresh token for a new access token.
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	if h.refreshTokens == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "refresh token store unavailable"})
+		return
+	}
+	var req refreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.RefreshToken = strings.TrimSpace(req.RefreshToken)
+	if req.RefreshToken == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "refresh token required"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	hash := security.HashToken(req.RefreshToken)
+	record, err := h.refreshTokens.FindActiveByHash(ctx, hash)
+	if err != nil {
+		status := http.StatusUnauthorized
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			status = http.StatusInternalServerError
+		}
+		c.JSON(status, gin.H{"error": "invalid refresh token"})
+		return
+	}
+
+	storedToken, err := security.DecryptToken(h.refreshKey, record.TokenCiphertext)
+	if err != nil || storedToken != req.RefreshToken {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
+		return
+	}
+
+	user, err := h.users.FindByID(ctx, record.UserID)
+	if err != nil {
+		status := http.StatusUnauthorized
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			status = http.StatusInternalServerError
+		}
+		c.JSON(status, gin.H{"error": "user not found"})
+		return
+	}
+
+	_ = h.refreshTokens.Revoke(ctx, record.ID)
+
+	accessToken, refreshToken, err := h.issueSession(ctx, user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
+		return
+	}
+
+	c.JSON(http.StatusOK, h.buildAuthResponse(user, accessToken, refreshToken))
 }
 
 // Me returns the authenticated user.
@@ -338,19 +421,25 @@ func (h *AuthHandler) RegisterDriver(c *gin.Context) {
 		return
 	}
 
-	token, err := h.signToken(user)
+	accessToken, refreshToken, err := h.issueSession(c.Request.Context(), user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to sign token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
 		return
 	}
 
-	c.JSON(http.StatusCreated, authResponse{
-		ID:    user.ID,
-		Email: user.Email,
-		Name:  user.Name,
-		Role:  user.Role,
-		Token: token,
-	})
+	c.JSON(http.StatusCreated, h.buildAuthResponse(user, accessToken, refreshToken))
+}
+
+func (h *AuthHandler) issueSession(ctx context.Context, user *domain.User) (string, string, error) {
+	accessToken, err := h.signToken(user)
+	if err != nil {
+		return "", "", err
+	}
+	refreshToken, err := h.mintRefreshToken(ctx, user.ID)
+	if err != nil {
+		return "", "", err
+	}
+	return accessToken, refreshToken, nil
 }
 
 func (h *AuthHandler) signToken(user *domain.User) (string, error) {
@@ -359,10 +448,52 @@ func (h *AuthHandler) signToken(user *domain.User) (string, error) {
 		"email": user.Email,
 		"role":  user.Role,
 		"iat":   time.Now().Unix(),
-		"exp":   time.Now().Add(24 * time.Hour).Unix(),
+		"exp":   time.Now().Add(h.accessTTL).Unix(),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(h.jwtSecret))
+}
+
+func (h *AuthHandler) mintRefreshToken(ctx context.Context, userID string) (string, error) {
+	if h.refreshTokens == nil || len(h.refreshKey) == 0 {
+		return "", errors.New("refresh token functionality disabled")
+	}
+	rawToken, err := security.GenerateToken(48)
+	if err != nil {
+		return "", err
+	}
+	ciphertext, err := security.EncryptToken(h.refreshKey, rawToken)
+	if err != nil {
+		return "", err
+	}
+	expiresAt := time.Now().Add(h.refreshTTL)
+	token := &domain.RefreshToken{
+		UserID:          userID,
+		TokenHash:       security.HashToken(rawToken),
+		TokenCiphertext: ciphertext,
+		ExpiresAt:       expiresAt,
+	}
+	if err := h.refreshTokens.Create(ctx, token); err != nil {
+		return "", err
+	}
+	return rawToken, nil
+}
+
+func (h *AuthHandler) buildAuthResponse(user *domain.User, accessToken, refreshToken string) authResponse {
+	expiresIn := int64(h.accessTTL.Seconds())
+	if expiresIn <= 0 {
+		expiresIn = int64((15 * time.Minute).Seconds())
+	}
+	return authResponse{
+		ID:           user.ID,
+		Email:        user.Email,
+		Name:         user.Name,
+		Role:         user.Role,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    expiresIn,
+		Token:        accessToken,
+	}
 }
 
 func (h *AuthHandler) seedWelcomeNotifications(ctx context.Context, userID, userName string) {

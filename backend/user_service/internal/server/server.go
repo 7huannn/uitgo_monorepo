@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -13,6 +14,7 @@ import (
 	"uitgo/backend/internal/http/handlers"
 	"uitgo/backend/internal/http/middleware"
 	"uitgo/backend/internal/notification"
+	"uitgo/backend/internal/observability"
 )
 
 // Server wraps the Gin engine for the user-service.
@@ -23,15 +25,24 @@ type Server struct {
 
 // New wires repositories, handlers, and middleware for the user-service.
 func New(cfg *config.Config, db *gorm.DB, driverProvisioner handlers.DriverProvisioner) (*Server, error) {
+	const serviceName = "user-service"
 	router := gin.New()
-	router.Use(gin.Logger())
+	gin.DisableConsoleColor()
+	router.Use(middleware.JSONLogger(serviceName))
+	router.Use(observability.GinMiddleware())
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID())
 	router.Use(middleware.CORS(cfg.AllowedOrigins))
-	router.Use(middleware.Auth(cfg.JWTSecret))
+	router.Use(middleware.Auth(cfg.JWTSecret, cfg.InternalAPIKey))
+
+	metrics := middleware.NewHTTPMetrics(serviceName, cfg.PrometheusEnabled)
+	router.Use(metrics.Handler())
+
+	auditRepo := domain.NewAuditLogRepository(db)
+	router.Use(middleware.AuditLogger(auditRepo))
 
 	handlers.RegisterHealth(router)
-
+	authLimiter := middleware.NewTokenBucketRateLimiter(10, time.Minute)
 	userRepo := domain.NewUserRepository(db)
 	notificationRepo := dbrepo.NewNotificationRepository(db)
 	deviceTokenRepo := dbrepo.NewDeviceTokenRepository(db)
@@ -40,10 +51,15 @@ func New(cfg *config.Config, db *gorm.DB, driverProvisioner handlers.DriverProvi
 		fmt.Printf("warn: unable to initialize FCM: %v\n", err)
 	}
 	notificationSvc := notification.NewService(notificationRepo, deviceTokenRepo, pushSender)
-	authHandler := handlers.NewAuthHandler(cfg, userRepo, notificationRepo, driverProvisioner)
+	refreshRepo := domain.NewRefreshTokenRepository(db)
+	authHandler, err := handlers.NewAuthHandler(cfg, userRepo, notificationRepo, driverProvisioner, refreshRepo)
+	if err != nil {
+		return nil, err
+	}
 
-	router.POST("/auth/register", authHandler.Register)
-	router.POST("/auth/login", authHandler.Login)
+	router.POST("/auth/register", authLimiter.Middleware("auth_register"), authHandler.Register)
+	router.POST("/auth/login", authLimiter.Middleware("auth_login"), authHandler.Login)
+	router.POST("/auth/refresh", authLimiter.Middleware("auth_refresh"), authHandler.Refresh)
 	router.GET("/auth/me", authHandler.Me)
 	router.PATCH("/users/me", authHandler.UpdateMe)
 	router.POST("/v1/drivers/register", authHandler.RegisterDriver)
@@ -58,6 +74,8 @@ func New(cfg *config.Config, db *gorm.DB, driverProvisioner handlers.DriverProvi
 	homeService := domain.NewHomeService(walletRepo, savedRepo, promoRepo, newsRepo)
 	handlers.RegisterWalletRoutes(router, walletService)
 	handlers.RegisterHomeRoutes(router, homeService)
+
+	metrics.Expose(router)
 
 	return &Server{engine: router, cfg: cfg}, nil
 }

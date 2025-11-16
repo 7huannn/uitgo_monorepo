@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../../core/config/config.dart';
@@ -178,13 +179,29 @@ class TripService {
     await closeChannel();
 
     final userInfo = await _auth.getUserInfo();
-    final userId = userInfo['userId']?.trim().isNotEmpty == true
-        ? userInfo['userId']!
-        : 'demo-user';
+    final userId = userInfo['userId'];
+    if (userId == null || userId.trim().isEmpty) {
+      throw const AuthException('Vui lòng đăng nhập lại để tiếp tục.');
+    }
+    final token = await _auth.getToken();
+    if (token == null || token.isEmpty) {
+      throw const AuthException('Phiên đăng nhập đã hết hạn.');
+    }
 
-    final uri = _buildWsUri(tripId, role, userId);
+    final uri = _buildWsUri(
+      tripId,
+      role,
+      userId,
+      tokenForQuery: kIsWeb ? token : null,
+    );
 
-    final channel = WebSocketChannel.connect(uri);
+    final headers = <String, dynamic>{
+      if (!kIsWeb) 'Authorization': 'Bearer $token',
+    };
+
+    final channel = kIsWeb
+        ? WebSocketChannel.connect(uri)
+        : IOWebSocketChannel.connect(uri, headers: headers);
     _channel = channel;
 
     return channel.stream.map((event) {
@@ -225,19 +242,24 @@ class TripService {
     _channel = null;
   }
 
-  Uri _buildWsUri(String tripId, String role, String userId) {
+  Uri _buildWsUri(String tripId, String role, String userId,
+      {String? tokenForQuery}) {
     final baseUri = Uri.parse(apiBase);
     final scheme = baseUri.scheme == 'https' ? 'wss' : 'ws';
     final path = baseUri.path.endsWith('/')
         ? '${baseUri.path}v1/trips/$tripId/ws'
         : '${baseUri.path}/v1/trips/$tripId/ws';
+    final params = <String, String>{
+      'role': role,
+      'userId': userId,
+    };
+    if (tokenForQuery != null && tokenForQuery.isNotEmpty) {
+      params['accessToken'] = tokenForQuery;
+    }
     return baseUri.replace(
       scheme: scheme,
       path: path,
-      queryParameters: {
-        'role': role,
-        'userId': userId,
-      },
+      queryParameters: params,
     );
   }
 }

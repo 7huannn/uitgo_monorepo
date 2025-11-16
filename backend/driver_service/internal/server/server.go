@@ -16,6 +16,7 @@ import (
 	"uitgo/backend/internal/http/handlers"
 	"uitgo/backend/internal/http/middleware"
 	"uitgo/backend/internal/notification"
+	"uitgo/backend/internal/observability"
 )
 
 // Server hosts the driver-service HTTP API.
@@ -26,12 +27,21 @@ type Server struct {
 
 // New builds the server with driver/profile routes and internal hooks.
 func New(cfg *config.Config, db *gorm.DB, tripSync domain.TripSyncRepository) (*Server, error) {
+	const serviceName = "driver-service"
 	router := gin.New()
-	router.Use(gin.Logger())
+	gin.DisableConsoleColor()
+	router.Use(middleware.JSONLogger(serviceName))
+	router.Use(observability.GinMiddleware())
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID())
 	router.Use(middleware.CORS(cfg.AllowedOrigins))
-	router.Use(middleware.Auth(cfg.JWTSecret))
+	router.Use(middleware.Auth(cfg.JWTSecret, cfg.InternalAPIKey))
+
+	metrics := middleware.NewHTTPMetrics(serviceName, cfg.PrometheusEnabled)
+	router.Use(metrics.Handler())
+
+	auditRepo := domain.NewAuditLogRepository(db)
+	router.Use(middleware.AuditLogger(auditRepo))
 
 	handlers.RegisterHealth(router)
 
@@ -48,10 +58,12 @@ func New(cfg *config.Config, db *gorm.DB, tripSync domain.TripSyncRepository) (*
 
 	handlers.RegisterDriverRoutes(router, driverService)
 
-	tripHandler := NewDriverTripHandler(driverService, cfg.TripServiceURL)
+	tripHandler := NewDriverTripHandler(driverService, cfg.TripServiceURL, cfg.InternalAPIKey)
 	tripHandler.Register(router.Group("/v1"))
 
 	registerInternalRoutes(router, cfg, driverRepo, driverService)
+
+	metrics.Expose(router)
 
 	return &Server{engine: router, cfg: cfg}, nil
 }

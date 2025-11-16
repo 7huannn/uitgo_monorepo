@@ -19,7 +19,7 @@ type TripHandler struct {
 }
 
 // RegisterTripRoutes registers trip related routes under /v1.
-func RegisterTripRoutes(router *gin.Engine, service *domain.TripService, driverService *domain.DriverService, hubs *HubManager) {
+func RegisterTripRoutes(router gin.IRouter, service *domain.TripService, driverService *domain.DriverService, hubs *HubManager, createTripMiddlewares ...gin.HandlerFunc) {
 	handler := &TripHandler{
 		service:       service,
 		driverService: driverService,
@@ -29,7 +29,9 @@ func RegisterTripRoutes(router *gin.Engine, service *domain.TripService, driverS
 	v1 := router.Group("/v1")
 	{
 		v1.GET("/trips", handler.listTrips)
-		v1.POST("/trips", handler.createTrip)
+		createTripHandlers := append([]gin.HandlerFunc{}, createTripMiddlewares...)
+		createTripHandlers = append(createTripHandlers, handler.createTrip)
+		v1.POST("/trips", createTripHandlers...)
 		v1.GET("/trips/:id", handler.getTrip)
 		v1.PATCH("/trips/:id/status", handler.updateTripStatus)
 		v1.POST("/trips/:id/assign", handler.assignDriver)
@@ -155,7 +157,8 @@ func (h *TripHandler) createTrip(c *gin.Context) {
 
 	riderID := userIDFromContext(c)
 	if riderID == "" {
-		riderID = "demo-user"
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "missing user context"})
+		return
 	}
 
 	trip := &domain.Trip{

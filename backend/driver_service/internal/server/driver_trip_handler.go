@@ -13,15 +13,17 @@ import (
 )
 
 type DriverTripHandler struct {
-	driverService *domain.DriverService
-	tripBaseURL   string
-	httpClient    *http.Client
+	driverService  *domain.DriverService
+	tripBaseURL    string
+	httpClient     *http.Client
+	internalAPIKey string
 }
 
-func NewDriverTripHandler(service *domain.DriverService, tripBaseURL string) *DriverTripHandler {
+func NewDriverTripHandler(service *domain.DriverService, tripBaseURL string, internalAPIKey string) *DriverTripHandler {
 	return &DriverTripHandler{
-		driverService: service,
-		tripBaseURL:   strings.TrimSuffix(strings.TrimSpace(tripBaseURL), "/"),
+		driverService:  service,
+		tripBaseURL:    strings.TrimSuffix(strings.TrimSpace(tripBaseURL), "/"),
+		internalAPIKey: strings.TrimSpace(internalAPIKey),
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
@@ -125,6 +127,9 @@ func (h *DriverTripHandler) proxyTripResponse(c *gin.Context, tripID string, use
 	}
 	req.Header.Set("X-User-Id", userID)
 	req.Header.Set("X-Role", "driver")
+	if h.internalAPIKey != "" {
+		req.Header.Set("X-Internal-Token", h.internalAPIKey)
+	}
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
