@@ -24,4 +24,4 @@ What you can do:
   - Drivers: send `location` and `status` messages.
 - Manage JWT tokens: successful register/login responses persist the token in `localStorage` and automatically attach `Authorization: Bearer ...` to subsequent requests. Use the “Logout” button to clear it.
 
-> Browsers cannot add custom headers to WebSocket connections. The page appends `?role=` and `?userId=` query parameters which the backend accepts as a fallback to the `X-Role`/`X-User-Id` headers.
+> Browsers cannot add custom headers to WebSocket connections. The page appends `?role=` plus `?accessToken=` query parameters which the backend accepts in place of the `Authorization`/`X-Role` headers.

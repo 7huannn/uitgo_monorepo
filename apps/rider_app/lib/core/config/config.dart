@@ -18,3 +18,8 @@ const String routingBase = String.fromEnvironment(
 
 const bool useNominatimFallback =
     bool.fromEnvironment('USE_NOMINATIM', defaultValue: true);
+
+const String sentryDsn = String.fromEnvironment(
+  'SENTRY_DSN',
+  defaultValue: '',
+);

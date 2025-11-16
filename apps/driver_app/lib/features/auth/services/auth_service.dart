@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/config/config.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/token_manager.dart';
 
 class AuthException implements Exception {
   const AuthException(this.message);
@@ -39,8 +40,11 @@ class UserProfile {
   }
 }
 
-class AuthService {
-  AuthService._internal();
+class AuthService implements AuthTokenProvider {
+  AuthService._internal() {
+    GlobalTokenManager.instance ??= this;
+  }
+
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
 
@@ -50,6 +54,8 @@ class AuthService {
   static const _keyUserName = 'user_name';
   static const _keyUserPhone = 'user_phone';
   static const _keyUserRole = 'user_role';
+  static const _keyRefreshToken = 'refresh_token';
+  static const _keyTokenExpiry = 'token_expiry';
 
   final _secure = const FlutterSecureStorage();
   final Dio _dio = DioClient().dio;
@@ -86,12 +92,16 @@ class AuthService {
     await prefs.remove(_keyUserPhone);
     await prefs.remove(_keyUserRole);
     await _secure.delete(key: _keyToken);
+    await _secure.delete(key: _keyRefreshToken);
+    await prefs.remove(_keyTokenExpiry);
   }
 
   Future<bool> isLoggedIn() async {
     final token = await _secure.read(key: _keyToken);
     return token != null && token.isNotEmpty;
   }
+
+  Future<String?> getToken() => _secure.read(key: _keyToken);
 
   Future<Map<String, String?>> getUserInfo() async {
     final prefs = await SharedPreferences.getInstance();
@@ -104,8 +114,34 @@ class AuthService {
     };
   }
 
+  Future<bool> refreshSession() async {
+    final refreshToken = await _secure.read(key: _keyRefreshToken);
+    if (refreshToken == null || refreshToken.isEmpty) {
+      return false;
+    }
+    try {
+      final res = await _dio.post(
+        '/auth/refresh',
+        data: {'refreshToken': refreshToken},
+        options: Options(extra: {'skipAuthRefresh': true}),
+      );
+      if (res.statusCode == 200 && res.data is Map<String, dynamic>) {
+        await _persistSession(res.data as Map<String, dynamic>);
+        return true;
+      }
+    } on DioException {
+      // ignore
+    }
+    await _secure.delete(key: _keyToken);
+    await _secure.delete(key: _keyRefreshToken);
+    return false;
+  }
+
   Future<void> _persistSession(Map<String, dynamic> json) async {
-    final token = json['token'] as String? ?? '';
+    final accessToken =
+        json['accessToken'] as String? ?? json['token'] as String? ?? '';
+    final refreshToken = json['refreshToken'] as String? ?? '';
+    final expiresIn = (json['expiresIn'] as num?)?.toInt();
     final id = json['id']?.toString() ?? '';
     final email = json['email'] as String? ?? '';
     final name = json['name'] as String? ?? '';
@@ -119,7 +155,18 @@ class AuthService {
       await prefs.setString(_keyUserPhone, json['phone'] as String);
     }
     await prefs.setString(_keyUserRole, role);
-    await _secure.write(key: _keyToken, value: token);
+    if (expiresIn != null && expiresIn > 0) {
+      final expiry = DateTime.now()
+          .add(Duration(seconds: expiresIn))
+          .millisecondsSinceEpoch;
+      await prefs.setInt(_keyTokenExpiry, expiry);
+    }
+    if (accessToken.isNotEmpty) {
+      await _secure.write(key: _keyToken, value: accessToken);
+    }
+    if (refreshToken.isNotEmpty) {
+      await _secure.write(key: _keyRefreshToken, value: refreshToken);
+    }
   }
 
   Future<void> _persistMockSession({required String email}) async {
@@ -129,7 +176,18 @@ class AuthService {
     await prefs.setString(_keyUserName, 'UIT-Go Driver');
     await prefs.setString(_keyUserRole, 'driver');
     await _secure.write(key: _keyToken, value: 'mock-token');
+    await _secure.write(key: _keyRefreshToken, value: 'mock-refresh-token');
+    await prefs.setInt(
+      _keyTokenExpiry,
+      DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
+    );
   }
+
+  @override
+  Future<String?> accessToken() => getToken();
+
+  @override
+  Future<bool> refreshToken() => refreshSession();
 
   Future<bool> registerDriver({
     required String name,

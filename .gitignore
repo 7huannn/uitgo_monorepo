@@ -18,6 +18,8 @@ vendor/
 *.log
 coverage/
 go.sum
+.gocache/
+.gomodcache/
 
 # Python
 __pycache__/

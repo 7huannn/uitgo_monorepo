@@ -37,11 +37,11 @@ flutter run -d ios \
 
 When connected to the backend, the “Đặt chuyến ngay” flow will:
 
-1. `POST /v1/trips` to create a trip (headers: `X-User-Id` is inferred from local profile, defaults to `demo-user`).
-2. Open a WebSocket on `/v1/trips/{id}/ws` to receive driver status & location updates.
+1. `POST /v1/trips` with `Authorization: Bearer <accessToken>` (issued by `/auth/login`/`/auth/register`).
+2. Open a WebSocket on `/v1/trips/{id}/ws` and attach the JWT (header on mobile/desktop, `accessToken` query parameter on Flutter web) so the server can authorise the stream.
 
 ### Troubleshooting
 
 - If trip creation fails, confirm the backend is running (`curl http://localhost:8080/health`) and that `API_BASE` matches your environment.
-- If login/register fails, ensure the backend was started with a `JWT_SECRET` and that the email/password meet the minimum requirements (password ≥ 6 characters).
-- On Chrome, ensure CORS allows the origin (default backend config permits `localhost`).
+- If login/register fails, ensure the backend was started with both `JWT_SECRET` and `REFRESH_TOKEN_ENCRYPTION_KEY`, and that the password meets the minimum requirements (≥ 6 characters).
+- On Chrome, ensure CORS allows the origin (default backend config permits `localhost`). For WebSocket auth the app automatically appends `?accessToken=<JWT>` when running on the web.

@@ -137,8 +137,6 @@
           <input id="serviceId" value="UIT-Bike" />
         </div>
       </div>
-      <label for="riderId">X-User-Id</label>
-      <input id="riderId" value="demo-rider" />
       <button onclick="createTrip()">POST /v1/trips</button>
     </div>
 
@@ -176,7 +174,7 @@
           </select>
         </div>
         <div>
-          <label for="wsUserId">X-User-Id / X-Role header</label>
+          <label for="wsUserId">Override user id (optional)</label>
           <input id="wsUserId" value="demo-rider" />
         </div>
       </div>
@@ -241,12 +239,8 @@
       }
 
       function syncUserIdInputs(force = false) {
-        const riderInput = document.getElementById('riderId');
         const wsInput = document.getElementById('wsUserId');
-        const defaultValue = authUserId || 'demo-user';
-        if (riderInput && (force || !riderInput.value)) {
-          riderInput.value = defaultValue;
-        }
+        const defaultValue = authUserId || '';
         if (wsInput && (force || !wsInput.value)) {
           wsInput.value = defaultValue;
         }
@@ -347,15 +341,10 @@
         const origin = document.getElementById('origin').value;
         const destination = document.getElementById('destination').value;
         const serviceId = document.getElementById('serviceId').value;
-        const riderId =
-          document.getElementById('riderId').value || authUserId || 'demo-user';
         try {
           const res = await fetch(`${apiBase()}/v1/trips`, {
             method: 'POST',
-            headers: authHeaders({
-              'Content-Type': 'application/json',
-              'X-User-Id': riderId,
-            }),
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({
               originText: origin,
               destText: destination,
@@ -413,11 +402,18 @@
         }
       }
 
-      function wsUrl(tripId, role, userId) {
+      function wsUrl(tripId, role, { userId, token }) {
         const base = new URL(apiBase());
         base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
         base.pathname = `${base.pathname.replace(/\/$/, '')}/v1/trips/${tripId}/ws`;
-        base.search = new URLSearchParams({ role, userId }).toString();
+        const params = new URLSearchParams({ role });
+        if (userId) {
+          params.set('userId', userId);
+        }
+        if (token) {
+          params.set('accessToken', token);
+        }
+        base.search = params.toString();
         return base.toString();
       }
 
@@ -428,14 +424,16 @@
           return;
         }
         const role = document.getElementById('wsRole').value;
-        const userId =
-          document.getElementById('wsUserId').value || authUserId || 'demo-user';
+        const userId = document.getElementById('wsUserId').value.trim();
 
         if (ws) {
           ws.close();
         }
 
-        const url = wsUrl(tripId, role, userId);
+        const url = wsUrl(tripId, role, {
+          userId: userId || authUserId,
+          token: authToken,
+        });
         appendLog(`🔌 connecting to ${url}`);
         ws = new WebSocket(url);
 

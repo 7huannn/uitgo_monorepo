@@ -8,6 +8,8 @@ import (
 	"uitgo/backend/internal/config"
 	"uitgo/backend/internal/db"
 	"uitgo/backend/internal/http/handlers"
+	"uitgo/backend/internal/logging"
+	"uitgo/backend/internal/observability"
 	"uitgo/backend/user_service/internal/clients"
 	"uitgo/backend/user_service/internal/server"
 )
@@ -19,6 +21,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
+	logging.Configure(cfg.LogFormat, "user-service")
+	flushSentry := observability.InitSentry(cfg.SentryDSN, "user-service")
+	defer flushSentry()
 
 	pool, err := db.Connect(cfg.DatabaseURL)
 	if err != nil {

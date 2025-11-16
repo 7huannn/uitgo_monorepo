@@ -304,7 +304,13 @@ func (m *HubManager) HandleWebsocket(service *domain.TripService) gin.HandlerFun
 			userStr = queryUser
 		}
 		if userStr == "" {
-			userStr = "demo-user"
+			_ = conn.WriteControl(
+				websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "authentication required"),
+				time.Now().Add(time.Second),
+			)
+			_ = conn.Close()
+			return
 		}
 
 		hub := m.get(tripID)

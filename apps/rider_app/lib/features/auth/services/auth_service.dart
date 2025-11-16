@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/config/config.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/token_manager.dart';
 
 class AuthException implements Exception {
   const AuthException(this.message);
@@ -47,16 +48,20 @@ class UserProfile {
       };
 }
 
-class AuthService {
+class AuthService implements AuthTokenProvider {
   static const String _keyToken = 'auth_token';
   static const String _keyUserId = 'user_id';
   static const String _keyUserEmail = 'user_email';
   static const String _keyUserName = 'user_name';
   static const String _keyUserPhone = 'user_phone';
+  static const String _keyRefreshToken = 'refresh_token';
+  static const String _keyTokenExpiry = 'token_expiry';
 
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
-  AuthService._internal();
+  AuthService._internal() {
+    GlobalTokenManager.instance ??= this;
+  }
 
   final _secure = const FlutterSecureStorage();
   final Dio _dio = DioClient().dio;
@@ -146,7 +151,9 @@ class AuthService {
     await prefs.remove(_keyUserEmail);
     await prefs.remove(_keyUserName);
     await prefs.remove(_keyUserPhone);
+    await prefs.remove(_keyTokenExpiry);
     await _secure.delete(key: _keyToken);
+    await _secure.delete(key: _keyRefreshToken);
   }
 
   Future<bool> isLoggedIn() async {
@@ -252,16 +259,53 @@ class AuthService {
     }
   }
 
+  Future<bool> refreshSession() async {
+    final refreshToken = await _secure.read(key: _keyRefreshToken);
+    if (refreshToken == null || refreshToken.isEmpty) {
+      return false;
+    }
+    try {
+      final res = await _dio.post(
+        '/auth/refresh',
+        data: {'refreshToken': refreshToken},
+        options: Options(extra: {'skipAuthRefresh': true}),
+      );
+      if (res.statusCode == 200 && res.data is Map<String, dynamic>) {
+        await _persistSession(res.data as Map<String, dynamic>);
+        return true;
+      }
+    } on DioException {
+      // fall through to false
+    }
+    await _secure.delete(key: _keyToken);
+    await _secure.delete(key: _keyRefreshToken);
+    return false;
+  }
+
   Future<void> _persistSession(Map<String, dynamic> data) async {
-    final token = data['token'] as String? ?? '';
-    if (token.isNotEmpty) {
-      await _secure.write(key: _keyToken, value: token);
+    final accessToken =
+        data['accessToken'] as String? ?? data['token'] as String? ?? '';
+    final refreshToken = data['refreshToken'] as String? ?? '';
+    final expiresIn = (data['expiresIn'] as num?)?.toInt();
+    if (accessToken.isNotEmpty) {
+      await _secure.write(key: _keyToken, value: accessToken);
+    }
+    if (refreshToken.isNotEmpty) {
+      await _secure.write(key: _keyRefreshToken, value: refreshToken);
+    }
+    final prefs = await SharedPreferences.getInstance();
+    if (expiresIn != null && expiresIn > 0) {
+      final expiry = DateTime.now()
+          .add(Duration(seconds: expiresIn))
+          .millisecondsSinceEpoch;
+      await prefs.setInt(_keyTokenExpiry, expiry);
     }
 
     final profile = UserProfile(
-      id: '${data['id'] ?? ''}',
+      id: '${data['id'] ?? data['userId'] ?? ''}',
       email: '${data['email'] ?? ''}',
       name: '${data['name'] ?? ''}',
+      phone: data['phone'] as String?,
     );
     await _cacheProfile(profile);
   }
@@ -278,6 +322,11 @@ class AuthService {
     await prefs.setString(_keyUserName, name);
     await prefs.setString(_keyUserPhone, '0900000000');
     await _secure.write(key: _keyToken, value: mockToken);
+    await _secure.write(key: _keyRefreshToken, value: '$mockToken-refresh');
+    await prefs.setInt(
+      _keyTokenExpiry,
+      DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
+    );
   }
 
   Future<void> _cacheProfile(UserProfile profile) async {
@@ -305,4 +354,10 @@ class AuthService {
       phone: prefs.getString(_keyUserPhone),
     );
   }
+
+  @override
+  Future<String?> accessToken() => getToken();
+
+  @override
+  Future<bool> refreshToken() => refreshSession();
 }

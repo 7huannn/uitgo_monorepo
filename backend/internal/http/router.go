@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -14,6 +15,7 @@ import (
 	"uitgo/backend/internal/http/handlers"
 	"uitgo/backend/internal/http/middleware"
 	"uitgo/backend/internal/notification"
+	"uitgo/backend/internal/observability"
 )
 
 // Server wraps the Gin engine and dependencies.
@@ -24,16 +26,25 @@ type Server struct {
 
 // NewServer configures a Gin engine with routes and middleware.
 func NewServer(cfg *config.Config, db *gorm.DB) (*Server, error) {
+	const serviceName = "api"
 	router := gin.New()
+	gin.DisableConsoleColor()
 	if err := router.SetTrustedProxies([]string{"127.0.0.1"}); err != nil {
 		log.Printf("warn: unable to set trusted proxies: %v", err)
 	}
 
-	router.Use(gin.Logger())
+	router.Use(middleware.JSONLogger(serviceName))
+	router.Use(observability.GinMiddleware())
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID())
 	router.Use(middleware.CORS(cfg.AllowedOrigins))
-	router.Use(middleware.Auth(cfg.JWTSecret))
+	router.Use(middleware.Auth(cfg.JWTSecret, cfg.InternalAPIKey))
+
+	metrics := middleware.NewHTTPMetrics(serviceName, cfg.PrometheusEnabled)
+	router.Use(metrics.Handler())
+
+	auditRepo := domain.NewAuditLogRepository(db)
+	router.Use(middleware.AuditLogger(auditRepo))
 
 	walletRepo := dbrepo.NewWalletRepository(db)
 	walletService := domain.NewWalletService(walletRepo)
@@ -53,23 +64,37 @@ func NewServer(cfg *config.Config, db *gorm.DB) (*Server, error) {
 	driverService := domain.NewDriverService(driverRepo, assignmentRepo, tripRepo, notificationSvc)
 	hubManager := handlers.NewHubManager(tripService, driverRepo)
 	userRepo := domain.NewUserRepository(db)
-	authHandler := handlers.NewAuthHandler(cfg, userRepo, notificationRepo, driverService)
+	refreshRepo := domain.NewRefreshTokenRepository(db)
+	authHandler, err := handlers.NewAuthHandler(cfg, userRepo, notificationRepo, driverService, refreshRepo)
+	if err != nil {
+		return nil, err
+	}
 	savedPlaceRepo := dbrepo.NewSavedPlaceRepository(db)
 	promotionRepo := dbrepo.NewPromotionRepository(db)
 	newsRepo := dbrepo.NewNewsRepository(db)
 	homeService := domain.NewHomeService(walletRepo, savedPlaceRepo, promotionRepo, newsRepo)
 
 	handlers.RegisterHealth(router)
-	router.POST("/auth/register", authHandler.Register)
-	router.POST("/auth/login", authHandler.Login)
+	debugGroup := router.Group("/internal/debug")
+	debugGroup.Use(middleware.InternalOnly(cfg.InternalAPIKey))
+	debugGroup.GET("/panic", func(c *gin.Context) {
+		panic("intentional panic")
+	})
+	authLimiter := middleware.NewTokenBucketRateLimiter(10, time.Minute)
+	tripLimiter := middleware.NewTokenBucketRateLimiter(10, time.Minute)
+	router.POST("/auth/register", authLimiter.Middleware("auth_register"), authHandler.Register)
+	router.POST("/auth/login", authLimiter.Middleware("auth_login"), authHandler.Login)
+	router.POST("/auth/refresh", authLimiter.Middleware("auth_refresh"), authHandler.Refresh)
 	router.GET("/auth/me", authHandler.Me)
 	router.PATCH("/users/me", authHandler.UpdateMe)
 	router.POST("/v1/drivers/register", authHandler.RegisterDriver)
 	handlers.RegisterDriverRoutes(router, driverService)
-	handlers.RegisterTripRoutes(router, tripService, driverService, hubManager)
+	handlers.RegisterTripRoutes(router, tripService, driverService, hubManager, tripLimiter.Middleware("trip_create"))
 	handlers.RegisterNotificationRoutes(router, notificationRepo, notificationSvc)
 	handlers.RegisterWalletRoutes(router, walletService)
 	handlers.RegisterHomeRoutes(router, homeService)
+
+	metrics.Expose(router)
 
 	return &Server{
 		engine: router,

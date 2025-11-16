@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -17,6 +18,7 @@ import (
 	"uitgo/backend/internal/http/handlers"
 	"uitgo/backend/internal/http/middleware"
 	"uitgo/backend/internal/notification"
+	"uitgo/backend/internal/observability"
 )
 
 // Server represents the trip-service HTTP server.
@@ -27,14 +29,24 @@ type Server struct {
 
 // New constructs the HTTP server with trip routes and internal hooks.
 func New(cfg *config.Config, db *gorm.DB, driverLocations handlers.DriverLocationWriter) (*Server, error) {
+	const serviceName = "trip-service"
 	router := gin.New()
-	router.Use(gin.Logger())
+	gin.DisableConsoleColor()
+	router.Use(middleware.JSONLogger(serviceName))
+	router.Use(observability.GinMiddleware())
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID())
 	router.Use(middleware.CORS(cfg.AllowedOrigins))
-	router.Use(middleware.Auth(cfg.JWTSecret))
+	router.Use(middleware.Auth(cfg.JWTSecret, cfg.InternalAPIKey))
+
+	metrics := middleware.NewHTTPMetrics(serviceName, cfg.PrometheusEnabled)
+	router.Use(metrics.Handler())
+
+	auditRepo := domain.NewAuditLogRepository(db)
+	router.Use(middleware.AuditLogger(auditRepo))
 
 	handlers.RegisterHealth(router)
+	tripLimiter := middleware.NewTokenBucketRateLimiter(10, time.Minute)
 
 	walletRepo := dbrepo.NewWalletRepository(db)
 	walletService := domain.NewWalletService(walletRepo)
@@ -49,8 +61,10 @@ func New(cfg *config.Config, db *gorm.DB, driverLocations handlers.DriverLocatio
 	tripService := domain.NewTripService(tripRepo, walletService, notificationSvc)
 	hubManager := handlers.NewHubManager(tripService, driverLocations)
 
-	handlers.RegisterTripRoutes(router, tripService, nil, hubManager)
+	handlers.RegisterTripRoutes(router, tripService, nil, hubManager, tripLimiter.Middleware("trip_create"))
 	registerInternalRoutes(router, cfg, tripService, hubManager)
+
+	metrics.Expose(router)
 
 	return &Server{engine: router, cfg: cfg}, nil
 }

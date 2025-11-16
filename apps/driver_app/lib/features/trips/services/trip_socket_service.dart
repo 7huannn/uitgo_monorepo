@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
+import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../../core/config/config.dart';
@@ -35,10 +37,26 @@ class TripSocketService {
     }
 
     final userInfo = await _auth.getUserInfo();
-    final userId = userInfo['userId']?.isNotEmpty == true ? userInfo['userId']! : 'demo-driver';
+    final userId = userInfo['userId'];
+    if (userId == null || userId.isEmpty) {
+      throw const AuthException('Phiên đăng nhập không hợp lệ.');
+    }
+    final token = await _auth.getToken();
+    if (token == null || token.isEmpty) {
+      throw const AuthException('Vui lòng đăng nhập lại.');
+    }
 
-    final uri = _buildUri(tripId, userId);
-    _channel = WebSocketChannel.connect(uri);
+    final uri = _buildUri(
+      tripId,
+      userId,
+      tokenForQuery: kIsWeb ? token : null,
+    );
+    final headers = <String, dynamic>{
+      if (!kIsWeb) 'Authorization': 'Bearer $token',
+    };
+    _channel = kIsWeb
+        ? WebSocketChannel.connect(uri)
+        : IOWebSocketChannel.connect(uri, headers: headers);
     _channelSub = _channel!.stream.listen(_handleInbound);
     _startLocationTicker();
   }
@@ -83,19 +101,23 @@ class TripSocketService {
     _locationTimer = null;
   }
 
-  Uri _buildUri(String tripId, String userId) {
+  Uri _buildUri(String tripId, String userId, {String? tokenForQuery}) {
     final baseUri = Uri.parse(apiBase);
     final scheme = baseUri.scheme == 'https' ? 'wss' : 'ws';
     final basePath = baseUri.path.endsWith('/')
         ? '${baseUri.path}v1/trips/$tripId/ws'
         : '${baseUri.path}/v1/trips/$tripId/ws';
+    final params = <String, String>{
+      'role': 'driver',
+      'userId': userId,
+    };
+    if (tokenForQuery != null && tokenForQuery.isNotEmpty) {
+      params['accessToken'] = tokenForQuery;
+    }
     return baseUri.replace(
       scheme: scheme,
       path: basePath,
-      queryParameters: {
-        'role': 'driver',
-        'userId': userId,
-      },
+      queryParameters: params,
     );
   }
 }

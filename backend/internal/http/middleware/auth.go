@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"crypto/subtle"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -12,29 +14,52 @@ import (
 const (
 	userIDHeader        = "X-User-Id"
 	roleHeader          = "X-Role"
-	defaultUser         = "demo-user"
 	internalTokenHeader = "X-Internal-Token"
 )
 
 // Auth attaches authentication info to the request context.
-func Auth(jwtSecret string) gin.HandlerFunc {
+func Auth(jwtSecret, internalSecret string) gin.HandlerFunc {
+	jwtSecret = strings.TrimSpace(jwtSecret)
+	internalSecret = strings.TrimSpace(internalSecret)
 	return func(c *gin.Context) {
-		userID := c.GetHeader(userIDHeader)
-		role := c.GetHeader(roleHeader)
+		var userID string
+		var role string
+
 		if jwtSecret != "" {
 			if sub, r := parseBearer(c.GetHeader("Authorization"), jwtSecret); sub != "" {
 				userID = sub
-				if role == "" && r != "" {
-					role = r
+				role = r
+			}
+			if userID == "" {
+				tokenParam := strings.TrimSpace(c.Query("accessToken"))
+				if tokenParam == "" {
+					tokenParam = strings.TrimSpace(c.Query("token"))
+				}
+				if tokenParam != "" {
+					if sub, r := parseBearer("Bearer "+tokenParam, jwtSecret); sub != "" {
+						userID = sub
+						if role == "" {
+							role = r
+						}
+					}
 				}
 			}
 		}
-		if userID == "" {
-			userID = defaultUser
+
+		if userID == "" && internalSecret != "" {
+			headerSecret := strings.TrimSpace(c.GetHeader(internalTokenHeader))
+			if headerSecret != "" && subtle.ConstantTimeCompare([]byte(headerSecret), []byte(internalSecret)) == 1 {
+				userID = strings.TrimSpace(c.GetHeader(userIDHeader))
+				role = strings.TrimSpace(c.GetHeader(roleHeader))
+			}
 		}
-		c.Set("userID", userID)
-		c.Set("role", role)
-		c.Set("userID", userID)
+
+		if userID != "" {
+			c.Set("userID", userID)
+		}
+		if role != "" {
+			c.Set("role", role)
+		}
 		c.Next()
 	}
 }
@@ -54,34 +79,99 @@ func RequestID() gin.HandlerFunc {
 
 // CORS enables configurable CORS.
 func CORS(allowedOrigins []string) gin.HandlerFunc {
+	var patterns []string
+	allowAll := false
+	for _, origin := range allowedOrigins {
+		origin = strings.TrimSpace(origin)
+		if origin == "" {
+			continue
+		}
+		if origin == "*" {
+			allowAll = true
+			break
+		}
+		patterns = append(patterns, origin)
+	}
+
 	return func(c *gin.Context) {
 		originHeader := c.GetHeader("Origin")
-		allowOrigin := "*"
-		if len(allowedOrigins) > 0 {
-			for _, candidate := range allowedOrigins {
-				if candidate == "*" {
-					allowOrigin = "*"
+		originAllowed := allowAll || originHeader == ""
+		if !originAllowed {
+			for _, candidate := range patterns {
+				if matchOrigin(candidate, originHeader) {
+					originAllowed = true
 					break
 				}
-				if originHeader != "" && originHeader == candidate {
-					allowOrigin = originHeader
-					break
-				}
-			}
-			// fallback to first configured origin if no match and wildcard not provided
-			if allowOrigin != "*" && originHeader == "" {
-				allowOrigin = allowedOrigins[0]
 			}
 		}
+
+		if !originAllowed {
+			if c.Request.Method == http.MethodOptions {
+				c.AbortWithStatus(http.StatusForbidden)
+				return
+			}
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "origin not allowed"})
+			return
+		}
+
+		allowOrigin := originHeader
+		if allowAll || allowOrigin == "" {
+			allowOrigin = "*"
+		}
+
 		c.Writer.Header().Set("Access-Control-Allow-Origin", allowOrigin)
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "*,Authorization,X-User-Id,X-Role")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS")
+		c.Writer.Header().Set("Vary", "Origin")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,X-User-Id,X-Role,X-Request-Id")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
 		c.Next()
 	}
+}
+
+func matchOrigin(candidate, actual string) bool {
+	candidate = strings.TrimSpace(candidate)
+	actual = strings.TrimSpace(actual)
+	if candidate == "" || actual == "" {
+		return false
+	}
+	if candidate == "*" || candidate == actual {
+		return true
+	}
+	if strings.HasSuffix(candidate, "*") {
+		prefix := strings.TrimSuffix(candidate, "*")
+		if prefix == "" {
+			return true
+		}
+		return strings.HasPrefix(actual, prefix)
+	}
+
+	if strings.HasSuffix(candidate, ":*") {
+		base := strings.TrimSuffix(candidate, ":*")
+		if !strings.Contains(base, "://") {
+			base = "http://" + base
+		}
+		cURL, err1 := url.Parse(base)
+		aURL, err2 := url.Parse(actual)
+		if err1 == nil && err2 == nil && cURL.Scheme == aURL.Scheme && cURL.Hostname() == aURL.Hostname() {
+			return true
+		}
+	}
+
+	cURL, err1 := url.Parse(candidate)
+	aURL, err2 := url.Parse(actual)
+	if err1 == nil && err2 == nil && cURL.Scheme == aURL.Scheme {
+		if cURL.Hostname() == aURL.Hostname() {
+			if cURL.Port() == "" || cURL.Port() == aURL.Port() {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // InternalOnly restricts a route to internal callers by validating a static token.
