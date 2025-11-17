@@ -149,6 +149,33 @@ func (r *driverRepository) FindByUserID(ctx context.Context, userID string) (*do
 	return toDriverDomain(&model), nil
 }
 
+func (r *driverRepository) FindAvailable(ctx context.Context) (*domain.Driver, error) {
+	type candidate struct {
+		ID uuid.UUID
+	}
+	var row candidate
+	activeStatuses := []string{
+		string(domain.TripAssignmentPending),
+		string(domain.TripAssignmentAccepted),
+	}
+	err := r.db.WithContext(ctx).
+		Table("drivers AS d").
+		Select("d.id").
+		Joins("JOIN driver_status ds ON ds.driver_id = d.id AND ds.status = ?", string(domain.DriverOnline)).
+		Joins("LEFT JOIN trip_assignments ta ON ta.driver_id = d.id AND ta.status IN ?", activeStatuses).
+		Where("ta.id IS NULL").
+		Order("ds.updated_at ASC").
+		Limit(1).
+		Take(&row).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return r.FindByID(ctx, row.ID.String())
+}
+
 func (r *driverRepository) Update(ctx context.Context, driver *domain.Driver) error {
 	if driver == nil || driver.ID == "" {
 		return errors.New("driver id required")

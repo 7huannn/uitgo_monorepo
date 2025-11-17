@@ -1,30 +1,36 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+import 'package:driver_app/features/home/widgets/trip_card.dart';
+import 'package:driver_app/features/trips/models/trip_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:driver_app/main.dart';
-
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('TripCard renders pickup and drop-off locations',
+      (WidgetTester tester) async {
+    final trip = TripDetail(
+      id: 'trip-1',
+      riderId: 'rider-1',
+      serviceId: 'UIT-Bike',
+      originText: 'UIT Campus A',
+      destText: 'KTX Khu B',
+      originLat: 10.87,
+      originLng: 106.8,
+      destLat: 10.88,
+      destLng: 106.82,
+      status: TripStatus.requested,
+      createdAt: DateTime(2024, 7, 1, 8, 30),
+      updatedAt: DateTime(2024, 7, 1, 8, 45),
+    );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TripCard(trip: trip),
+        ),
+      ),
+    );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.textContaining('UIT Campus A'), findsOneWidget);
+    expect(find.textContaining('KTX Khu B'), findsOneWidget);
+    expect(find.textContaining('Chờ xác nhận'), findsOneWidget);
   });
 }

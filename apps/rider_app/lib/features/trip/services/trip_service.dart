@@ -28,6 +28,7 @@ class TripService {
     double? originLng,
     double? destLat,
     double? destLng,
+    String? promotionCode,
   }) async {
     final now = DateTime.now().toUtc();
 
@@ -59,6 +60,8 @@ class TripService {
           if (originLng != null) 'originLng': originLng,
           if (destLat != null) 'destLat': destLat,
           if (destLng != null) 'destLng': destLng,
+          if (promotionCode != null && promotionCode.isNotEmpty)
+            'promotionCode': promotionCode,
         },
       );
 

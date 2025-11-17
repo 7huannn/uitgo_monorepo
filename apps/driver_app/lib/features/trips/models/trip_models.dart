@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 class TripStatus {
   const TripStatus._(this.value);
   final String value;
@@ -45,7 +47,8 @@ class LocationUpdate {
     return LocationUpdate(
       latitude: (json['lat'] as num?)?.toDouble() ?? 0,
       longitude: (json['lng'] as num?)?.toDouble() ?? 0,
-      timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ?? DateTime.now(),
+      timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ??
+          DateTime.now(),
     );
   }
 
@@ -63,6 +66,10 @@ class TripDetail {
     required this.serviceId,
     required this.originText,
     required this.destText,
+    this.originLat,
+    this.originLng,
+    this.destLat,
+    this.destLng,
     required this.status,
     required this.createdAt,
     required this.updatedAt,
@@ -75,6 +82,10 @@ class TripDetail {
   final String serviceId;
   final String originText;
   final String destText;
+  final double? originLat;
+  final double? originLng;
+  final double? destLat;
+  final double? destLng;
   final TripStatus status;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -91,6 +102,10 @@ class TripDetail {
       serviceId: serviceId,
       originText: originText,
       destText: destText,
+      originLat: originLat,
+      originLng: originLng,
+      destLat: destLat,
+      destLng: destLng,
       status: status ?? this.status,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
@@ -107,15 +122,61 @@ class TripDetail {
       serviceId: json['serviceId'] as String? ?? '',
       originText: json['originText'] as String? ?? '',
       destText: json['destText'] as String? ?? '',
+      originLat: (json['originLat'] as num?)?.toDouble(),
+      originLng: (json['originLng'] as num?)?.toDouble(),
+      destLat: (json['destLat'] as num?)?.toDouble(),
+      destLng: (json['destLng'] as num?)?.toDouble(),
       status: TripStatus.from(json['status'] as String?),
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ?? DateTime.now(),
-      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? '') ??
+          DateTime.now(),
       lastLocation: json['lastLocation'] is Map<String, dynamic>
-          ? LocationUpdate.fromJson(json['lastLocation'] as Map<String, dynamic>)
+          ? LocationUpdate.fromJson(
+              json['lastLocation'] as Map<String, dynamic>)
           : null,
     );
   }
+
+  double? get estimatedDistanceKm {
+    final meters = _haversineDistanceMeters(
+      originLat,
+      originLng,
+      destLat,
+      destLng,
+    );
+    return meters != null ? meters / 1000 : null;
+  }
+
+  double? get estimatedDistanceMeters => _haversineDistanceMeters(
+        originLat,
+        originLng,
+        destLat,
+        destLng,
+      );
 }
+
+double? _haversineDistanceMeters(
+  double? lat1,
+  double? lon1,
+  double? lat2,
+  double? lon2,
+) {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) {
+    return null;
+  }
+  const earthRadiusMeters = 6371000.0;
+  final dLat = _toRadians(lat2 - lat1);
+  final dLon = _toRadians(lon2 - lon1);
+  final a = math.pow(math.sin(dLat / 2), 2) +
+      math.cos(_toRadians(lat1)) *
+          math.cos(_toRadians(lat2)) *
+          math.pow(math.sin(dLon / 2), 2);
+  final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  return earthRadiusMeters * c;
+}
+
+double _toRadians(double degree) => degree * math.pi / 180;
 
 class PagedTrips {
   const PagedTrips({
@@ -168,12 +229,14 @@ class TripRealtimeEvent {
         LocationUpdate(
           latitude: (json['lat'] as num).toDouble(),
           longitude: (json['lng'] as num).toDouble(),
-          timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ?? DateTime.now(),
+          timestamp: DateTime.tryParse(json['timestamp'] as String? ?? '') ??
+              DateTime.now(),
         ),
       );
     }
     if (type == 'status' && json['status'] is String) {
-      return TripRealtimeEvent.status(TripStatus.from(json['status'] as String?));
+      return TripRealtimeEvent.status(
+          TripStatus.from(json['status'] as String?));
     }
     return TripRealtimeEvent.status(null);
   }

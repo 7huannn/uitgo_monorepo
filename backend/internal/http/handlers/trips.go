@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -179,6 +180,14 @@ func (h *TripHandler) createTrip(c *gin.Context) {
 		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	if h.driverService != nil {
+		if _, err := h.driverService.AssignNextAvailableDriver(c.Request.Context(), trip.ID); err != nil {
+			if !errors.Is(err, domain.ErrNoDriversAvailable) {
+				log.Printf("auto-assign driver for trip %s failed: %v", trip.ID, err)
+			}
+		}
 	}
 
 	c.JSON(http.StatusCreated, toTripResponse(trip, nil))

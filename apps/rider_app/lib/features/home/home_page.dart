@@ -32,8 +32,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   final TextEditingController _pickupController =
       TextEditingController(text: 'Sảnh A, Đại học UIT');
   final TextEditingController _destinationController = TextEditingController();
-  final PageController _promoController =
-      PageController(viewportFraction: 0.88);
+  final TextEditingController _promoCodeController = TextEditingController();
   final FocusNode _pickupFocus = FocusNode();
   final FocusNode _destinationFocus = FocusNode();
   final LayerLink _pickupLayerLink = LayerLink();
@@ -78,6 +77,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Size _pickupFieldSize = Size.zero;
   Size _destinationFieldSize = Size.zero;
   int _unreadNotifications = 0;
+  PromotionBanner? _appliedPromotion;
+  String? _promoError;
+  List<PromotionBanner> _currentPromotions = const [];
 
   @override
   void initState() {
@@ -94,6 +96,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _setPickupText(_pickupPlace!.displayName, suppressOnChanged: true);
     _pickupFocus.addListener(_onPickupFocusChange);
     _destinationFocus.addListener(_onDestinationFocusChange);
+    _promoCodeController.addListener(_onPromoCodeChanged);
     if (widget.debugStartReady) {
       _homeFuture = Future.value(
         _HomeSnapshot(
@@ -134,6 +137,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final wallet = results[0] as WalletSummary;
     final savedPlaces = results[1] as List<SavedPlaceModel>;
     final promotions = results[2] as List<PromotionBanner>;
+    _currentPromotions = promotions;
     final news = results[3] as List<HomeNewsItem>;
     final pagedTrips = results[4] as PagedTrips;
     final trips = [...pagedTrips.items]
@@ -142,14 +146,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       context.read<WalletNotifier>().replace(wallet);
     }
 
-    final upcoming = trips
-        .where((trip) => !_isTerminalStatus(trip.status))
-        .take(3)
-        .toList();
-    final recent = trips
-        .where((trip) => _isTerminalStatus(trip.status))
-        .take(5)
-        .toList();
+    final upcoming =
+        trips.where((trip) => !_isTerminalStatus(trip.status)).take(3).toList();
+    final recent =
+        trips.where((trip) => _isTerminalStatus(trip.status)).take(5).toList();
 
     return _HomeSnapshot(
       riderName: riderName,
@@ -169,9 +169,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _removeDestinationOverlay();
     _pickupFocus.removeListener(_onPickupFocusChange);
     _destinationFocus.removeListener(_onDestinationFocusChange);
+    _promoCodeController.removeListener(_onPromoCodeChanged);
     _pickupController.dispose();
     _destinationController.dispose();
-    _promoController.dispose();
+    _promoCodeController.dispose();
     _scrollController.removeListener(_handleViewportChange);
     _scrollController.dispose();
     _cancelPickupDebounce(reason: 'dispose');
@@ -757,18 +758,38 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   child: LinearProgressIndicator(minHeight: 3),
                 )
               else if (_routeOverview != null)
-                _buildSummaryRow(
-                  'Quãng đường',
-                  '${_routeOverview!.formattedDistance} • ETA ${_routeOverview!.formattedEta}',
-                  icon: Icons.alt_route,
-                ),
-              if (_routeError != null)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSummaryRow(
+                      'Quãng đường',
+                      '${_routeOverview!.formattedDistance} • ETA ${_routeOverview!.formattedEta}',
+                      icon: Icons.alt_route,
+                    ),
+                    if (_routeOverview!.isApproximate)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Đang dùng quãng đường ước tính do dịch vụ định tuyến tạm gián đoạn.',
+                          style: TextStyle(
+                              color: Colors.orange[700], fontSize: 12),
+                        ),
+                      ),
+                  ],
+                )
+              else if (_routeError != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     _routeError!,
                     style: const TextStyle(color: Colors.red),
                   ),
+                ),
+              if (_appliedPromotion != null)
+                _buildSummaryRow(
+                  'Ưu đãi',
+                  '${_appliedPromotion!.code} • ${_appliedPromotion!.title}',
+                  icon: Icons.card_giftcard,
                 ),
               const SizedBox(height: 24),
               ElevatedButton(
@@ -782,6 +803,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           scheduleText: scheduleText,
                           pickupPlace: _pickupPlace!,
                           destinationPlace: _destinationPlace!,
+                          promotionCode: _appliedPromotion?.code,
                         ),
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size.fromHeight(50),
@@ -984,6 +1006,63 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _tryLoadRouteOverview();
   }
 
+  void _onPromoCodeChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  void _applyPromotionCode({String? code}) {
+    final availablePromos = _currentPromotions;
+    final raw = (code ?? _promoCodeController.text).trim();
+    if (raw.isEmpty) {
+      setState(() {
+        _promoError = 'Vui lòng nhập mã ưu đãi.';
+        _appliedPromotion = null;
+      });
+      return;
+    }
+    if (availablePromos.isEmpty) {
+      setState(() {
+        _promoError = 'Hiện chưa có ưu đãi khả dụng.';
+        _appliedPromotion = null;
+      });
+      return;
+    }
+    final normalized = raw.toUpperCase();
+    PromotionBanner? matched;
+    for (final promo in availablePromos) {
+      if (promo.code.trim().toUpperCase() == normalized) {
+        matched = promo;
+        break;
+      }
+    }
+    if (matched == null) {
+      setState(() {
+        _promoError = 'Mã không hợp lệ hoặc đã hết hạn.';
+        _appliedPromotion = null;
+      });
+      return;
+    }
+    final applied = matched;
+    setState(() {
+      _appliedPromotion = applied;
+      _promoError = null;
+      _promoCodeController.text = applied.code;
+    });
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Đã áp dụng mã ${applied.code}')),
+    );
+  }
+
+  void _clearPromotion() {
+    setState(() {
+      _appliedPromotion = null;
+      _promoError = null;
+      _promoCodeController.clear();
+    });
+  }
+
   Future<void> _bookTrip(
     BuildContext sheetContext, {
     required _ServiceOption service,
@@ -992,6 +1071,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     required String scheduleText,
     required PlaceSuggestion pickupPlace,
     required PlaceSuggestion destinationPlace,
+    String? promotionCode,
   }) async {
     if (_isBooking) return;
     setState(() {
@@ -1007,6 +1087,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         originLng: pickupPlace.longitude,
         destLat: destinationPlace.latitude,
         destLng: destinationPlace.longitude,
+        promotionCode: promotionCode,
       );
 
       if (!mounted) return;
@@ -1645,15 +1726,30 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           else if (_routeOverview != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.alt_route, color: Color(0xFF667EEA)),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${_routeOverview!.formattedDistance} • ETA ${_routeOverview!.formattedEta}',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600, color: Color(0xFF667EEA)),
+                  Row(
+                    children: [
+                      const Icon(Icons.alt_route, color: Color(0xFF667EEA)),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${_routeOverview!.formattedDistance} • ETA ${_routeOverview!.formattedEta}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF667EEA)),
+                      ),
+                    ],
                   ),
+                  if (_routeOverview!.isApproximate)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Đang hiển thị quãng đường ước tính vì dịch vụ bản đồ tạm gián đoạn.',
+                        style:
+                            TextStyle(color: Colors.orange[700], fontSize: 12),
+                      ),
+                    ),
                 ],
               ),
             )
@@ -1774,8 +1870,135 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               ),
             ),
           ],
+          const SizedBox(height: 16),
+          _buildPromotionInput(snapshot),
         ],
       ),
+    );
+  }
+
+  Widget _buildPromotionInput(_HomeSnapshot snapshot) {
+    final quickPromos = snapshot.promotions.take(4).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Ưu đãi & mã giảm giá',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _promoCodeController,
+                decoration: InputDecoration(
+                  hintText: 'Nhập mã ưu đãi (ví dụ UITNEW)',
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
+                  suffixIcon: _appliedPromotion != null ||
+                          (_promoCodeController.text.isNotEmpty)
+                      ? IconButton(
+                          tooltip: 'Xóa mã',
+                          icon: const Icon(Icons.close),
+                          onPressed: _clearPromotion,
+                        )
+                      : null,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton(
+              onPressed: () => _applyPromotionCode(),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF667EEA),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: Text(
+                _appliedPromotion != null ? 'Đã áp dụng' : 'Áp dụng',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+        if (_promoError != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            _promoError!,
+            style: const TextStyle(color: Colors.red, fontSize: 12),
+          ),
+        ],
+        if (_appliedPromotion != null) ...[
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF38B000).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.card_giftcard, color: Color(0xFF38B000)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${_appliedPromotion!.code} • ${_appliedPromotion!.title}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _clearPromotion,
+                  child: const Text('Gỡ'),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (quickPromos.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 36,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: quickPromos.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (context, index) {
+                final promo = quickPromos[index];
+                final selectedCode =
+                    (_appliedPromotion?.code ?? '').toUpperCase();
+                final promoCodeUpper = promo.code.toUpperCase();
+                final selected = selectedCode == promoCodeUpper;
+                return ChoiceChip(
+                  label: Text(promo.code),
+                  selected: selected,
+                  onSelected: (_) => _applyPromotionCode(code: promo.code),
+                  selectedColor:
+                      const Color(0xFF667EEA).withValues(alpha: 0.15),
+                  side: BorderSide(
+                    color: selected
+                        ? const Color(0xFF667EEA)
+                        : Colors.grey.withValues(alpha: 0.3),
+                  ),
+                );
+              },
+            ),
+          ),
+        ] else ...[
+          const SizedBox(height: 10),
+          Text(
+            'Chưa có ưu đãi nổi bật, vui lòng quay lại sau.',
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          ),
+        ],
+      ],
     );
   }
 
@@ -2103,6 +2326,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
               itemBuilder: (context, index) {
                 final place = places[index];
                 return GestureDetector(
@@ -2272,17 +2496,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           ),
           const SizedBox(height: 16),
           SizedBox(
-            height: 160,
-            child: PageView.builder(
-              controller: _promoController,
+            height: 190,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              scrollDirection: Axis.horizontal,
               itemCount: promotions.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 16),
               itemBuilder: (context, index) {
                 final promo = promotions[index];
-                return Padding(
-                  padding: EdgeInsets.only(
-                    right: index == promotions.length - 1 ? 20 : 10,
-                    left: index == 0 ? 20 : 0,
-                  ),
+                return SizedBox(
+                  width: 300,
                   child: Material(
                     color: Colors.transparent,
                     borderRadius: BorderRadius.circular(24),
@@ -2295,7 +2518,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                           borderRadius: BorderRadius.circular(24),
                           boxShadow: [
                             BoxShadow(
-                              color: promo.gradient.last.withValues(alpha: 0.25),
+                              color:
+                                  promo.gradient.last.withValues(alpha: 0.25),
                               blurRadius: 18,
                               offset: const Offset(0, 6),
                             ),
@@ -2314,13 +2538,15 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                               ),
                             ),
                             const SizedBox(height: 8),
-                            Text(
-                              promo.description,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.92),
+                            Expanded(
+                              child: Text(
+                                promo.description,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.92),
+                                ),
                               ),
                             ),
-                            const Spacer(),
+                            const SizedBox(height: 12),
                             Row(
                               children: [
                                 Container(
@@ -2329,8 +2555,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     vertical: 6,
                                   ),
                                   decoration: BoxDecoration(
-                                    color:
-                                        Colors.white.withValues(alpha: 0.88),
+                                    color: Colors.white.withValues(alpha: 0.88),
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                   child: Text(
@@ -2341,15 +2566,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 12),
-                                TextButton.icon(
-                                  onPressed: () => _copyPromoCode(promo.code),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  icon: const Icon(Icons.copy, size: 16),
-                                  label: const Text('Sao chép mã'),
-                                ),
                                 const Spacer(),
                                 Text(
                                   promo.expiryLabel,
@@ -2357,6 +2573,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                                     color: Colors.white70,
                                     fontSize: 12,
                                   ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                TextButton.icon(
+                                  onPressed: () =>
+                                      _applyPromotionCode(code: promo.code),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  icon: const Icon(Icons.local_offer, size: 16),
+                                  label: const Text('Dùng mã này'),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  tooltip: 'Sao chép mã',
+                                  onPressed: () => _copyPromoCode(promo.code),
+                                  icon: const Icon(Icons.copy,
+                                      size: 18, color: Colors.white),
                                 ),
                               ],
                             ),
