@@ -8,9 +8,17 @@ import '../features/auth/services/auth_service.dart';
 import '../features/driver/services/driver_service.dart';
 import '../features/home/controllers/driver_home_controller.dart';
 import '../features/home/pages/home_page.dart';
+import '../features/profile/controllers/driver_profile_controller.dart';
+import '../features/profile/pages/profile_page.dart';
 import '../features/trips/services/trip_service.dart';
 import '../features/trip_detail/pages/trip_detail_page.dart';
 import '../features/trips/pages/trip_history_page.dart';
+import '../features/wallet/controllers/wallet_controller.dart';
+import '../features/wallet/pages/wallet_overview_page.dart';
+import '../features/wallet/pages/wallet_route_args.dart';
+import '../features/wallet/pages/wallet_transaction_detail_page.dart';
+import '../features/wallet/pages/wallet_transactions_page.dart';
+import '../features/wallet/services/wallet_service.dart';
 import 'theme.dart';
 
 final GlobalKey<NavigatorState> driverNavigatorKey =
@@ -87,6 +95,57 @@ Route<dynamic> _onGenerateRoute(RouteSettings settings) {
         builder: (_) => const TripHistoryPage(),
         settings: settings,
       );
+    case DriverProfilePage.routeName:
+      return MaterialPageRoute(
+        builder: (_) => ChangeNotifierProvider(
+          create: (_) => DriverProfileController(DriverService())..bootstrap(),
+          child: const DriverProfilePage(),
+        ),
+        settings: settings,
+      );
+    case WalletOverviewPage.routeName:
+      return MaterialPageRoute(
+        builder: (_) => ChangeNotifierProvider(
+          create: (_) => WalletController(WalletService())..bootstrap(),
+          child: const WalletOverviewPage(),
+        ),
+        settings: settings,
+      );
+    case WalletTransactionsPage.routeName:
+      final args = settings.arguments;
+      WalletController? controller;
+      if (args is WalletRouteControllerArgs) {
+        controller = args.controller;
+      }
+      return MaterialPageRoute(
+        builder: (_) {
+          if (controller != null) {
+            return ChangeNotifierProvider<WalletController>.value(
+              value: controller,
+              child: const WalletTransactionsPage(),
+            );
+          }
+          return ChangeNotifierProvider(
+            create: (_) => WalletController(WalletService())..bootstrap(),
+            child: const WalletTransactionsPage(),
+          );
+        },
+        settings: settings,
+      );
+    case WalletTransactionDetailPage.routeName:
+      final args = settings.arguments;
+      if (args is WalletTransactionDetailArgs) {
+        return MaterialPageRoute(
+          builder: (_) => WalletTransactionDetailPage(
+            transaction: args.transaction,
+          ),
+          settings: settings,
+        );
+      }
+      return MaterialPageRoute(
+        builder: (_) => const _MissingWalletTransactionPage(),
+        settings: settings,
+      );
     default:
       return MaterialPageRoute(
         builder: (_) => const _AuthGate(),
@@ -118,6 +177,19 @@ class _MissingTripIdPage extends StatelessWidget {
     return const Scaffold(
       body: Center(
         child: Text('Không tìm thấy mã chuyến để hiển thị.'),
+      ),
+    );
+  }
+}
+
+class _MissingWalletTransactionPage extends StatelessWidget {
+  const _MissingWalletTransactionPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Text('Không tìm thấy thông tin giao dịch.'),
       ),
     );
   }

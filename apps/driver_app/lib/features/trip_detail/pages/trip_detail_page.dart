@@ -2,7 +2,9 @@ import 'dart:async';
 
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../trips/models/trip_models.dart';
 import '../../trips/services/trip_service.dart';
@@ -28,6 +30,7 @@ class TripDetailPage extends StatefulWidget {
 class _TripDetailPageState extends State<TripDetailPage> {
   final TripService _tripService = TripService();
   final TripSocketService _socket = TripSocketService();
+  final MapController _mapController = MapController();
 
   TripDetail? _trip;
   LocationUpdate? _latestLocation;
@@ -60,6 +63,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
         _trip = trip;
         _latestLocation = trip.lastLocation;
       });
+      _fitMapToTrip(trip, location: trip.lastLocation);
       await _socket.connect(widget.tripId);
       _socketSub = _socket.stream.listen((event) {
         if (!mounted) return;
@@ -71,6 +75,10 @@ class _TripDetailPageState extends State<TripDetailPage> {
             _latestLocation = event.location;
           }
         });
+        final latestTrip = _trip;
+        if (event.location != null && latestTrip != null) {
+          _fitMapToTrip(latestTrip, location: event.location);
+        }
       });
     } catch (e) {
       setState(() => _error = 'Không thể tải thông tin chuyến.');
@@ -109,6 +117,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
       await action();
       final refreshed = await _tripService.fetchTrip(widget.tripId);
       setState(() => _trip = refreshed);
+      _fitMapToTrip(refreshed);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -158,6 +167,39 @@ class _TripDetailPageState extends State<TripDetailPage> {
     }
   }
 
+  void _fitMapToTrip(TripDetail trip, {LocationUpdate? location}) {
+    final points = <LatLng>[];
+    final pickup = _latLng(trip.originLat, trip.originLng);
+    final dropoff = _latLng(trip.destLat, trip.destLng);
+    final driver = location ?? _latestLocation;
+    if (pickup != null) points.add(pickup);
+    if (dropoff != null) points.add(dropoff);
+    if (driver != null) {
+      points.add(LatLng(driver.latitude, driver.longitude));
+    }
+    if (points.isEmpty) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (points.length == 1) {
+        _mapController.move(points.first, 15);
+      } else {
+        final bounds = LatLngBounds.fromPoints(points);
+        _mapController.fitCamera(
+          CameraFit.bounds(
+            bounds: bounds,
+            padding: const EdgeInsets.all(36),
+          ),
+        );
+      }
+    });
+  }
+
+  LatLng? _latLng(double? lat, double? lng) {
+    if (lat == null || lng == null) return null;
+    return LatLng(lat, lng);
+  }
+
   @override
   Widget build(BuildContext context) {
     final trip = _trip;
@@ -184,11 +226,12 @@ class _TripDetailPageState extends State<TripDetailPage> {
                         padding: const EdgeInsets.all(16),
                         physics: const AlwaysScrollableScrollPhysics(),
                         children: [
-                          _MapPlaceholder(
+                          _TripMap(
                             trip: trip,
                             location: _latestLocation,
                             statusColor: _statusColor(context, trip.status),
                             statusLabel: _statusLabel(trip.status),
+                            mapController: _mapController,
                           ),
                           const SizedBox(height: 16),
                           _TripDetailsCard(
@@ -282,73 +325,151 @@ class _TripDetailPageState extends State<TripDetailPage> {
   }
 }
 
-class _MapPlaceholder extends StatelessWidget {
-  const _MapPlaceholder({
+class _TripMap extends StatelessWidget {
+  const _TripMap({
     required this.trip,
     required this.location,
     required this.statusColor,
     required this.statusLabel,
+    required this.mapController,
   });
 
   final TripDetail trip;
   final LocationUpdate? location;
   final Color statusColor;
   final String statusLabel;
+  final MapController mapController;
 
   @override
   Widget build(BuildContext context) {
+    final pickup = _toLatLng(trip.originLat, trip.originLng);
+    final destination = _toLatLng(trip.destLat, trip.destLng);
+    final driver = location == null
+        ? null
+        : LatLng(location!.latitude, location!.longitude);
+    final fitPoints = [
+      if (pickup != null) pickup,
+      if (destination != null) destination,
+      if (driver != null) driver,
+    ];
+    final initialCenter = fitPoints.isNotEmpty
+        ? fitPoints.first
+        : const LatLng(10.8702, 106.8033);
+    final initialCameraFit = fitPoints.length >= 2
+        ? CameraFit.bounds(
+            bounds: LatLngBounds.fromPoints(fitPoints),
+            padding: const EdgeInsets.all(32),
+          )
+        : null;
     final distanceKm = trip.estimatedDistanceKm;
     final distanceLabel = distanceKm == null
         ? 'Đang tính toán quãng đường'
         : distanceKm >= 1
             ? '${distanceKm.toStringAsFixed(1)} km'
             : '${(distanceKm * 1000).toStringAsFixed(0)} m';
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        height: 220,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF1D3557), Color(0xFF457B9D)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+    final markers = <Marker>[
+      if (pickup != null)
+        Marker(
+          point: pickup,
+          width: 140,
+          height: 80,
+          alignment: Alignment.topCenter,
+          child: _MapMarker(
+            label: 'Điểm đón',
+            value: trip.originText,
+            color: Colors.green.shade600,
+            icon: Icons.radio_button_checked,
           ),
         ),
+      if (destination != null)
+        Marker(
+          point: destination,
+          width: 140,
+          height: 80,
+          alignment: Alignment.topCenter,
+          child: _MapMarker(
+            label: 'Điểm trả',
+            value: trip.destText,
+            color: Colors.deepOrange.shade600,
+            icon: Icons.flag,
+            alignEnd: true,
+          ),
+        ),
+      if (driver != null)
+        Marker(
+          point: driver,
+          width: 60,
+          height: 60,
+          alignment: Alignment.center,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.blue.shade600,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.25),
+                  blurRadius: 8,
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.directions_car,
+              color: Colors.white,
+            ),
+          ),
+        ),
+    ];
+    final polylines = <Polyline>[
+      if (pickup != null && destination != null)
+        Polyline(
+          points: [pickup, destination],
+          strokeWidth: 4,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+    ];
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: SizedBox(
+        height: 260,
         child: Stack(
           children: [
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _RoutePainter(color: Colors.white.withOpacity(0.3)),
+            FlutterMap(
+              mapController: mapController,
+              options: MapOptions(
+                initialCenter: initialCenter,
+                initialZoom: 14,
+                initialCameraFit: initialCameraFit,
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.pinchZoom | InteractiveFlag.drag,
+                ),
+                keepAlive: true,
               ),
-            ),
-            Positioned(
-              top: 24,
-              left: 24,
-              child: _MapPoint(
-                label: 'Điểm đón',
-                value: trip.originText,
-                color: Colors.greenAccent,
-              ),
-            ),
-            Positioned(
-              bottom: 24,
-              right: 24,
-              child: _MapPoint(
-                label: 'Điểm trả',
-                value: trip.destText,
-                color: Colors.orangeAccent,
-                alignEnd: true,
-              ),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.uitgo.driver',
+                ),
+                if (polylines.isNotEmpty)
+                  PolylineLayer(
+                    polylines: polylines,
+                  ),
+                if (markers.isNotEmpty)
+                  MarkerLayer(
+                    markers: markers,
+                  ),
+              ],
             ),
             Positioned(
               bottom: 16,
               left: 16,
+              right: 16,
               child: Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.35),
-                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.black.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -362,14 +483,12 @@ class _MapPlaceholder extends StatelessWidget {
                     ),
                     Text(
                       distanceLabel,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                      ),
+                      style: const TextStyle(color: Colors.white70),
                     ),
                     if (location != null) ...[
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4),
                       Text(
-                        'Vị trí: ${location!.latitude.toStringAsFixed(4)}, ${location!.longitude.toStringAsFixed(4)}',
+                        'Tài xế: ${location!.latitude.toStringAsFixed(4)}, ${location!.longitude.toStringAsFixed(4)}',
                         style: const TextStyle(color: Colors.white70),
                       ),
                     ],
@@ -381,7 +500,7 @@ class _MapPlaceholder extends StatelessWidget {
               top: 16,
               right: 16,
               child: Chip(
-                backgroundColor: Colors.white.withOpacity(0.2),
+                backgroundColor: Colors.black.withOpacity(0.4),
                 label: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -407,6 +526,72 @@ class _MapPlaceholder extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  LatLng? _toLatLng(double? lat, double? lng) {
+    if (lat == null || lng == null) return null;
+    return LatLng(lat, lng);
+  }
+}
+
+class _MapMarker extends StatelessWidget {
+  const _MapMarker({
+    required this.label,
+    required this.value,
+    required this.color,
+    required this.icon,
+    this.alignEnd = false,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+  final IconData icon;
+  final bool alignEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.55),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment:
+            alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: 120,
+            child: Text(
+              value,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -647,95 +832,4 @@ class _TimelinePoint extends StatelessWidget {
       ],
     );
   }
-}
-
-class _MapPoint extends StatelessWidget {
-  const _MapPoint({
-    required this.label,
-    required this.value,
-    required this.color,
-    this.alignEnd = false,
-  });
-
-  final String label;
-  final String value;
-  final Color color;
-  final bool alignEnd;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 160,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.25),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.6)),
-      ),
-      child: Column(
-        crossAxisAlignment:
-            alignEnd ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RoutePainter extends CustomPainter {
-  const _RoutePainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round;
-    final path = Path()
-      ..moveTo(24, size.height - 24)
-      ..cubicTo(
-        size.width * 0.25,
-        size.height * 0.6,
-        size.width * 0.75,
-        size.height * 0.4,
-        size.width - 24,
-        24,
-      );
-    canvas.drawPath(path, paint);
-    final dashPaint = Paint()
-      ..color = Colors.white.withOpacity(0.4)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    const dashWidth = 6.0;
-    const dashSpace = 6.0;
-    for (final metric in path.computeMetrics()) {
-      double distance = 0;
-      while (distance < metric.length) {
-        final next = distance + dashWidth;
-        canvas.drawPath(metric.extractPath(distance, next), dashPaint);
-        distance = next + dashSpace;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
