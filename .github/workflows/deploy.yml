@@ -1,0 +1,154 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  backend-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        id: meta
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/uitgo-backend:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/uitgo-backend:latest
+
+  flutter-build:
+    runs-on: ubuntu-latest
+    needs: backend-image
+    strategy:
+      matrix:
+        app:
+          - name: rider
+            path: apps/rider_app
+          - name: driver
+            path: apps/driver_app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.app.path }}
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: ${{ matrix.app.path }}
+        run: flutter build apk --release --no-tree-shake-icons
+
+      - name: Build web bundle
+        working-directory: ${{ matrix.app.path }}
+        run: flutter build web --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app.name }}-apk
+          path: ${{ matrix.app.path }}/build/app/outputs/flutter-apk/*.apk
+
+      - name: Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app.name }}-web
+          path: ${{ matrix.app.path }}/build/web
+
+  flutter-ios:
+    runs-on: macos-14
+    needs: backend-image
+    strategy:
+      matrix:
+        app:
+          - name: rider
+            path: apps/rider_app
+          - name: driver
+            path: apps/driver_app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.app.path }}
+        run: flutter pub get
+
+      - name: Build IPA (no codesign)
+        working-directory: ${{ matrix.app.path }}
+        run: flutter build ipa --no-codesign
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app.name }}-ipa
+          path: ${{ matrix.app.path }}/build/ios/ipa/*.ipa
+
+  staging-deploy:
+    runs-on: ubuntu-latest
+    needs:
+      - backend-image
+      - flutter-build
+      - flutter-ios
+    permissions:
+      contents: read
+      packages: read
+    env:
+      REGISTRY_OWNER: ${{ github.repository_owner }}
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare env file
+        run: |
+          cp infra/staging/.env.staging.example infra/staging/.env.staging
+
+      - name: Validate staging compose stack
+        working-directory: infra/staging
+        run: |
+          docker compose pull
+          docker compose up -d
+          docker compose ps
+          docker compose logs api || true
+          docker compose down -v

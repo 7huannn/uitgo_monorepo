@@ -4,7 +4,12 @@ import '../../../core/network/dio_client.dart';
 import '../../home/models/home_models.dart';
 import '../models/wallet_transaction.dart';
 
-class WalletService {
+abstract class WalletGateway {
+  Future<WalletSummary> fetchSummary();
+  Future<WalletSummary> topUp({required int amount});
+}
+
+class WalletService implements WalletGateway {
   WalletService._internal();
   static final WalletService _instance = WalletService._internal();
   factory WalletService() => _instance;

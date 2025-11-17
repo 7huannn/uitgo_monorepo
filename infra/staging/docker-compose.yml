@@ -1,0 +1,51 @@
+x-backend-image: &backend-image ghcr.io/${REGISTRY_OWNER:-uitgo}/uitgo-backend:${IMAGE_TAG:-latest}
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-uitgo}
+      POSTGRES_USER: ${POSTGRES_USER:-uitgo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-uitgo}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-uitgo} -d ${POSTGRES_DB:-uitgo}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  migrate:
+    image: *backend-image
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.staging
+    command: ["/app/migrate"]
+
+  api:
+    image: *backend-image
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    env_file:
+      - .env.staging
+    ports:
+      - "8080:8080"
+
+  gateway:
+    image: nginx:1.25-alpine
+    depends_on:
+      api:
+        condition: service_started
+    volumes:
+      - ../../backend/gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "80:80"
+
+volumes:
+  db-data:

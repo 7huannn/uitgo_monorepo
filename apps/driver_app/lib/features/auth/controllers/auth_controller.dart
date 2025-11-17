@@ -4,7 +4,7 @@ import '../services/auth_service.dart';
 
 class AuthController extends ChangeNotifier {
   AuthController(this._auth);
-  final AuthService _auth;
+  final AuthGateway _auth;
 
   bool _initialised = false;
   bool _loggedIn = false;

@@ -2,7 +2,7 @@ SHELL := /bin/bash
 GO := GOROOT=/usr/local/go go
 GOFLAGS :=
 
-.PHONY: dev down run migrate test fmt tidy
+.PHONY: dev down run migrate test fmt tidy seed
 
 dev:
 	docker compose up --build
@@ -24,3 +24,6 @@ fmt:
 
 tidy:
 	$(GO) mod tidy
+
+seed:
+	$(GO) run ./cmd/seed

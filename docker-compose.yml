@@ -56,7 +56,7 @@ services:
       POSTGRES_DSN: postgres://uitgo:uitgo@user-db:5432/user_service?sslmode=disable
       JWT_SECRET: uitgo-dev-secret
       REFRESH_TOKEN_ENCRYPTION_KEY: ***REMOVED***
-      CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:*,http://127.0.0.1:*
+      CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:*,http://127.0.0.1:*,https://localhost:8080,https://127.0.0.1:8080,https://localhost:*,https://127.0.0.1:*
       DRIVER_SERVICE_URL: http://driver-service:8083
       INTERNAL_API_KEY: uitgo-internal-secret
     depends_on:
@@ -74,7 +74,7 @@ services:
       POSTGRES_DSN: postgres://uitgo:uitgo@trip-db:5432/trip_service?sslmode=disable
       JWT_SECRET: uitgo-dev-secret
       REFRESH_TOKEN_ENCRYPTION_KEY: ***REMOVED***
-      CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:*,http://127.0.0.1:*
+      CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:*,http://127.0.0.1:*,https://localhost:8080,https://127.0.0.1:8080,https://localhost:*,https://127.0.0.1:*
       DRIVER_SERVICE_URL: http://driver-service:8083
       INTERNAL_API_KEY: uitgo-internal-secret
     depends_on:
@@ -92,7 +92,7 @@ services:
       POSTGRES_DSN: postgres://uitgo:uitgo@driver-db:5432/driver_service?sslmode=disable
       JWT_SECRET: uitgo-dev-secret
       REFRESH_TOKEN_ENCRYPTION_KEY: ***REMOVED***
-      CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:*,http://127.0.0.1:*
+      CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:*,http://127.0.0.1:*,https://localhost:8080,https://127.0.0.1:8080,https://localhost:*,https://127.0.0.1:*
       TRIP_SERVICE_URL: http://trip-service:8082
       INTERNAL_API_KEY: uitgo-internal-secret
     depends_on:

@@ -99,6 +99,19 @@ open http://localhost:3000
 - WebSocket connections attach the JWT (Authorization header on mobile/desktop, `accessToken` query parameter on web builds) so backend authorization always passes.
 - Pass `--dart-define SENTRY_DSN=...` when running `flutter run` to enable Sentry in the mobile apps; errors automatically surface in the same project as the backend.
 
+## Testing & QA
+
+- **Backend**: run `cd backend && make test` to execute unit tests. Coverage is enforced at 80%+ inside CI via `go test ./... -covermode=atomic`. Linting (`go vet` + `golangci-lint`) also runs in GitHub Actions.
+- **Flutter apps**: from each app directory run `flutter analyze` and `flutter test`. The CI workflow (`.github/workflows/fe_ci.yml`) runs these commands for both rider and driver apps on every push/PR.
+- **Seed demo data**: once migrations are applied you can run `cd backend && make seed` to insert riders, drivers, wallets, and sample trips. Credentials are printed in the terminal.
+
+## Continuous Delivery
+
+- `.github/workflows/be_ci.yml` runs Go unit tests, vetting, linting, and enforces ≥80 % coverage before merges.
+- `.github/workflows/fe_ci.yml` keeps both Flutter apps green by running `flutter analyze` and `flutter test`.
+- `.github/workflows/deploy.yml` (triggered on pushes to `main`) builds/pushes the API image to `ghcr.io/<org>/uitgo-backend:<sha>`, produces APK/IPA/Web artifacts for rider + driver apps, and validates the staging stack defined in `infra/staging`.
+- The staging stack uses `infra/staging/docker-compose.yml`. Copy `.env.staging.example` to `.env.staging`, adjust secrets, then run `docker compose up -d` from that directory to spin up Postgres, run migrations, and boot the API behind the bundled Nginx gateway. The GitHub Actions deployment job runs the same Compose file with the freshly built image tag.
+
 ## Logging to Loki/ELK
 
 Containers write JSON logs to stdout so you can ship them with your favourite collector. Example Promtail configuration:

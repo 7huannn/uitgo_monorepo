@@ -84,8 +84,14 @@ func Load() (*Config, error) {
 
 	rawOrigins := strings.TrimSpace(os.Getenv("CORS_ALLOWED_ORIGINS"))
 	var origins []string
+	defaultOrigins := []string{
+		"http://localhost:*",
+		"http://127.0.0.1:*",
+		"https://localhost:*",
+		"https://127.0.0.1:*",
+	}
 	if rawOrigins == "" {
-		origins = []string{"http://localhost:*", "http://127.0.0.1:*"}
+		origins = append(origins, defaultOrigins...)
 	} else {
 		for _, value := range strings.Split(rawOrigins, ",") {
 			if trimmed := strings.TrimSpace(value); trimmed != "" {
@@ -93,7 +99,17 @@ func Load() (*Config, error) {
 			}
 		}
 		if len(origins) == 0 {
-			origins = []string{"http://localhost:*", "http://127.0.0.1:*"}
+			origins = append(origins, defaultOrigins...)
+		}
+	}
+
+	webOrigins := strings.TrimSpace(os.Getenv("WEB_APP_ORIGINS"))
+	if webOrigins == "" {
+		webOrigins = strings.TrimSpace(os.Getenv("WEB_APP_ORIGIN"))
+	}
+	if webOrigins != "" {
+		for _, value := range strings.Split(webOrigins, ",") {
+			origins = appendOriginIfMissing(origins, value)
 		}
 	}
 
@@ -143,4 +159,17 @@ func parseBoolEnv(value string, defaultValue bool) bool {
 	default:
 		return defaultValue
 	}
+}
+
+func appendOriginIfMissing(origins []string, candidate string) []string {
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return origins
+	}
+	for _, existing := range origins {
+		if strings.EqualFold(existing, candidate) {
+			return origins
+		}
+	}
+	return append(origins, candidate)
 }

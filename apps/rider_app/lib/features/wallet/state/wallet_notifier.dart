@@ -4,10 +4,10 @@ import '../../home/models/home_models.dart';
 import '../services/wallet_service.dart';
 
 class WalletNotifier extends ChangeNotifier {
-  WalletNotifier({WalletService? service})
+  WalletNotifier({WalletGateway? service})
       : _service = service ?? WalletService();
 
-  final WalletService _service;
+  final WalletGateway _service;
 
   WalletSummary? _summary;
   bool _refreshing = false;

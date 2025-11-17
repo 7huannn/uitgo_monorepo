@@ -3,11 +3,11 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../../core/config/config.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/network/websocket_connector.dart';
 import '../../auth/services/auth_service.dart';
 import '../models/trip_models.dart';
 
@@ -199,9 +199,7 @@ class TripService {
       if (!kIsWeb) 'Authorization': 'Bearer $token',
     };
 
-    final channel = kIsWeb
-        ? WebSocketChannel.connect(uri)
-        : IOWebSocketChannel.connect(uri, headers: headers);
+    final channel = connectWebSocket(uri, headers: headers);
     _channel = channel;
 
     return channel.stream.map((event) {

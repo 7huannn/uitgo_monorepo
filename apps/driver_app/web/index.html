@@ -1,38 +1,31 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
-  <base href="$FLUTTER_BASE_HREF">
-
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
-
-  <!-- iOS meta tags & icons -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="UIT-Go Driver giúp tài xế UIT nhận, điều khiển và theo dõi chuyến trên web.">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="color-scheme" content="dark light">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://tile.openstreetmap.org https://*.uitgo.dev https://*.uitgo.app https://*.googleusercontent.com https://*.gstatic.com https://localhost:* https://127.0.0.1:* https://10.0.2.2:* http://localhost:* http://127.0.0.1:* http://10.0.2.2:*; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://www.gstatic.com https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; connect-src 'self' blob: data: https://tile.openstreetmap.org https://photon.komoot.io https://router.project-osrm.org https://*.uitgo.dev https://*.uitgo.app https://*.sentry.io https://*.ingest.sentry.io https://*.googleapis.com https://www.googleapis.com https://firebaseinstallations.googleapis.com https://fcmregistrations.googleapis.com https://www.gstatic.com https://www.googleapis.com https://fonts.gstatic.com https://localhost:* https://127.0.0.1:* https://10.0.2.2:* http://localhost:* http://127.0.0.1:* http://10.0.2.2:* ws://localhost:* ws://127.0.0.1:* ws://10.0.2.2:* wss://localhost:* wss://127.0.0.1:* wss://10.0.2.2:* wss://*.uitgo.dev wss://*.uitgo.app; worker-src 'self' blob:; media-src 'self' blob: data:;">
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="UIT-Go Driver">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="driver_app">
+  <meta name="apple-mobile-web-app-title" content="UIT-Go Driver">
+  <base href="$FLUTTER_BASE_HREF">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
-
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
-
-  <title>driver_app</title>
+  <link rel="icon" type="image/png" href="favicon.png">
   <link rel="manifest" href="manifest.json">
+  <title>UIT-Go Driver</title>
 </head>
 <body>
+  <noscript>
+    <p style="font-family: sans-serif; padding: 16px;">
+      UIT-Go Driver cần bật JavaScript để hoạt động. Vui lòng bật JavaScript rồi tải lại trang.
+    </p>
+  </noscript>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

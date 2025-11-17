@@ -11,6 +11,11 @@ import 'firebase_options.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  if (kIsWeb) {
+    runApp(const DriverApp());
+    return;
+  }
+
   if (sentryDsn.isEmpty) {
     await _launchApp();
     return;
