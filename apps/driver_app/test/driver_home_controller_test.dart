@@ -1,6 +1,7 @@
 import 'package:driver_app/features/driver/models/driver_models.dart';
 import 'package:driver_app/features/driver/services/driver_service.dart';
 import 'package:driver_app/features/home/controllers/driver_home_controller.dart';
+import 'package:driver_app/features/profile/models/profile_models.dart';
 import 'package:driver_app/features/trips/models/trip_models.dart';
 import 'package:driver_app/features/trips/services/trip_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -81,6 +82,27 @@ class _FakeDriverService implements DriverService {
     toggles += 1;
     _profile = profile.copyWith(availability: status);
     return _profile;
+  }
+
+  @override
+  Future<DriverProfile?> updateProfile(
+    DriverProfileUpdateRequest request,
+  ) async {
+    _profile = _profile.copyWith(
+      fullName: request.fullName,
+      phone: request.phone,
+      licenseNumber: request.licensePlate,
+      vehicleType: request.vehicleType,
+    );
+    return _profile;
+  }
+
+  @override
+  Future<bool> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    return true;
   }
 }
 

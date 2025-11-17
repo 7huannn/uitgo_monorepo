@@ -6,6 +6,8 @@ import '../../driver/models/driver_models.dart';
 import '../../trips/models/trip_models.dart';
 import '../../trip_detail/pages/trip_detail_page.dart';
 import '../../trips/pages/trip_history_page.dart';
+import '../../profile/pages/profile_page.dart';
+import '../../wallet/pages/wallet_overview_page.dart';
 import '../controllers/driver_home_controller.dart';
 import '../widgets/driver_status_card.dart';
 import '../widgets/trip_card.dart';
@@ -84,6 +86,20 @@ class _HomePageState extends State<HomePage> {
       appBar: AppBar(
         title: const Text('UIT-Go Driver'),
         actions: [
+          IconButton(
+            tooltip: 'Hồ sơ',
+            onPressed: () {
+              Navigator.pushNamed(context, DriverProfilePage.routeName);
+            },
+            icon: const Icon(Icons.account_circle_outlined),
+          ),
+          IconButton(
+            tooltip: 'Ví của tôi',
+            onPressed: () {
+              Navigator.pushNamed(context, WalletOverviewPage.routeName);
+            },
+            icon: const Icon(Icons.account_balance_wallet_outlined),
+          ),
           IconButton(
             tooltip: 'Đăng xuất',
             onPressed: auth.loggedIn

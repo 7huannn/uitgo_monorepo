@@ -42,6 +42,8 @@ class DriverProfile {
     required this.rating,
     required this.availability,
     this.vehicle,
+    this.avatarUrl,
+    this.vehicleType,
   });
 
   final String id;
@@ -52,19 +54,29 @@ class DriverProfile {
   final double rating;
   final DriverAvailability availability;
   final DriverVehicle? vehicle;
+  final String? avatarUrl;
+  final String? vehicleType;
 
   DriverProfile copyWith({
     DriverAvailability? availability,
+    String? fullName,
+    String? phone,
+    String? licenseNumber,
+    DriverVehicle? vehicle,
+    String? avatarUrl,
+    String? vehicleType,
   }) {
     return DriverProfile(
       id: id,
       userId: userId,
-      fullName: fullName,
-      phone: phone,
-      licenseNumber: licenseNumber,
+      fullName: fullName ?? this.fullName,
+      phone: phone ?? this.phone,
+      licenseNumber: licenseNumber ?? this.licenseNumber,
       rating: rating,
       availability: availability ?? this.availability,
-      vehicle: vehicle,
+      vehicle: vehicle ?? this.vehicle,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
+      vehicleType: vehicleType ?? this.vehicleType,
     );
   }
 
@@ -72,7 +84,8 @@ class DriverProfile {
     final statusPayload = json['status'];
     final availability = () {
       if (statusPayload is Map<String, dynamic>) {
-        return driverAvailabilityFromString(statusPayload['availability'] as String?);
+        return driverAvailabilityFromString(
+            statusPayload['availability'] as String?);
       }
       return driverAvailabilityFromString(statusPayload as String?);
     }();
@@ -88,6 +101,8 @@ class DriverProfile {
       vehicle: json['vehicle'] is Map<String, dynamic>
           ? DriverVehicle.fromJson(json['vehicle'] as Map<String, dynamic>)
           : null,
+      avatarUrl: json['avatarUrl'] as String?,
+      vehicleType: json['vehicleType'] as String?,
     );
   }
 }
