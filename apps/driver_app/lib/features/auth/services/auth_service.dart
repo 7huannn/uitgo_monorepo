@@ -40,7 +40,24 @@ class UserProfile {
   }
 }
 
-class AuthService implements AuthTokenProvider {
+abstract class AuthGateway {
+  Future<bool> isLoggedIn();
+  Future<bool> login({required String email, required String password});
+  Future<bool> registerDriver({
+    required String name,
+    required String email,
+    required String phone,
+    required String password,
+    required String licenseNumber,
+    String? vehicleMake,
+    String? vehicleModel,
+    String? vehicleColor,
+    String? plateNumber,
+  });
+  Future<void> logout();
+}
+
+class AuthService implements AuthTokenProvider, AuthGateway {
   AuthService._internal() {
     GlobalTokenManager.instance ??= this;
   }

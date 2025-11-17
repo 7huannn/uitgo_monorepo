@@ -43,7 +43,10 @@ make run         # starts the HTTP server on $PORT (default 8080)
 make test   # run Go unit tests
 make fmt    # gofmt all packages
 make tidy   # tidy go.mod / go.sum
+make seed   # seed demo riders, drivers, wallets, and trips
 ```
+
+The seed command connects to the configured `POSTGRES_DSN`, creates two demo riders, one driver (with vehicle + availability), tops up wallets, and inserts trips in multiple statuses so the Flutter apps have realistic data out of the box.
 
 ## API Quickstart
 
@@ -240,3 +243,8 @@ socket.stream.listen((event) {
 ```
 
 Drivers can send updates (e.g. using `web_socket_channel`) by writing JSON payloads through `socket.sink.add`.
+
+### CORS for Flutter web builds
+
+- `CORS_ALLOWED_ORIGINS` keeps working as before, but the default list now includes both HTTP and HTTPS localhost wildcards so `flutter run -d chrome` works out of the box.
+- To allow deployed Flutter web builds, set `WEB_APP_ORIGINS` (comma-separated) or `WEB_APP_ORIGIN` in the environment to the exact origins you deploy (for example `https://rider.uitgo.dev,https://driver.uitgo.dev`). The API automatically merges these with the configured `CORS_ALLOWED_ORIGINS`.

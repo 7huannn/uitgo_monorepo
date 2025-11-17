@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
-import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../../core/config/config.dart';
+import '../../../core/network/websocket_connector.dart';
 import '../../auth/services/auth_service.dart';
 import '../models/trip_models.dart';
 
@@ -46,17 +46,16 @@ class TripSocketService {
       throw const AuthException('Vui lòng đăng nhập lại.');
     }
 
+    final sendTokenInQuery = kIsWeb;
     final uri = _buildUri(
       tripId,
       userId,
-      tokenForQuery: kIsWeb ? token : null,
+      tokenForQuery: sendTokenInQuery ? token : null,
     );
     final headers = <String, dynamic>{
-      if (!kIsWeb) 'Authorization': 'Bearer $token',
+      if (!sendTokenInQuery) 'Authorization': 'Bearer $token',
     };
-    _channel = kIsWeb
-        ? WebSocketChannel.connect(uri)
-        : IOWebSocketChannel.connect(uri, headers: headers);
+    _channel = connectWebSocket(uri, headers: headers);
     _channelSub = _channel!.stream.listen(_handleInbound);
     _startLocationTicker();
   }

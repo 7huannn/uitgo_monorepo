@@ -29,6 +29,7 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
   final TripService _tripService = TripService();
   final MapController _mapController = MapController();
   final RoutingService _routingService = RoutingService();
+  late final TileProvider _tileProvider;
 
   StreamSubscription<TripRealtimeEvent>? _subscription;
   TripDetail? _trip;
@@ -52,6 +53,7 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
   @override
   void initState() {
     super.initState();
+    _tileProvider = CancellableNetworkTileProvider();
     _trip = widget.initialTrip;
     _status = _trip?.status;
     _latestLocation = _trip?.lastLocation;
@@ -305,7 +307,7 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.uitgo.rider',
-              tileProvider: CancellableNetworkTileProvider(),
+              tileProvider: _tileProvider,
             ),
             if (polylines.isNotEmpty)
               PolylineLayer(

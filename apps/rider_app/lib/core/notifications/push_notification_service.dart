@@ -35,7 +35,7 @@ class PushNotificationService {
 
   static final PushNotificationService instance = PushNotificationService._();
 
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  FirebaseMessaging? _messaging;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
   bool _configured = false;
@@ -63,6 +63,8 @@ class PushNotificationService {
       uitgoRiderFirebaseMessagingBackgroundHandler,
     );
 
+    _messaging ??= FirebaseMessaging.instance;
+
     const initSettings = InitializationSettings(
       android: AndroidInitializationSettings('@mipmap/ic_launcher'),
       iOS: DarwinInitializationSettings(),
@@ -78,7 +80,8 @@ class PushNotificationService {
     );
     await _createNotificationChannel();
 
-    final settings = await _messaging.requestPermission(
+    final messaging = _messaging!;
+    final settings = await messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
@@ -87,7 +90,7 @@ class PushNotificationService {
       debugPrint('Notification permission denied by the user.');
     }
 
-    await _messaging.setForegroundNotificationPresentationOptions(
+    await messaging.setForegroundNotificationPresentationOptions(
       alert: true,
       badge: true,
       sound: true,
@@ -96,16 +99,16 @@ class PushNotificationService {
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
     FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageInteraction);
 
-    final initialMessage = await _messaging.getInitialMessage();
+    final initialMessage = await messaging.getInitialMessage();
     if (initialMessage != null) {
       _handleMessageInteraction(initialMessage);
     }
 
-    final token = await _messaging.getToken();
+    final token = await messaging.getToken();
     if (token != null) {
       await _syncDeviceToken(token);
     }
-    _messaging.onTokenRefresh.listen(_syncDeviceToken);
+    messaging.onTokenRefresh.listen(_syncDeviceToken);
 
     _configured = true;
   }

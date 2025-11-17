@@ -1,12 +1,12 @@
 {
-  "name": "UIT-Go Driver",
+  "name": "UIT-Go Rider",
   "short_name": "UIT-Go",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
-  "description": "Tiếp nhận và quản lý chuyến xe UIT-Go ngay trên trình duyệt.",
+  "description": "Đặt chuyến UIT-Go và theo dõi tài xế theo thời gian thực.",
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
   "icons": [

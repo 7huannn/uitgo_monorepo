@@ -32,10 +32,17 @@ class DriverPushNotificationService {
   static final DriverPushNotificationService instance =
       DriverPushNotificationService._();
   static bool get hasValidFirebaseConfig {
-    final options = DefaultFirebaseOptions.currentPlatform;
-    bool invalid(String value) =>
-        value.isEmpty || value.contains('REPLACE_WITH');
-    return !(invalid(options.appId) || invalid(options.apiKey));
+    if (kIsWeb) {
+      return false;
+    }
+    try {
+      final options = DefaultFirebaseOptions.currentPlatform;
+      bool invalid(String value) =>
+          value.isEmpty || value.contains('REPLACE_WITH');
+      return !(invalid(options.appId) || invalid(options.apiKey));
+    } catch (_) {
+      return false;
+    }
   }
 
   FirebaseMessaging? _messaging;
