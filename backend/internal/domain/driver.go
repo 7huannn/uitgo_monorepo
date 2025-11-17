@@ -88,6 +88,7 @@ type DriverRepository interface {
 	Update(ctx context.Context, driver *Driver) error
 	FindByID(ctx context.Context, id string) (*Driver, error)
 	FindByUserID(ctx context.Context, userID string) (*Driver, error)
+	FindAvailable(ctx context.Context) (*Driver, error)
 	SaveVehicle(ctx context.Context, vehicle *Vehicle) (*Vehicle, error)
 	FindVehicle(ctx context.Context, driverID string) (*Vehicle, error)
 	SetAvailability(ctx context.Context, driverID string, availability DriverAvailability) (*DriverStatus, error)

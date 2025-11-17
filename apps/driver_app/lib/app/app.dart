@@ -9,6 +9,8 @@ import '../features/driver/services/driver_service.dart';
 import '../features/home/controllers/driver_home_controller.dart';
 import '../features/home/pages/home_page.dart';
 import '../features/trips/services/trip_service.dart';
+import '../features/trip_detail/pages/trip_detail_page.dart';
+import '../features/trips/pages/trip_history_page.dart';
 import 'theme.dart';
 
 final GlobalKey<NavigatorState> driverNavigatorKey =
@@ -42,10 +44,54 @@ class DriverApp extends StatelessWidget {
           theme: buildLightTheme(),
           darkTheme: buildDarkTheme(),
           themeMode: themeController.themeMode,
-          home: const _AuthGate(),
+          initialRoute: '/',
+          onGenerateRoute: _onGenerateRoute,
         ),
       ),
     );
+  }
+}
+
+Route<dynamic> _onGenerateRoute(RouteSettings settings) {
+  switch (settings.name) {
+    case '/':
+      return MaterialPageRoute(
+        builder: (_) => const _AuthGate(),
+        settings: settings,
+      );
+    case HomePage.routeName:
+      return MaterialPageRoute(
+        builder: (_) => const HomePage(),
+        settings: settings,
+      );
+    case TripDetailPage.routeName:
+      final args = settings.arguments;
+      if (args is TripDetailPageArgs) {
+        return MaterialPageRoute(
+          builder: (_) => TripDetailPage(tripId: args.tripId),
+          settings: settings,
+        );
+      }
+      if (args is String && args.isNotEmpty) {
+        return MaterialPageRoute(
+          builder: (_) => TripDetailPage(tripId: args),
+          settings: settings,
+        );
+      }
+      return MaterialPageRoute(
+        builder: (_) => const _MissingTripIdPage(),
+        settings: settings,
+      );
+    case TripHistoryPage.routeName:
+      return MaterialPageRoute(
+        builder: (_) => const TripHistoryPage(),
+        settings: settings,
+      );
+    default:
+      return MaterialPageRoute(
+        builder: (_) => const _AuthGate(),
+        settings: settings,
+      );
   }
 }
 
@@ -61,5 +107,18 @@ class _AuthGate extends StatelessWidget {
       );
     }
     return auth.loggedIn ? const HomePage() : const LoginPage();
+  }
+}
+
+class _MissingTripIdPage extends StatelessWidget {
+  const _MissingTripIdPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Text('Không tìm thấy mã chuyến để hiển thị.'),
+      ),
+    );
   }
 }

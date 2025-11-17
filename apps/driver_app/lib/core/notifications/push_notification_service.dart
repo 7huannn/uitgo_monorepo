@@ -192,10 +192,9 @@ class DriverPushNotificationService {
       return;
     }
     Future.microtask(() {
-      navigator.push(
-        MaterialPageRoute(
-          builder: (_) => TripDetailPage(tripId: tripId),
-        ),
+      navigator.pushNamed(
+        TripDetailPage.routeName,
+        arguments: TripDetailPageArgs(tripId: tripId),
       );
     });
   }

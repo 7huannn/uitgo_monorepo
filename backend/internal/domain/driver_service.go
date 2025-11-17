@@ -159,6 +159,31 @@ func (s *DriverService) UpdateAvailability(ctx context.Context, driverID string,
 	return s.drivers.SetAvailability(ctx, driverID, availability)
 }
 
+// FindAvailableDriver returns the next online driver without an active assignment.
+func (s *DriverService) FindAvailableDriver(ctx context.Context) (*Driver, error) {
+	driver, err := s.drivers.FindAvailable(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if driver == nil {
+		return nil, ErrNoDriversAvailable
+	}
+	enrichDriver(ctx, s.drivers, driver)
+	return driver, nil
+}
+
+// AssignNextAvailableDriver finds an available driver and assigns the trip.
+func (s *DriverService) AssignNextAvailableDriver(ctx context.Context, tripID string) (*Driver, error) {
+	driver, err := s.FindAvailableDriver(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.AssignTrip(ctx, tripID, driver.ID); err != nil {
+		return nil, err
+	}
+	return driver, nil
+}
+
 // AssignTrip links a driver to a trip and creates/updates assignment row.
 func (s *DriverService) AssignTrip(ctx context.Context, tripID, driverID string) (*TripAssignment, error) {
 	if tripID == "" || driverID == "" {
