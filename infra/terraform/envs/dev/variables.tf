@@ -42,3 +42,15 @@ variable "availability_zones" {
   type    = list(string)
   default = ["ap-southeast-1a", "ap-southeast-1b"]
 }
+
+variable "driver_service_ami" {
+  description = "AMI ID for driver-service instances"
+  type        = string
+  default     = "ami-xxxxxxxx"
+}
+
+variable "trip_service_ami" {
+  description = "AMI ID for trip-service instances"
+  type        = string
+  default     = "ami-xxxxxxxx"
+}

@@ -51,14 +51,15 @@ type DriverStatus struct {
 
 // DriverLocation stores a location ping for the driver.
 type DriverLocation struct {
-	ID         string    `json:"id"`
-	DriverID   string    `json:"driverId"`
-	Latitude   float64   `json:"lat"`
-	Longitude  float64   `json:"lng"`
-	Accuracy   *float64  `json:"accuracy,omitempty"`
-	Heading    *float64  `json:"heading,omitempty"`
-	Speed      *float64  `json:"speed,omitempty"`
-	RecordedAt time.Time `json:"recordedAt"`
+	ID             string    `json:"id"`
+	DriverID       string    `json:"driverId"`
+	Latitude       float64   `json:"lat"`
+	Longitude      float64   `json:"lng"`
+	Accuracy       *float64  `json:"accuracy,omitempty"`
+	Heading        *float64  `json:"heading,omitempty"`
+	Speed          *float64  `json:"speed,omitempty"`
+	RecordedAt     time.Time `json:"recordedAt"`
+	DistanceMeters *float64  `json:"distanceMeters,omitempty"`
 }
 
 // TripAssignmentStatus enumerates assignment lifecycle states.
@@ -95,6 +96,13 @@ type DriverRepository interface {
 	GetAvailability(ctx context.Context, driverID string) (*DriverStatus, error)
 	RecordLocation(ctx context.Context, driverID string, location *DriverLocation) error
 	LatestLocation(ctx context.Context, driverID string) (*DriverLocation, error)
+}
+
+// DriverLocationIndex stores and queries geospatial coordinates.
+type DriverLocationIndex interface {
+	Upsert(ctx context.Context, driverID string, location *DriverLocation) error
+	Remove(ctx context.Context, driverID string) error
+	Nearby(ctx context.Context, lat, lng, radiusMeters float64, limit int) ([]*DriverLocation, error)
 }
 
 // TripAssignmentRepository handles driver-trip links.

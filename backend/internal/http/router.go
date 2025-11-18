@@ -61,7 +61,7 @@ func NewServer(cfg *config.Config, db *gorm.DB) (*Server, error) {
 	notificationSvc := notification.NewService(notificationRepo, deviceTokenRepo, pushSender)
 
 	tripService := domain.NewTripService(tripRepo, walletService, notificationSvc)
-	driverService := domain.NewDriverService(driverRepo, assignmentRepo, tripRepo, notificationSvc)
+	driverService := domain.NewDriverService(driverRepo, assignmentRepo, tripRepo, notificationSvc, nil)
 	hubManager := handlers.NewHubManager(tripService, driverRepo)
 	userRepo := domain.NewUserRepository(db)
 	refreshRepo := domain.NewRefreshTokenRepository(db)
@@ -89,7 +89,7 @@ func NewServer(cfg *config.Config, db *gorm.DB) (*Server, error) {
 	router.PATCH("/users/me", authHandler.UpdateMe)
 	router.POST("/v1/drivers/register", authHandler.RegisterDriver)
 	handlers.RegisterDriverRoutes(router, driverService)
-	handlers.RegisterTripRoutes(router, tripService, driverService, hubManager, tripLimiter.Middleware("trip_create"))
+	handlers.RegisterTripRoutes(router, tripService, driverService, hubManager, nil, tripLimiter.Middleware("trip_create"))
 	handlers.RegisterNotificationRoutes(router, notificationRepo, notificationSvc)
 	handlers.RegisterWalletRoutes(router, walletService)
 	handlers.RegisterHomeRoutes(router, homeService)

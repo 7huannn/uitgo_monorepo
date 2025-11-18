@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"uitgo/backend/internal/domain"
+	"uitgo/backend/internal/matching"
 )
 
 // TripHandler wires HTTP endpoints for trips.
@@ -17,14 +18,16 @@ type TripHandler struct {
 	service       *domain.TripService
 	driverService *domain.DriverService
 	hubs          *HubManager
+	dispatcher    matching.TripDispatcher
 }
 
 // RegisterTripRoutes registers trip related routes under /v1.
-func RegisterTripRoutes(router gin.IRouter, service *domain.TripService, driverService *domain.DriverService, hubs *HubManager, createTripMiddlewares ...gin.HandlerFunc) {
+func RegisterTripRoutes(router gin.IRouter, service *domain.TripService, driverService *domain.DriverService, hubs *HubManager, dispatcher matching.TripDispatcher, createTripMiddlewares ...gin.HandlerFunc) {
 	handler := &TripHandler{
 		service:       service,
 		driverService: driverService,
 		hubs:          hubs,
+		dispatcher:    dispatcher,
 	}
 
 	v1 := router.Group("/v1")
@@ -182,7 +185,23 @@ func (h *TripHandler) createTrip(c *gin.Context) {
 		return
 	}
 
-	if h.driverService != nil {
+	scheduled := false
+	if h.dispatcher != nil {
+		event := &matching.TripEvent{
+			TripID:     trip.ID,
+			RiderID:    trip.RiderID,
+			ServiceID:  trip.ServiceID,
+			OriginText: trip.OriginText,
+			DestText:   trip.DestText,
+			Requested:  trip.CreatedAt,
+		}
+		if err := h.dispatcher.Publish(c.Request.Context(), event); err != nil {
+			log.Printf("dispatch trip %s failed: %v", trip.ID, err)
+		} else {
+			scheduled = true
+		}
+	}
+	if !scheduled && h.driverService != nil {
 		if _, err := h.driverService.AssignNextAvailableDriver(c.Request.Context(), trip.ID); err != nil {
 			if !errors.Is(err, domain.ErrNoDriversAvailable) {
 				log.Printf("auto-assign driver for trip %s failed: %v", trip.ID, err)

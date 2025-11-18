@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,14 +16,18 @@ import (
 	"uitgo/backend/internal/domain"
 	"uitgo/backend/internal/http/handlers"
 	"uitgo/backend/internal/http/middleware"
+	"uitgo/backend/internal/location"
+	"uitgo/backend/internal/matching"
 	"uitgo/backend/internal/notification"
 	"uitgo/backend/internal/observability"
 )
 
 // Server hosts the driver-service HTTP API.
 type Server struct {
-	engine *gin.Engine
-	cfg    *config.Config
+	engine      *gin.Engine
+	cfg         *config.Config
+	queue       *matching.RedisQueue
+	queueCancel context.CancelFunc
 }
 
 // New builds the server with driver/profile routes and internal hooks.
@@ -54,27 +59,56 @@ func New(cfg *config.Config, db *gorm.DB, tripSync domain.TripSyncRepository) (*
 		log.Printf("warn: unable to initialize FCM: %v", err)
 	}
 	notificationSvc := notification.NewService(notificationRepo, deviceTokenRepo, pushSender)
-	driverService := domain.NewDriverService(driverRepo, assignmentRepo, tripSync, notificationSvc)
+	locator, err := location.NewGeoIndex(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB, "driver")
+	if err != nil {
+		return nil, fmt.Errorf("init redis geo index: %w", err)
+	}
+	driverService := domain.NewDriverService(driverRepo, assignmentRepo, tripSync, notificationSvc, locator)
+
+	var matchQueue *matching.RedisQueue
+	if cfg.MatchQueueAddr != "" {
+		queue, err := matching.NewRedisQueue(cfg.MatchQueueAddr, cfg.RedisPassword, cfg.MatchQueueDB, cfg.MatchQueueName)
+		if err != nil {
+			log.Printf("warn: init trip queue failed: %v", err)
+		} else {
+			matchQueue = queue
+		}
+	}
 
 	handlers.RegisterDriverRoutes(router, driverService)
 
 	tripHandler := NewDriverTripHandler(driverService, cfg.TripServiceURL, cfg.InternalAPIKey)
 	tripHandler.Register(router.Group("/v1"))
 
-	registerInternalRoutes(router, cfg, driverRepo, driverService)
+	registerInternalRoutes(router, cfg, driverService)
+
+	var cancel context.CancelFunc
+	if matchQueue != nil {
+		ctx, c := context.WithCancel(context.Background())
+		cancel = c
+		go consumeTripQueue(ctx, matchQueue, driverService)
+	}
 
 	metrics.Expose(router)
 
-	return &Server{engine: router, cfg: cfg}, nil
+	return &Server{engine: router, cfg: cfg, queue: matchQueue, queueCancel: cancel}, nil
 }
 
 // Run starts the HTTP listener.
 func (s *Server) Run() error {
 	addr := fmt.Sprintf(":%s", s.cfg.Port)
+	defer func() {
+		if s.queueCancel != nil {
+			s.queueCancel()
+		}
+		if s.queue != nil {
+			_ = s.queue.Close()
+		}
+	}()
 	return s.engine.Run(addr)
 }
 
-func registerInternalRoutes(router gin.IRouter, cfg *config.Config, drivers domain.DriverRepository, service *domain.DriverService) {
+func registerInternalRoutes(router gin.IRouter, cfg *config.Config, service *domain.DriverService) {
 	group := router.Group("/internal")
 	group.Use(middleware.InternalOnly(cfg.InternalAPIKey))
 
@@ -151,10 +185,31 @@ func registerInternalRoutes(router gin.IRouter, cfg *config.Config, drivers doma
 			Speed:      req.Speed,
 			RecordedAt: timestamp,
 		}
-		if err := drivers.RecordLocation(c.Request.Context(), req.DriverID, location); err != nil {
+		if err := service.RecordLocation(c.Request.Context(), req.DriverID, location); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		c.Status(http.StatusAccepted)
 	})
+}
+
+func consumeTripQueue(ctx context.Context, queue matching.TripConsumer, driverService *domain.DriverService) {
+	if queue == nil || driverService == nil {
+		return
+	}
+	log.Println("trip queue consumer started")
+	if err := queue.Consume(ctx, func(ctx context.Context, event *matching.TripEvent) error {
+		if event == nil || event.TripID == "" {
+			return nil
+		}
+		_, err := driverService.AssignNextAvailableDriver(ctx, event.TripID)
+		if err != nil && !errors.Is(err, domain.ErrNoDriversAvailable) {
+			return err
+		}
+		return nil
+	}); err != nil && !errors.Is(err, context.Canceled) {
+		log.Printf("trip queue consumer stopped: %v", err)
+	} else {
+		log.Println("trip queue consumer stopped")
+	}
 }

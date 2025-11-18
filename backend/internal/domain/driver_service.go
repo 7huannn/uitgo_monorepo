@@ -32,15 +32,17 @@ type DriverService struct {
 	assignments TripAssignmentRepository
 	trips       TripSyncRepository
 	notifier    TripEventNotifier
+	locator     DriverLocationIndex
 }
 
 // NewDriverService wires repositories for driver operations.
-func NewDriverService(drivers DriverRepository, assignments TripAssignmentRepository, trips TripSyncRepository, notifier TripEventNotifier) *DriverService {
+func NewDriverService(drivers DriverRepository, assignments TripAssignmentRepository, trips TripSyncRepository, notifier TripEventNotifier, locator DriverLocationIndex) *DriverService {
 	return &DriverService{
 		drivers:     drivers,
 		assignments: assignments,
 		trips:       trips,
 		notifier:    notifier,
+		locator:     locator,
 	}
 }
 
@@ -156,7 +158,35 @@ func (s *DriverService) UpdateAvailability(ctx context.Context, driverID string,
 	if _, err := s.drivers.FindByID(ctx, driverID); err != nil {
 		return nil, err
 	}
-	return s.drivers.SetAvailability(ctx, driverID, availability)
+	status, err := s.drivers.SetAvailability(ctx, driverID, availability)
+	if err != nil {
+		return nil, err
+	}
+	if s.locator != nil && availability == DriverOffline {
+		if err := s.locator.Remove(ctx, driverID); err != nil {
+			return nil, err
+		}
+	}
+	return status, nil
+}
+
+// RecordLocation saves the driver's coordinates to persistent + geospatial stores.
+func (s *DriverService) RecordLocation(ctx context.Context, driverID string, location *DriverLocation) error {
+	if driverID == "" {
+		return errors.New("driver id required")
+	}
+	if location == nil {
+		return errors.New("location required")
+	}
+	if err := s.drivers.RecordLocation(ctx, driverID, location); err != nil {
+		return err
+	}
+	if s.locator != nil {
+		if err := s.locator.Upsert(ctx, driverID, location); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // FindAvailableDriver returns the next online driver without an active assignment.
@@ -223,6 +253,49 @@ func (s *DriverService) AssignTrip(ctx context.Context, tripID, driverID string)
 		}
 	}
 	return assignment, nil
+}
+
+// SearchNearbyDrivers finds online drivers near the provided coordinate.
+func (s *DriverService) SearchNearbyDrivers(ctx context.Context, lat, lng, radiusMeters float64, limit int) ([]*Driver, error) {
+	if s.locator == nil {
+		return nil, errors.New("driver locator not configured")
+	}
+	locations, err := s.locator.Nearby(ctx, lat, lng, radiusMeters, limit)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]*Driver, 0, len(locations))
+	for _, loc := range locations {
+		if loc == nil || loc.DriverID == "" {
+			continue
+		}
+		driver, err := s.drivers.FindByID(ctx, loc.DriverID)
+		if err != nil {
+			if err == ErrDriverNotFound {
+				continue
+			}
+			return nil, err
+		}
+		status, err := s.drivers.GetAvailability(ctx, driver.ID)
+		if err != nil {
+			if err == ErrDriverNotFound {
+				continue
+			}
+			return nil, err
+		}
+		if status == nil || status.Availability != DriverOnline {
+			continue
+		}
+		driver.Status = status
+		locationCopy := *loc
+		locationCopy.DriverID = driver.ID
+		if locationCopy.RecordedAt.IsZero() {
+			locationCopy.RecordedAt = time.Now().UTC()
+		}
+		driver.Location = &locationCopy
+		results = append(results, driver)
+	}
+	return results, nil
 }
 
 // AcceptTrip marks the assignment accepted and updates trip status.

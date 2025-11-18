@@ -17,6 +17,7 @@ import (
 	"uitgo/backend/internal/domain"
 	"uitgo/backend/internal/http/handlers"
 	"uitgo/backend/internal/http/middleware"
+	"uitgo/backend/internal/matching"
 	"uitgo/backend/internal/notification"
 	"uitgo/backend/internal/observability"
 )
@@ -28,7 +29,7 @@ type Server struct {
 }
 
 // New constructs the HTTP server with trip routes and internal hooks.
-func New(cfg *config.Config, db *gorm.DB, driverLocations handlers.DriverLocationWriter) (*Server, error) {
+func New(cfg *config.Config, db *gorm.DB, driverLocations handlers.DriverLocationWriter, dispatcher matching.TripDispatcher) (*Server, error) {
 	const serviceName = "trip-service"
 	router := gin.New()
 	gin.DisableConsoleColor()
@@ -61,7 +62,7 @@ func New(cfg *config.Config, db *gorm.DB, driverLocations handlers.DriverLocatio
 	tripService := domain.NewTripService(tripRepo, walletService, notificationSvc)
 	hubManager := handlers.NewHubManager(tripService, driverLocations)
 
-	handlers.RegisterTripRoutes(router, tripService, nil, hubManager, tripLimiter.Middleware("trip_create"))
+	handlers.RegisterTripRoutes(router, tripService, nil, hubManager, dispatcher, tripLimiter.Middleware("trip_create"))
 	registerInternalRoutes(router, cfg, tripService, hubManager)
 
 	metrics.Expose(router)

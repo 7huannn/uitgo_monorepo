@@ -31,7 +31,7 @@ func TestTripHandlerListTripsAndCreate(t *testing.T) {
 			c.Set("userID", user)
 		}
 	})
-	RegisterTripRoutes(router, service, nil, hubs)
+	RegisterTripRoutes(router, service, nil, hubs, nil)
 
 	userID := "rider-1"
 	for i := 0; i < 3; i++ {
@@ -76,7 +76,7 @@ func TestTripHandlerCreateTripInsufficientFunds(t *testing.T) {
 	router.Use(func(c *gin.Context) {
 		c.Set("userID", "wallet-user")
 	})
-	RegisterTripRoutes(router, service, nil, NewHubManager(service, nil))
+	RegisterTripRoutes(router, service, nil, NewHubManager(service, nil), nil)
 
 	res := performTripRequest(t, router, http.MethodPost, "/v1/trips", `{"originText":"A","destText":"B","serviceId":"bike"}`, "wallet-user")
 	require.Equal(t, http.StatusPaymentRequired, res.Code)
@@ -90,7 +90,7 @@ func TestTripHandlerGetAndUpdateTrip(t *testing.T) {
 	service := domain.NewTripService(repo, nil, nil)
 	hubs := NewHubManager(service, nil)
 	router := gin.New()
-	RegisterTripRoutes(router, service, nil, hubs)
+	RegisterTripRoutes(router, service, nil, hubs, nil)
 
 	trip := &domain.Trip{
 		RiderID:    "rider-55",
@@ -126,7 +126,7 @@ func TestTripHandlerGetTripNotFound(t *testing.T) {
 	repo := newFakeTripRepo()
 	service := domain.NewTripService(repo, nil, nil)
 	router := gin.New()
-	RegisterTripRoutes(router, service, nil, NewHubManager(service, nil))
+	RegisterTripRoutes(router, service, nil, NewHubManager(service, nil), nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/trips/"+uuidLike(), nil)
 	rec := httptest.NewRecorder()
