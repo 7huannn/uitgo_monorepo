@@ -9,6 +9,7 @@ import (
 	"uitgo/backend/internal/db"
 	"uitgo/backend/internal/http/handlers"
 	"uitgo/backend/internal/logging"
+	"uitgo/backend/internal/matching"
 	"uitgo/backend/internal/observability"
 	"uitgo/backend/trip_service/internal/clients"
 	"uitgo/backend/trip_service/internal/server"
@@ -46,7 +47,18 @@ func main() {
 		locationWriter = clients.NewLocationClient(cfg.DriverServiceURL, cfg.InternalAPIKey)
 	}
 
-	srv, err := server.New(cfg, pool, locationWriter)
+	var dispatcher matching.TripDispatcher
+	if cfg.MatchQueueAddr != "" {
+		queue, err := matching.NewRedisQueue(cfg.MatchQueueAddr, cfg.RedisPassword, cfg.MatchQueueDB, cfg.MatchQueueName)
+		if err != nil {
+			log.Printf("warn: unable to initialize trip queue: %v", err)
+		} else {
+			dispatcher = queue
+			defer queue.Close()
+		}
+	}
+
+	srv, err := server.New(cfg, pool, locationWriter, dispatcher)
 	if err != nil {
 		log.Fatalf("init server: %v", err)
 	}

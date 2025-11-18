@@ -8,6 +8,7 @@
 | trip-service | trip lifecycle, status tracking, websocket streaming | 8082 | `trip_service` schema |
 | driver-service | driver onboarding, availability, dispatch + trip actions | 8083 | `driver_service` schema |
 | api-gateway | routes Flutter app traffic to the correct service | 8080 | — |
+| redis (driver-locations) | geospatial index for driver proximity search | 6379 | in-memory (snapshot disabled for dev) |
 
 All inter-service communication happens over HTTP within the `uitgo-net` Docker network. Sensitive internal endpoints require the `X-Internal-Token` header (value comes from `INTERNAL_API_KEY`).
 
@@ -29,7 +30,7 @@ Point both Rider and Driver apps to the API gateway (`http://localhost:8080` by 
 
 - `/auth/*`, `/users/*`, `/wallet`, `/saved_places`, `/promotions`, `/news`, `/notifications`, `/v1/drivers/register` → user-service
 - `/v1/trips*`, `/v1/trips/:id/ws` → trip-service
-- `/v1/drivers/*`, `/v1/trips/:id/(assign|accept|decline|status)` → driver-service
+- `/v1/drivers/*`, `/v1/drivers/search`, `/v1/trips/:id/(assign|accept|decline|status)` → driver-service
 
 No Dart code changes are required beyond updating `API_BASE` if you previously targeted the monolith port.
 
@@ -51,6 +52,7 @@ Under `infra/terraform` you’ll find a thin scaffold for Stage 1 infrastructure
 
 - `modules/network` provisions a VPC with configurable public/private subnets.
 - `modules/rds` provisions Postgres instances (security groups + subnet groups).
-- `envs/dev` wires the modules together for three isolated RDS instances.
+- `modules/redis` (now referenced by the driver service) provisions an ElastiCache cluster for the geospatial index.
+- `envs/dev` wires the modules together for database instances + Redis.
 
 Set `TF_VAR_db_password` (or create a `dev.tfvars`) before running `terraform init && terraform apply` inside `infra/terraform/envs/dev`.

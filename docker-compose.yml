@@ -77,6 +77,8 @@ services:
       CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:*,http://127.0.0.1:*,https://localhost:8080,https://127.0.0.1:8080,https://localhost:*,https://127.0.0.1:*
       DRIVER_SERVICE_URL: http://driver-service:8083
       INTERNAL_API_KEY: uitgo-internal-secret
+      MATCH_QUEUE_REDIS_ADDR: redis:6379
+      MATCH_QUEUE_NAME: trip:requests
     depends_on:
       trip-db:
         condition: service_healthy
@@ -95,11 +97,24 @@ services:
       CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:*,http://127.0.0.1:*,https://localhost:8080,https://127.0.0.1:8080,https://localhost:*,https://127.0.0.1:*
       TRIP_SERVICE_URL: http://trip-service:8082
       INTERNAL_API_KEY: uitgo-internal-secret
+      REDIS_ADDR: redis:6379
+      MATCH_QUEUE_REDIS_ADDR: redis:6379
+      MATCH_QUEUE_NAME: trip:requests
     depends_on:
       driver-db:
         condition: service_healthy
       trip-service:
         condition: service_started
+    networks:
+      - uitgo-net
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
     networks:
       - uitgo-net
 
@@ -159,6 +174,7 @@ volumes:
   trip-db-data:
   driver-db-data:
   grafana-data:
+  redis-data:
 
 networks:
   uitgo-net:

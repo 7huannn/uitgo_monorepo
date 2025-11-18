@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ func RegisterDriverRoutes(router *gin.Engine, service *domain.DriverService) {
 		v1.GET("/drivers/me", handler.me)
 		v1.PATCH("/drivers/me", handler.updateProfile)
 		v1.PATCH("/drivers/:id/status", handler.updateStatus)
+		v1.GET("/drivers/search", handler.searchNearby)
 	}
 }
 
@@ -87,9 +89,10 @@ type driverStatusResponse struct {
 }
 
 type driverLocationResponse struct {
-	Latitude   float64 `json:"lat"`
-	Longitude  float64 `json:"lng"`
-	RecordedAt string  `json:"recordedAt"`
+	Latitude       float64  `json:"lat"`
+	Longitude      float64  `json:"lng"`
+	RecordedAt     string   `json:"recordedAt"`
+	DistanceMeters *float64 `json:"distanceMeters,omitempty"`
 }
 
 func (h *DriverHandler) register(c *gin.Context) {
@@ -239,6 +242,41 @@ func (h *DriverHandler) updateStatus(c *gin.Context) {
 	})
 }
 
+func (h *DriverHandler) searchNearby(c *gin.Context) {
+	if h.service == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "driver service unavailable"})
+		return
+	}
+	latStr := strings.TrimSpace(c.Query("lat"))
+	lngStr := strings.TrimSpace(c.Query("lng"))
+	if latStr == "" || lngStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "lat and lng are required"})
+		return
+	}
+	lat, err := strconv.ParseFloat(latStr, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid lat"})
+		return
+	}
+	lng, err := strconv.ParseFloat(lngStr, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid lng"})
+		return
+	}
+	radiusMeters := parseFloatDefault(c.DefaultQuery("radius", "3000"), 3000)
+	limit := parseIntDefault(c.DefaultQuery("limit", "10"), 10, 50)
+	drivers, err := h.service.SearchNearbyDrivers(c.Request.Context(), lat, lng, radiusMeters, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	items := make([]driverResponse, 0, len(drivers))
+	for _, driver := range drivers {
+		items = append(items, toDriverResponse(driver))
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
 func payloadToVehicle(payload *driverVehiclePayload) *domain.Vehicle {
 	if payload == nil {
 		return nil
@@ -285,6 +323,36 @@ func toDriverResponse(driver *domain.Driver) driverResponse {
 			Longitude:  driver.Location.Longitude,
 			RecordedAt: driver.Location.RecordedAt.UTC().Format(time.RFC3339),
 		}
+		if driver.Location.DistanceMeters != nil {
+			resp.Location.DistanceMeters = driver.Location.DistanceMeters
+		}
 	}
 	return resp
+}
+
+func parseFloatDefault(value string, defaultValue float64) float64 {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return defaultValue
+	}
+	f, err := strconv.ParseFloat(trimmed, 64)
+	if err != nil || f <= 0 {
+		return defaultValue
+	}
+	return f
+}
+
+func parseIntDefault(value string, defaultValue, max int) int {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return defaultValue
+	}
+	parsed, err := strconv.Atoi(trimmed)
+	if err != nil || parsed <= 0 {
+		return defaultValue
+	}
+	if parsed > max && max > 0 {
+		return max
+	}
+	return parsed
 }

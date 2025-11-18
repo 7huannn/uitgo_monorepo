@@ -23,6 +23,12 @@ type Config struct {
 	InternalAPIKey          string
 	DriverServiceURL        string
 	TripServiceURL          string
+	RedisAddr               string
+	RedisPassword           string
+	RedisDB                 int
+	MatchQueueAddr          string
+	MatchQueueDB            int
+	MatchQueueName          string
 	FirebaseCredentialsFile string
 	FirebaseCredentialsJSON string
 	SentryDSN               string
@@ -50,6 +56,18 @@ func Load() (*Config, error) {
 	tripServiceURL := strings.TrimSpace(os.Getenv("TRIP_SERVICE_URL"))
 	firebaseCredsFile := strings.TrimSpace(os.Getenv("FIREBASE_CREDENTIALS_FILE"))
 	firebaseCredsJSON := strings.TrimSpace(os.Getenv("FIREBASE_CREDENTIALS_JSON"))
+	redisAddr := strings.TrimSpace(os.Getenv("REDIS_ADDR"))
+	redisPassword := os.Getenv("REDIS_PASSWORD")
+	redisDB := parseIntEnv(os.Getenv("REDIS_DB"), 0)
+	matchQueueAddr := strings.TrimSpace(os.Getenv("MATCH_QUEUE_REDIS_ADDR"))
+	if matchQueueAddr == "" {
+		matchQueueAddr = redisAddr
+	}
+	matchQueueDB := parseIntEnv(os.Getenv("MATCH_QUEUE_REDIS_DB"), redisDB)
+	matchQueueName := strings.TrimSpace(os.Getenv("MATCH_QUEUE_NAME"))
+	if matchQueueName == "" {
+		matchQueueName = "trip:requests"
+	}
 
 	accessTTL := parseDuration(os.Getenv("ACCESS_TOKEN_TTL_MINUTES"), 15*time.Minute, time.Minute)
 	refreshTTL := parseDuration(os.Getenv("REFRESH_TOKEN_TTL_DAYS"), 30*24*time.Hour, 24*time.Hour)
@@ -124,6 +142,12 @@ func Load() (*Config, error) {
 		InternalAPIKey:          internalAPIKey,
 		DriverServiceURL:        driverServiceURL,
 		TripServiceURL:          tripServiceURL,
+		RedisAddr:               redisAddr,
+		RedisPassword:           redisPassword,
+		RedisDB:                 redisDB,
+		MatchQueueAddr:          matchQueueAddr,
+		MatchQueueDB:            matchQueueDB,
+		MatchQueueName:          matchQueueName,
 		FirebaseCredentialsFile: firebaseCredsFile,
 		FirebaseCredentialsJSON: firebaseCredsJSON,
 		SentryDSN:               sentryDSN,
@@ -159,6 +183,18 @@ func parseBoolEnv(value string, defaultValue bool) bool {
 	default:
 		return defaultValue
 	}
+}
+
+func parseIntEnv(value string, defaultValue int) int {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return defaultValue
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return defaultValue
+	}
+	return parsed
 }
 
 func appendOriginIfMissing(origins []string, candidate string) []string {
