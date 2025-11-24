@@ -126,8 +126,8 @@ class _LoginHeader extends StatelessWidget {
             height: 96,
             width: 96,
             decoration: BoxDecoration(
-              color: accentColor.withOpacity(
-                theme.brightness == Brightness.dark ? 0.18 : 0.12,
+              color: accentColor.withValues(
+                alpha: theme.brightness == Brightness.dark ? 0.18 : 0.12,
               ),
               borderRadius: BorderRadius.circular(24),
             ),
@@ -252,7 +252,7 @@ class _LoginCardState extends State<_LoginCard> {
     final isDark = theme.brightness == Brightness.dark;
 
     final cardColor = Color.alphaBlend(
-      widget.accentColor.withOpacity(isDark ? 0.08 : 0.04),
+      widget.accentColor.withValues(alpha: isDark ? 0.08 : 0.04),
       colorScheme.surface,
     );
 
@@ -264,7 +264,7 @@ class _LoginCardState extends State<_LoginCard> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.4 : 0.12),
+            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
             blurRadius: 32,
             offset: const Offset(0, 18),
             spreadRadius: -8,
@@ -446,7 +446,7 @@ class _ThemeToggleButton extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: accent.withOpacity(0.08),
+        color: accent.withValues(alpha: 0.08),
       ),
       child: IconButton(
         onPressed: onToggleTheme,
