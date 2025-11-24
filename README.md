@@ -1,141 +1,113 @@
-# UIT-Go Security & Observability Guide
+# UITGo Monorepo
 
-This repository now ships hardened authentication flows, rate-limited public APIs, and end-to-end telemetry (Sentry, Prometheus, Grafana, and structured logs suitable for Loki/ELK).
+Nền tảng gọi xe gồm các Go microservice (user, trip, driver) sau API gateway, ứng dụng Flutter cho rider/driver, cùng stack quan sát (Prometheus, Grafana, Sentry) và bộ Terraform/hạ tầng mẫu. Kho repo này dành cho phát triển nội bộ, demo, và triển khai thử nghiệm.
 
-## Quick start
+## Toàn cảnh
+- Backend: `user-service`, `trip-service`, `driver-service` chạy sau gateway Nginx; Redis dùng cho geospatial index và hàng đợi ghép chuyến.
+- Ứng dụng: Flutter rider/driver (`apps/rider_app`, `apps/driver_app`) và admin prototype (`apps/admin_app`).
+- Quan sát: Prometheus + Grafana auto-provisioned dashboard, Sentry hook cho backend và Flutter, log JSON sẵn sàng ship sang Loki/ELK.
+- Hạ tầng: Docker Compose cho dev/staging, scaffold Terraform cho VPC, Postgres, Redis, SQS/ASG.
 
+## Kiến trúc dịch vụ
+| Service | Vai trò | Port | Lưu trữ |
+| --- | --- | --- | --- |
+| api-gateway | Định tuyến traffic từ ứng dụng | 8080 | — |
+| user-service | Auth, hồ sơ, ví, địa điểm lưu, thông báo | 8081 | Postgres `user_service` |
+| trip-service | Vòng đời chuyến, WebSocket trạng thái | 8082 | Postgres `trip_service` |
+| driver-service | Onboarding, trạng thái tài xế, ghép chuyến | 8083 | Postgres `driver_service` |
+| redis | GEO index + hàng đợi ghép chuyến | 6379 | In-memory |
+| prometheus | Thu thập `/metrics` | 9090 | — |
+| grafana | Dashboard quan sát | 3000 | — (admin/`uitgo`) |
+
+## Yêu cầu hệ thống
+- Docker + Docker Compose v2
+- `make`
+- Go 1.22+ (nếu chạy dịch vụ trực tiếp)
+- Flutter stable (nếu build rider/driver)
+
+## Khởi chạy nhanh
 ```bash
-# start Postgres, Go microservices, Prometheus, and Grafana
+# từ thư mục gốc
 docker compose up --build
 ```
+- Khởi tạo 3 Postgres, 3 service Go, Redis, API Gateway, Prometheus, Grafana.
+- Endpoint: API `http://localhost:8080`, Prometheus `http://localhost:9090`, Grafana `http://localhost:3000` (admin/`uitgo`).
+- Grafana tự nạp dashboard `observability/grafana/dashboards/uitgo-overview.json`.
 
-Available endpoints:
+## Cấu hình chính
+### Backend (biến dùng chung cho các service)
+| Biến | Mô tả |
+| --- | --- |
+| `POSTGRES_DSN` | Chuỗi kết nối Postgres cho từng service. |
+| `JWT_SECRET` | HMAC secret, access token mặc định 15 phút. |
+| `REFRESH_TOKEN_ENCRYPTION_KEY` | Chuỗi dùng derive khoá AES-GCM lưu refresh token. |
+| `ACCESS_TOKEN_TTL_MINUTES` | Tuỳ chọn override thời gian sống access token. |
+| `REFRESH_TOKEN_TTL_DAYS` | Tuỳ chọn override refresh token (mặc định 30 ngày). |
+| `CORS_ALLOWED_ORIGINS` | Danh sách origin cho phép, không dùng wildcard. |
+| `INTERNAL_API_KEY` | Bắt buộc cho `/internal/*` và debug endpoint. |
+| `SENTRY_DSN` | Bật Sentry cho backend. |
+| `PROMETHEUS_ENABLED` | Bật/tắt middleware metrics. |
+| `DRIVER_SERVICE_URL` / `TRIP_SERVICE_URL` | Service-to-service call. |
+| `MATCH_QUEUE_REDIS_ADDR` / `MATCH_QUEUE_NAME` | Queue ghép chuyến async. |
+| `REDIS_ADDR` | GEO index cho tìm kiếm tài xế. |
 
-| Service     | URL                    |
-| ----------- | ---------------------- |
-| API Gateway | http://localhost:8080  |
-| Prometheus  | http://localhost:9090  |
-| Grafana     | http://localhost:3000  (admin / `uitgo`) |
-
-Grafana auto-loads the dashboard defined in `observability/grafana/dashboards/uitgo-overview.json`.
-
-## Configuration highlights
-
-| Variable                       | Description                                                                     |
-| ------------------------------ | ------------------------------------------------------------------------------- |
-| `JWT_SECRET`                   | HMAC secret for access tokens (15‑minute expiry).                               |
-| `REFRESH_TOKEN_ENCRYPTION_KEY` | Arbitrary string used to derive the AES‑GCM key for storing refresh tokens.     |
-| `ACCESS_TOKEN_TTL_MINUTES`     | (Optional) Override access token lifetime (default 15).                         |
-| `REFRESH_TOKEN_TTL_DAYS`       | (Optional) Override refresh token lifetime (default 30).                        |
-| `SENTRY_DSN`                   | Backend DSN. Flutter apps read the DSN via `--dart-define SENTRY_DSN=...`.      |
-| `PROMETHEUS_ENABLED`           | Toggle HTTP metrics middleware (enabled by default).                            |
-| `CORS_ALLOWED_ORIGINS`         | Comma-separated list of approved origins (wildcards disabled).                  |
-| `INTERNAL_API_KEY`             | Required for `/internal/*` debug endpoints.                                     |
-
-Flutter apps accept:
-
-- `API_BASE`
-- `USE_MOCK`
+### Flutter
+- `API_BASE` (mặc định `http://localhost:8080`)
+- `USE_MOCK` (bật mock data nếu cần)
 - `SENTRY_DSN`
 
-## Security updates
-
-- `/auth/login`, `/auth/register`, and `/auth/refresh` now return `accessToken` (15 minutes) and `refreshToken` (30 days). Refresh tokens are encrypted and stored in the `refresh_tokens` table.
-- `POST /auth/refresh` rotates the refresh token on every call and issues a fresh access token.
-- `middleware.Auth` enforces JWT authentication for all protected routes (no more `demo-user` fallbacks). WebSocket clients must supply `Authorization: Bearer <token>` or an `accessToken` query parameter (Flutter web fallback).
-- Login, registration, refresh, and trip creation endpoints are throttled (10 requests/minute/IP).
-- Every request is stored in the `audit_logs` table (`userId`, path, status, error message, latency, request ID).
-- CORS rejects unapproved origins instead of silently allowing `*`.
-
-### Testing auth
-
+## Phát triển backend
 ```bash
-# register
+cd backend
+make migrate   # chạy migration theo POSTGRES_DSN
+make run       # khởi động server (PORT mặc định 8080)
+make test      # unit test
+make seed      # nạp rider, driver, ví, và chuyến mẫu
+```
+Các service khi chạy trong Docker tự apply migration. Seed in ra thông tin tài khoản demo để thử nhanh.
+
+## Smoke test API (curl)
+```bash
+# đăng ký tài khoản mẫu
 curl -s http://localhost:8080/auth/register \
   -H "Content-Type: application/json" \
   -d '{"name":"UIT Rider","email":"rider@example.com","password":"passw0rd"}'
 
-# login
+# đăng nhập
 LOGIN=$(curl -s http://localhost:8080/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"rider@example.com","password":"passw0rd"}')
 ACCESS=$(echo "$LOGIN" | jq -r .accessToken)
 REFRESH=$(echo "$LOGIN" | jq -r .refreshToken)
 
-# current user
+# lấy thông tin hiện tại
 curl http://localhost:8080/auth/me -H "Authorization: Bearer $ACCESS"
 
-# refresh
+# refresh token
 curl -s http://localhost:8080/auth/refresh \
   -H "Content-Type: application/json" \
   -d "{\"refreshToken\":\"$REFRESH\"}"
 ```
 
-## Observability updates
+## Bảo mật & quan sát
+- JWT 15 phút, refresh token 30 ngày (mã hoá, rotate mỗi lần refresh).
+- Rate limit 10 request/phút cho login, register, refresh, tạo trip; CORS chỉ cho phép origin khai báo.
+- Bắt buộc JWT cho tất cả route bảo vệ; WebSocket nhận `Authorization: Bearer` hoặc query `accessToken`.
+- Request log vào bảng `audit_logs` (user, path, status, error, latency, request ID).
+- Prometheus scrape `/metrics`; Grafana dashboard sẵn; log JSON sẵn sàng ship sang Loki/ELK.
+- Sentry cho Go và Flutter; test panic: `curl -H "X-Internal-Token: $INTERNAL_API_KEY" http://localhost:8080/internal/debug/panic`.
 
-- **Sentry** is wired into all Go binaries (`internal/observability/sentry.go`) and both Flutter apps (`sentry_flutter`). Trigger a test event with:
+## Kiểm thử & CI/CD
+- Backend: `cd backend && make test` (`go test ./... -covermode=atomic` enforced trong CI).
+- Flutter: `flutter analyze` và `flutter test` trong từng thư mục app.
+- Load test: `k6 run loadtests/k6/trip_matching.js` (kịch bản rider/driver search).
+- CI: `.github/workflows/be_ci.yml` (Go), `.github/workflows/fe_ci.yml` (Flutter), `.github/workflows/deploy.yml` build/push image `ghcr.io/.../uitgo-backend:<sha>`, build APK/IPA/Web, validate stack `infra/staging`.
 
-  ```bash
-  curl -H "X-Internal-Token: $INTERNAL_API_KEY" http://localhost:8080/internal/debug/panic
-  ```
+## Triển khai & hạ tầng
+- Staging Compose: `infra/staging` (copy `.env.staging.example` → `.env.staging`, rồi `docker compose up -d`).
+- Terraform scaffold: `infra/terraform` (module network, rds, redis, sqs, asg). Đặt `TF_VAR_db_password` (hoặc file `dev.tfvars`) rồi `terraform init && terraform apply` trong `infra/terraform/envs/dev`.
 
-- **Prometheus** scrapes `/metrics` from every Go service. Grafana auto-provisions a Prometheus datasource and the `UIT-Go Service Overview` dashboard (request rate, latency, and error rate panels).
-- **Structured logging**: all Go services emit JSON to stdout (`middleware.JSONLogger` and `internal/logging`). These logs can be tailed by Promtail/Vector/Fluent Bit and forwarded to Loki/ELK.
-- **Terraform** creates CloudWatch log groups for the API, user, driver, and trip services under `/uitgo/dev/*`, so ECS/EKS task definitions can attach the same structured stream. RDS networking is unchanged.
-
-### Verifying metrics locally
-
-```bash
-# Prometheus targets
-open http://localhost:9090/targets
-
-# Grafana dashboard
-open http://localhost:3000
-```
-
-## Flutter client notes
-
-- Tokens live in `flutter_secure_storage`. The shared `DioClient` transparently refreshes access tokens when a request returns `401`.
-- WebSocket connections attach the JWT (Authorization header on mobile/desktop, `accessToken` query parameter on web builds) so backend authorization always passes.
-- Pass `--dart-define SENTRY_DSN=...` when running `flutter run` to enable Sentry in the mobile apps; errors automatically surface in the same project as the backend.
-
-## Testing & QA
-
-- **Backend**: run `cd backend && make test` to execute unit tests. Coverage is enforced at 80%+ inside CI via `go test ./... -covermode=atomic`. Linting (`go vet` + `golangci-lint`) also runs in GitHub Actions.
-- **Flutter apps**: from each app directory run `flutter analyze` and `flutter test`. The CI workflow (`.github/workflows/fe_ci.yml`) runs these commands for both rider and driver apps on every push/PR.
-- **Seed demo data**: once migrations are applied you can run `cd backend && make seed` to insert riders, drivers, wallets, and sample trips. Credentials are printed in the terminal.
-
-## Continuous Delivery
-
-- `.github/workflows/be_ci.yml` runs Go unit tests, vetting, linting, and enforces ≥80 % coverage before merges.
-- `.github/workflows/fe_ci.yml` keeps both Flutter apps green by running `flutter analyze` and `flutter test`.
-- `.github/workflows/deploy.yml` (triggered on pushes to `main`) builds/pushes the API image to `ghcr.io/<org>/uitgo-backend:<sha>`, produces APK/IPA/Web artifacts for rider + driver apps, and validates the staging stack defined in `infra/staging`.
-- The staging stack uses `infra/staging/docker-compose.yml`. Copy `.env.staging.example` to `.env.staging`, adjust secrets, then run `docker compose up -d` from that directory to spin up Postgres, run migrations, and boot the API behind the bundled Nginx gateway. The GitHub Actions deployment job runs the same Compose file with the freshly built image tag.
-
-## Logging to Loki/ELK
-
-Containers write JSON logs to stdout so you can ship them with your favourite collector. Example Promtail configuration:
-
-```yaml
-server:
-  http_listen_port: 9080
-
-positions:
-  filename: /tmp/positions.yaml
-
-clients:
-  - url: http://loki:3100/loki/api/v1/push
-
-scrape_configs:
-  - job_name: uitgo
-    docker_sd_configs:
-      - host: unix:///var/run/docker.sock
-    pipeline_stages:
-      - json:
-          expressions:
-            level: level
-            message: message
-            service: service
-```
-
-Hook the output to Grafana Loki or any ELK cluster to keep a full audit trail.
+## Tài liệu thêm
+- `docs/architecture-stage1.md` – mô tả skeleton microservice và biến môi trường.
+- `docs/moduleA_scalability.md` – báo cáo tối ưu hiệu năng và kết quả k6.
+- `backend/README.md` – chi tiết API và hướng dẫn service Go.
