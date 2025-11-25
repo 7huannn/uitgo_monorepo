@@ -2,10 +2,14 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
 	"uitgo/backend/internal/config"
@@ -56,6 +60,7 @@ func New(cfg *config.Config, db *gorm.DB, driverProvisioner handlers.DriverProvi
 	if err != nil {
 		return nil, err
 	}
+	seedAdminUser(context.Background(), cfg, userRepo)
 
 	router.POST("/auth/register", authLimiter.Middleware("auth_register"), authHandler.Register)
 	router.POST("/auth/login", authLimiter.Middleware("auth_login"), authHandler.Login)
@@ -63,6 +68,10 @@ func New(cfg *config.Config, db *gorm.DB, driverProvisioner handlers.DriverProvi
 	router.GET("/auth/me", authHandler.Me)
 	router.PATCH("/users/me", authHandler.UpdateMe)
 	router.POST("/v1/drivers/register", authHandler.RegisterDriver)
+
+	adminGroup := router.Group("/admin")
+	adminGroup.Use(middleware.RequireRoles("admin"))
+	adminGroup.GET("/me", authHandler.Me)
 
 	handlers.RegisterNotificationRoutes(router, notificationRepo, notificationSvc)
 
@@ -84,4 +93,48 @@ func New(cfg *config.Config, db *gorm.DB, driverProvisioner handlers.DriverProvi
 func (s *Server) Run() error {
 	addr := fmt.Sprintf(":%s", s.cfg.Port)
 	return s.engine.Run(addr)
+}
+
+func seedAdminUser(ctx context.Context, cfg *config.Config, repo domain.UserRepository) {
+	if repo == nil {
+		return
+	}
+	email := strings.ToLower(strings.TrimSpace(cfg.AdminEmail))
+	password := strings.TrimSpace(cfg.AdminPassword)
+	if email == "" || password == "" {
+		return
+	}
+	name := strings.TrimSpace(cfg.AdminName)
+	if name == "" {
+		name = "UITGo Admin"
+	}
+
+	existing, err := repo.FindByEmail(ctx, email)
+	if err == nil && existing != nil {
+		if strings.ToLower(existing.Role) != "admin" {
+			log.Printf("admin seed: user %s exists with role %s (expected admin)", email, existing.Role)
+		}
+		return
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		log.Printf("admin seed: unable to check existing user: %v", err)
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("admin seed: failed to hash password: %v", err)
+		return
+	}
+	user := &domain.User{
+		Name:         name,
+		Email:        email,
+		PasswordHash: string(hash),
+		Role:         "admin",
+	}
+	if err := repo.Create(ctx, user); err != nil {
+		log.Printf("admin seed: failed to create admin user: %v", err)
+		return
+	}
+	log.Printf("admin seed: ensured admin account %s", email)
 }

@@ -16,6 +16,11 @@ const String routingBase = String.fromEnvironment(
   defaultValue: 'https://router.project-osrm.org',
 );
 
+const String routesEndpoint = String.fromEnvironment(
+  'ROUTES_ENDPOINT',
+  defaultValue: '/routes',
+);
+
 const bool useNominatimFallback =
     bool.fromEnvironment('USE_NOMINATIM', defaultValue: true);
 

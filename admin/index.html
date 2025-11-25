@@ -171,6 +171,7 @@
           <select id="wsRole">
             <option value="rider">rider</option>
             <option value="driver">driver</option>
+            <option value="admin">admin</option>
           </select>
         </div>
         <div>
@@ -211,6 +212,7 @@
       let authToken = localStorage.getItem('uitgoToken') || '';
       let authEmail = localStorage.getItem('uitgoEmail') || '';
       let authUserId = localStorage.getItem('uitgoUserId') || '';
+      let authRole = localStorage.getItem('uitgoRole') || '';
 
       function apiBase() {
         return document.getElementById('apiBase').value.trim();
@@ -232,7 +234,7 @@
         if (authToken) {
           statusEl.textContent = `Logged in as ${authEmail || 'unknown'} (id: ${
             authUserId || 'unknown'
-          })`;
+          }) role=${authRole || 'n/a'}`;
         } else {
           statusEl.textContent = 'Not logged in';
         }
@@ -250,10 +252,12 @@
         authToken = data?.token || '';
         authEmail = data?.email || '';
         authUserId = data?.id || '';
+        authRole = data?.role || '';
         if (authToken) {
           localStorage.setItem('uitgoToken', authToken);
           localStorage.setItem('uitgoEmail', authEmail);
           localStorage.setItem('uitgoUserId', authUserId);
+          localStorage.setItem('uitgoRole', authRole);
         }
         updateAuthStatus();
         syncUserIdInputs(true);
@@ -263,9 +267,11 @@
         authToken = '';
         authEmail = '';
         authUserId = '';
+        authRole = '';
         localStorage.removeItem('uitgoToken');
         localStorage.removeItem('uitgoEmail');
         localStorage.removeItem('uitgoUserId');
+        localStorage.removeItem('uitgoRole');
         updateAuthStatus();
         syncUserIdInputs(true);
         appendLog('👋 Logged out (token cleared)');
