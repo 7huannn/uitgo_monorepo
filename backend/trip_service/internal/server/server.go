@@ -20,6 +20,7 @@ import (
 	"uitgo/backend/internal/matching"
 	"uitgo/backend/internal/notification"
 	"uitgo/backend/internal/observability"
+	"uitgo/backend/internal/routing"
 )
 
 // Server represents the trip-service HTTP server.
@@ -47,6 +48,8 @@ func New(cfg *config.Config, db *gorm.DB, driverLocations handlers.DriverLocatio
 	router.Use(middleware.AuditLogger(auditRepo))
 
 	handlers.RegisterHealth(router)
+	routeProvider := routing.NewClient(cfg.RoutingBaseURL, 8*time.Second, 5*time.Minute)
+	handlers.RegisterRouteRoutes(router, routeProvider)
 	tripLimiter := middleware.NewTokenBucketRateLimiter(10, time.Minute)
 
 	walletRepo := dbrepo.NewWalletRepository(db)

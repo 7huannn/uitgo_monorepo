@@ -16,6 +16,7 @@ import (
 	"uitgo/backend/internal/http/middleware"
 	"uitgo/backend/internal/notification"
 	"uitgo/backend/internal/observability"
+	"uitgo/backend/internal/routing"
 )
 
 // Server wraps the Gin engine and dependencies.
@@ -73,8 +74,10 @@ func NewServer(cfg *config.Config, db *gorm.DB) (*Server, error) {
 	promotionRepo := dbrepo.NewPromotionRepository(db)
 	newsRepo := dbrepo.NewNewsRepository(db)
 	homeService := domain.NewHomeService(walletRepo, savedPlaceRepo, promotionRepo, newsRepo)
+	routeProvider := routing.NewClient(cfg.RoutingBaseURL, 8*time.Second, 5*time.Minute)
 
 	handlers.RegisterHealth(router)
+	handlers.RegisterRouteRoutes(router, routeProvider)
 	debugGroup := router.Group("/internal/debug")
 	debugGroup.Use(middleware.InternalOnly(cfg.InternalAPIKey))
 	debugGroup.GET("/panic", func(c *gin.Context) {
@@ -88,6 +91,9 @@ func NewServer(cfg *config.Config, db *gorm.DB) (*Server, error) {
 	router.GET("/auth/me", authHandler.Me)
 	router.PATCH("/users/me", authHandler.UpdateMe)
 	router.POST("/v1/drivers/register", authHandler.RegisterDriver)
+	adminGroup := router.Group("/admin")
+	adminGroup.Use(middleware.RequireRoles("admin"))
+	adminGroup.GET("/me", authHandler.Me)
 	handlers.RegisterDriverRoutes(router, driverService)
 	handlers.RegisterTripRoutes(router, tripService, driverService, hubManager, nil, tripLimiter.Middleware("trip_create"))
 	handlers.RegisterNotificationRoutes(router, notificationRepo, notificationSvc)

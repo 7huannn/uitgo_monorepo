@@ -36,6 +36,10 @@ type Config struct {
 	LogFormat               string
 	Environment             string
 	IsProduction            bool
+	RoutingBaseURL          string
+	AdminEmail              string
+	AdminPassword           string
+	AdminName               string
 }
 
 const devRefreshFallback = "uitgo-dev-refresh-key-32bytes!!!"
@@ -83,6 +87,18 @@ func Load() (*Config, error) {
 		appEnv = "development"
 	}
 	isProd := strings.EqualFold(appEnv, "prod") || strings.EqualFold(appEnv, "production")
+
+	routingBaseURL := strings.TrimSpace(os.Getenv("ROUTING_BASE_URL"))
+	if routingBaseURL == "" {
+		routingBaseURL = "https://router.project-osrm.org"
+	}
+
+	adminEmail := strings.TrimSpace(os.Getenv("ADMIN_EMAIL"))
+	adminPassword := strings.TrimSpace(os.Getenv("ADMIN_PASSWORD"))
+	adminName := strings.TrimSpace(os.Getenv("ADMIN_NAME"))
+	if adminName == "" {
+		adminName = "UITGo Admin"
+	}
 
 	refreshKey := strings.TrimSpace(os.Getenv("REFRESH_TOKEN_ENCRYPTION_KEY"))
 	switch {
@@ -155,6 +171,10 @@ func Load() (*Config, error) {
 		LogFormat:               logFormat,
 		Environment:             appEnv,
 		IsProduction:            isProd,
+		RoutingBaseURL:          routingBaseURL,
+		AdminEmail:              adminEmail,
+		AdminPassword:           adminPassword,
+		AdminName:               adminName,
 	}, nil
 }
 
