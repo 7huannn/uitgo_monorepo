@@ -30,6 +30,9 @@ env/
 venv/
 .venv/
 
+# Flutter / Go build cache
+.cache/
+go-build/
 # Node (for chat service)
 node_modules/
 npm-debug.log

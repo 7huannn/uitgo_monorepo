@@ -41,6 +41,8 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
   String? _tripError;
   String? _socketError;
   LatLng? _pendingCenter;
+  List<LatLng>? _pendingFitPoints;
+  bool _hasFittedBounds = false;
 
   LatLng? _pickupLatLng;
   LatLng? _destinationLatLng;
@@ -80,7 +82,8 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
       setState(() {
         _loadingTrip = false;
       });
-      _moveCameraToCurrentLocation();
+      _hasFittedBounds = false;
+      _fitCameraToTrip(force: true);
       return;
     }
 
@@ -98,7 +101,8 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
         _latestLocation = detail.lastLocation ?? _latestLocation;
       });
       _applyStatus(detail.status);
-      _moveCameraToCurrentLocation();
+      _hasFittedBounds = false;
+      _fitCameraToTrip(force: true);
       unawaited(_loadTripRoute());
     } catch (error) {
       if (!mounted) return;
@@ -171,10 +175,14 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
   void _handleRealtimeEvent(TripRealtimeEvent event) {
     if (!mounted) return;
     if (event.type == RealtimeEventType.location && event.location != null) {
+      final hadDriverLocation = _latestLocation != null;
       setState(() {
         _latestLocation = event.location;
       });
-      _moveCameraToCurrentLocation();
+      if (!hadDriverLocation) {
+        _hasFittedBounds = false;
+        _fitCameraToTrip(force: true);
+      }
     } else if (event.type == RealtimeEventType.status && event.status != null) {
       _applyStatus(event.status);
     }
@@ -220,10 +228,35 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
         _defaultCenter;
   }
 
-  void _moveCameraToCurrentLocation() {
-    final target = _driverLatLng ?? _pickupLatLng ?? _destinationLatLng;
-    if (target == null) return;
-    _centerMap(target);
+  void _fitCameraToTrip({bool force = false}) {
+    final points = <LatLng>[
+      if (_pickupLatLng != null) _pickupLatLng!,
+      if (_destinationLatLng != null) _destinationLatLng!,
+      if (_driverLatLng != null) _driverLatLng!,
+    ];
+    if (points.isEmpty) return;
+
+    if (!_mapReady) {
+      _pendingFitPoints = points;
+      return;
+    }
+
+    if (points.length == 1) {
+      _mapController.move(points.first, _defaultZoom);
+      _hasFittedBounds = true;
+      return;
+    }
+
+    if (_hasFittedBounds && !force) return;
+
+    final bounds = LatLngBounds.fromPoints(points);
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: bounds,
+        padding: const EdgeInsets.all(32),
+      ),
+    );
+    _hasFittedBounds = true;
   }
 
   void _centerMap(LatLng target, {double? zoom}) {
@@ -297,9 +330,25 @@ class _TripTrackingPageState extends State<TripTrackingPage> {
               setState(() {
                 _mapReady = true;
               });
-              if (_pendingCenter != null) {
+              if (_pendingFitPoints != null && _pendingFitPoints!.isNotEmpty) {
+                final points = _pendingFitPoints!;
+                _pendingFitPoints = null;
+                if (points.length == 1) {
+                  _mapController.move(points.first, _defaultZoom);
+                } else {
+                  _mapController.fitCamera(
+                    CameraFit.bounds(
+                      bounds: LatLngBounds.fromPoints(points),
+                      padding: const EdgeInsets.all(32),
+                    ),
+                  );
+                }
+                _hasFittedBounds = true;
+              } else if (_pendingCenter != null) {
                 _mapController.move(_pendingCenter!, _defaultZoom);
                 _pendingCenter = null;
+              } else {
+                _fitCameraToTrip(force: true);
               }
             },
           ),

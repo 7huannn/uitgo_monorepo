@@ -9,6 +9,7 @@ import 'package:latlong2/latlong.dart';
 import '../../trips/models/trip_models.dart';
 import '../../trips/services/trip_service.dart';
 import '../../trips/services/trip_socket_service.dart';
+import '../../trips/services/routing_service.dart';
 
 class TripDetailPageArgs {
   const TripDetailPageArgs({required this.tripId});
@@ -30,12 +31,15 @@ class TripDetailPage extends StatefulWidget {
 class _TripDetailPageState extends State<TripDetailPage> {
   final TripService _tripService = TripService();
   final TripSocketService _socket = TripSocketService();
+  final RoutingService _routingService = RoutingService();
   final MapController _mapController = MapController();
 
   TripDetail? _trip;
   LocationUpdate? _latestLocation;
+  RouteOverview? _route;
   bool _loading = true;
   bool _actionLoading = false;
+  bool _routeLoading = false;
   StreamSubscription? _socketSub;
   String? _error;
 
@@ -64,6 +68,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
         _latestLocation = trip.lastLocation;
       });
       _fitMapToTrip(trip, location: trip.lastLocation);
+      unawaited(_loadRoute(trip));
       await _socket.connect(widget.tripId);
       _socketSub = _socket.stream.listen((event) {
         if (!mounted) return;
@@ -118,6 +123,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
       final refreshed = await _tripService.fetchTrip(widget.tripId);
       setState(() => _trip = refreshed);
       _fitMapToTrip(refreshed);
+      unawaited(_loadRoute(refreshed));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -172,10 +178,14 @@ class _TripDetailPageState extends State<TripDetailPage> {
     final pickup = _latLng(trip.originLat, trip.originLng);
     final dropoff = _latLng(trip.destLat, trip.destLng);
     final driver = location ?? _latestLocation;
+    final routePoints = _route?.polylinePoints ?? const <LatLng>[];
     if (pickup != null) points.add(pickup);
     if (dropoff != null) points.add(dropoff);
     if (driver != null) {
       points.add(LatLng(driver.latitude, driver.longitude));
+    }
+    if (routePoints.isNotEmpty) {
+      points.addAll(routePoints);
     }
     if (points.isEmpty) return;
 
@@ -198,6 +208,33 @@ class _TripDetailPageState extends State<TripDetailPage> {
   LatLng? _latLng(double? lat, double? lng) {
     if (lat == null || lng == null) return null;
     return LatLng(lat, lng);
+  }
+
+  Future<void> _loadRoute(TripDetail trip) async {
+    final origin = _latLng(trip.originLat, trip.originLng);
+    final destination = _latLng(trip.destLat, trip.destLng);
+    if (origin == null || destination == null) {
+      setState(() => _route = null);
+      return;
+    }
+    setState(() => _routeLoading = true);
+    try {
+      final overview = await _routingService.fetchRoute(origin, destination);
+      if (!mounted) return;
+      setState(() {
+        _route = overview;
+        _routeLoading = false;
+      });
+      if (overview != null && overview.polylinePoints.isNotEmpty) {
+        _fitMapToTrip(trip);
+      }
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _route = null;
+        _routeLoading = false;
+      });
+    }
   }
 
   @override
@@ -226,14 +263,16 @@ class _TripDetailPageState extends State<TripDetailPage> {
                         padding: const EdgeInsets.all(16),
                         physics: const AlwaysScrollableScrollPhysics(),
                         children: [
-                          _TripMap(
-                            trip: trip,
-                            location: _latestLocation,
-                            statusColor: _statusColor(context, trip.status),
-                            statusLabel: _statusLabel(trip.status),
-                            mapController: _mapController,
-                          ),
-                          const SizedBox(height: 16),
+          _TripMap(
+            trip: trip,
+            location: _latestLocation,
+            route: _route,
+            statusColor: _statusColor(context, trip.status),
+            statusLabel: _statusLabel(trip.status),
+            mapController: _mapController,
+            routeLoading: _routeLoading,
+          ),
+          const SizedBox(height: 16),
                           _TripDetailsCard(
                             trip: trip,
                             location: _latestLocation,
@@ -241,7 +280,10 @@ class _TripDetailPageState extends State<TripDetailPage> {
                             statusLabel: _statusLabel(trip.status),
                           ),
                           const SizedBox(height: 16),
-                          _TripMetaCard(trip: trip),
+                          _TripMetaCard(
+                            trip: trip,
+                            route: _route,
+                          ),
                           const SizedBox(height: 24),
                           ..._buildActions(),
                         ],
@@ -329,16 +371,20 @@ class _TripMap extends StatelessWidget {
   const _TripMap({
     required this.trip,
     required this.location,
+    required this.route,
     required this.statusColor,
     required this.statusLabel,
     required this.mapController,
+    required this.routeLoading,
   });
 
   final TripDetail trip;
   final LocationUpdate? location;
+  final RouteOverview? route;
   final Color statusColor;
   final String statusLabel;
   final MapController mapController;
+  final bool routeLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -362,11 +408,15 @@ class _TripMap extends StatelessWidget {
           )
         : null;
     final distanceKm = trip.estimatedDistanceKm;
-    final distanceLabel = distanceKm == null
-        ? 'Đang tính toán quãng đường'
-        : distanceKm >= 1
-            ? '${distanceKm.toStringAsFixed(1)} km'
-            : '${(distanceKm * 1000).toStringAsFixed(0)} m';
+    final distanceLabel = routeLoading
+        ? 'Đang tải lộ trình...'
+        : route != null
+            ? '${route!.formattedDistance} • ETA ${route!.formattedEta}'
+            : distanceKm == null
+                ? 'Đang tính toán quãng đường'
+                : distanceKm >= 1
+                    ? '${distanceKm.toStringAsFixed(1)} km'
+                    : '${(distanceKm * 1000).toStringAsFixed(0)} m';
     final markers = <Marker>[
       if (pickup != null)
         Marker(
@@ -420,11 +470,17 @@ class _TripMap extends StatelessWidget {
         ),
     ];
     final polylines = <Polyline>[
-      if (pickup != null && destination != null)
+      if (route != null && route!.polylinePoints.isNotEmpty)
+        Polyline(
+          points: route!.polylinePoints,
+          strokeWidth: 4,
+          color: Theme.of(context).colorScheme.primary,
+        )
+      else if (pickup != null && destination != null)
         Polyline(
           points: [pickup, destination],
           strokeWidth: 4,
-          color: Theme.of(context).colorScheme.primary,
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.7),
         ),
     ];
 
@@ -708,18 +764,21 @@ class _TripDetailsCard extends StatelessWidget {
 }
 
 class _TripMetaCard extends StatelessWidget {
-  const _TripMetaCard({required this.trip});
+  const _TripMetaCard({required this.trip, required this.route});
 
   final TripDetail trip;
+  final RouteOverview? route;
 
   @override
   Widget build(BuildContext context) {
     final distanceKm = trip.estimatedDistanceKm;
-    final distanceLabel = distanceKm == null
-        ? '--'
-        : distanceKm >= 1
-            ? '${distanceKm.toStringAsFixed(1)} km'
-            : '${(distanceKm * 1000).toStringAsFixed(0)} m';
+    final distanceLabel = route != null
+        ? '${route!.formattedDistance} • ETA ${route!.formattedEta}'
+        : distanceKm == null
+            ? '--'
+            : distanceKm >= 1
+                ? '${distanceKm.toStringAsFixed(1)} km'
+                : '${(distanceKm * 1000).toStringAsFixed(0)} m';
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
