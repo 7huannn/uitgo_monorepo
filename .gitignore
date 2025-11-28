@@ -1,50 +1,107 @@
-# Flutter
-build/
+#############################
+# Flutter / Dart
+#############################
 .dart_tool/
+.packages
+.pub/
+.pub-cache/
 .flutter-plugins
 .flutter-plugins-dependencies
-.packages
-.pub-cache/
-.idea/
-.vscode/
-.DS_Store
+.flutter-version
+.generated/
+coverage/
+build/
 
+#############################
+# Flutter Platforms
+#############################
+
+# Android
+android/.gradle/
+android/local.properties
+android/key.properties
+*.apk
+*.aab
+*.dex
+*.class
+*.iml
+
+# iOS / macOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/ephemeral/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/build/
+macos/Pods/
+macos/Flutter/ephemeral/
+macos/build/
+
+# Xcode
+*.xcworkspace
+*.xcuserstate
+*.xcuserdata/
+*.xcuserdatad/
+
+# Windows
+windows/flutter/ephemeral/
+windows/build/
+
+# Linux
+linux/flutter/ephemeral/
+linux/build/
+
+# Web
+web/.dart_tool/
+web/build/
+
+#############################
 # Go
+#############################
 bin/
 vendor/
 *.exe
 *.test
 *.out
-*.log
 coverage/
-go.sum
 .gocache/
 .gomodcache/
 
+#############################
+# Node.js (chat service)
+#############################
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+#############################
 # Python
+#############################
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
 env/
 venv/
 .venv/
 
-# Flutter / Go build cache
-.cache/
-go-build/
-# Node (for chat service)
-node_modules/
-npm-debug.log
-yarn-error.log
-
+#############################
 # Terraform
+#############################
 *.tfstate
 *.tfstate.*
 .terraform/
 .terraform.lock.hcl
 
+#############################
+# Cache / Temp
+#############################
+.cache/
+go-build/
+
+#############################
 # Secrets / Local config
+#############################
 .env
 .env.*
 secrets/
@@ -53,5 +110,12 @@ secrets/
 *.crt
 *.p12
 
-# System files
+#############################
+# IDE / OS
+#############################
+.idea/
+.vscode/
+*.swp
+*.log
+.DS_Store
 Thumbs.db

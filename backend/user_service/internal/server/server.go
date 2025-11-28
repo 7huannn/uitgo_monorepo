@@ -101,18 +101,22 @@ func seedAdminUser(ctx context.Context, cfg *config.Config, repo domain.UserRepo
 	}
 	email := strings.ToLower(strings.TrimSpace(cfg.AdminEmail))
 	password := strings.TrimSpace(cfg.AdminPassword)
-	if email == "" || password == "" {
-		return
-	}
 	name := strings.TrimSpace(cfg.AdminName)
 	if name == "" {
 		name = "UITGo Admin"
+	}
+	if email == "" || password == "" {
+		email = "admin@example.com"
+		password = "***REMOVED***"
+		log.Printf("admin seed: using default dev admin credentials (%s)", email)
 	}
 
 	existing, err := repo.FindByEmail(ctx, email)
 	if err == nil && existing != nil {
 		if strings.ToLower(existing.Role) != "admin" {
-			log.Printf("admin seed: user %s exists with role %s (expected admin)", email, existing.Role)
+			log.Printf("admin seed: user %s exists with role %s (expected admin), updating role", email, existing.Role)
+			role := "admin"
+			_, _ = repo.UpdateRoleAndStatus(ctx, existing.ID, &role, nil)
 		}
 		return
 	}

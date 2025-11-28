@@ -144,6 +144,7 @@ type promotionResponse struct {
 	GradientEnd   string  `json:"gradientEnd"`
 	ExpiresAt     *string `json:"expiresAt,omitempty"`
 	Priority      int     `json:"priority"`
+	IsActive      bool    `json:"isActive"`
 }
 
 func (h *HomeHandler) promotions(c *gin.Context) {
@@ -219,5 +220,6 @@ func toPromotionResponse(p *domain.Promotion) promotionResponse {
 		GradientEnd:   p.GradientEnd,
 		ExpiresAt:     expires,
 		Priority:      p.Priority,
+		IsActive:      p.IsActive,
 	}
 }

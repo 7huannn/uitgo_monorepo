@@ -229,6 +229,9 @@ func (r *fakeUserRepo) Create(_ context.Context, user *domain.User) error {
 		user.ID = uuid.NewString()
 	}
 	user.CreatedAt = time.Now().UTC()
+	if user.Role == "" {
+		user.Role = "rider"
+	}
 	copyUser := *user
 	r.byEmail[key] = &copyUser
 	r.byID[user.ID] = &copyUser
@@ -268,6 +271,57 @@ func (r *fakeUserRepo) UpdateProfile(ctx context.Context, id string, name *strin
 	if phone != nil {
 		trimmed := strings.TrimSpace(*phone)
 		user.Phone = trimmed
+	}
+	copyUser := *user
+	return &copyUser, nil
+}
+
+func (r *fakeUserRepo) List(_ context.Context, role string, disabled *bool, q string, limit, offset int) ([]*domain.User, int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	role = strings.TrimSpace(strings.ToLower(role))
+	q = strings.TrimSpace(strings.ToLower(q))
+	users := make([]*domain.User, 0, len(r.byID))
+	for _, u := range r.byID {
+		if role != "" && strings.ToLower(u.Role) != role {
+			continue
+		}
+		if disabled != nil && u.Disabled != *disabled {
+			continue
+		}
+		if q != "" {
+			lowerEmail := strings.ToLower(u.Email)
+			lowerName := strings.ToLower(u.Name)
+			if !strings.Contains(lowerEmail, q) && !strings.Contains(lowerName, q) {
+				continue
+			}
+		}
+		copyUser := *u
+		users = append(users, &copyUser)
+	}
+	total := int64(len(users))
+	if offset > len(users) {
+		return []*domain.User{}, total, nil
+	}
+	end := offset + limit
+	if end > len(users) {
+		end = len(users)
+	}
+	return users[offset:end], total, nil
+}
+
+func (r *fakeUserRepo) UpdateRoleAndStatus(ctx context.Context, id string, role *string, disabled *bool) (*domain.User, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	user, ok := r.byID[id]
+	if !ok {
+		return nil, gorm.ErrRecordNotFound
+	}
+	if role != nil {
+		user.Role = strings.TrimSpace(strings.ToLower(*role))
+	}
+	if disabled != nil {
+		user.Disabled = *disabled
 	}
 	copyUser := *user
 	return &copyUser, nil

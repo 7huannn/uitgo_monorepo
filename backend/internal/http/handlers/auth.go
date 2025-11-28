@@ -106,6 +106,7 @@ type userResponse struct {
 	Phone     string    `json:"phone,omitempty"`
 	Role      string    `json:"role"`
 	CreatedAt time.Time `json:"createdAt"`
+	Disabled  bool      `json:"disabled"`
 }
 
 type updateProfileRequest struct {
@@ -148,6 +149,7 @@ func toUserResponse(user *domain.User) userResponse {
 		Phone:     user.Phone,
 		Role:      user.Role,
 		CreatedAt: user.CreatedAt,
+		Disabled:  user.Disabled,
 	}
 }
 
@@ -231,6 +233,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
+		return
+	}
+
+	if user.Disabled {
+		c.JSON(http.StatusForbidden, gin.H{"error": "account disabled"})
 		return
 	}
 
