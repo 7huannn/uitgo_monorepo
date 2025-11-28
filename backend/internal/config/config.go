@@ -15,6 +15,7 @@ import (
 type Config struct {
 	Port                    string
 	DatabaseURL             string
+	TripReplicaDatabaseURL  string
 	AllowedOrigins          []string
 	JWTSecret               string
 	AccessTokenTTL          time.Duration
@@ -26,9 +27,13 @@ type Config struct {
 	RedisAddr               string
 	RedisPassword           string
 	RedisDB                 int
+	HomeCacheTTL            time.Duration
+	MatchQueueBackend       string
 	MatchQueueAddr          string
 	MatchQueueDB            int
 	MatchQueueName          string
+	MatchQueueSQSURL        string
+	AWSRegion               string
 	FirebaseCredentialsFile string
 	FirebaseCredentialsJSON string
 	SentryDSN               string
@@ -54,6 +59,7 @@ func Load() (*Config, error) {
 	}
 
 	dbURL := os.Getenv("POSTGRES_DSN")
+	replicaURL := strings.TrimSpace(os.Getenv("TRIP_DB_REPLICA_DSN"))
 	jwtSecret := os.Getenv("JWT_SECRET")
 	internalAPIKey := os.Getenv("INTERNAL_API_KEY")
 	driverServiceURL := strings.TrimSpace(os.Getenv("DRIVER_SERVICE_URL"))
@@ -63,6 +69,12 @@ func Load() (*Config, error) {
 	redisAddr := strings.TrimSpace(os.Getenv("REDIS_ADDR"))
 	redisPassword := os.Getenv("REDIS_PASSWORD")
 	redisDB := parseIntEnv(os.Getenv("REDIS_DB"), 0)
+	homeCacheTTL := parseDuration(os.Getenv("HOME_CACHE_TTL_SECONDS"), 300*time.Second, time.Second)
+
+	matchQueueBackend := strings.TrimSpace(strings.ToLower(os.Getenv("QUEUE_BACKEND")))
+	if matchQueueBackend == "" {
+		matchQueueBackend = "redis"
+	}
 	matchQueueAddr := strings.TrimSpace(os.Getenv("MATCH_QUEUE_REDIS_ADDR"))
 	if matchQueueAddr == "" {
 		matchQueueAddr = redisAddr
@@ -72,6 +84,7 @@ func Load() (*Config, error) {
 	if matchQueueName == "" {
 		matchQueueName = "trip:requests"
 	}
+	matchQueueSQSURL := strings.TrimSpace(os.Getenv("MATCH_QUEUE_SQS_URL"))
 
 	accessTTL := parseDuration(os.Getenv("ACCESS_TOKEN_TTL_MINUTES"), 15*time.Minute, time.Minute)
 	refreshTTL := parseDuration(os.Getenv("REFRESH_TOKEN_TTL_DAYS"), 30*24*time.Hour, 24*time.Hour)
@@ -87,6 +100,8 @@ func Load() (*Config, error) {
 		appEnv = "development"
 	}
 	isProd := strings.EqualFold(appEnv, "prod") || strings.EqualFold(appEnv, "production")
+
+	awsRegion := strings.TrimSpace(os.Getenv("AWS_REGION"))
 
 	routingBaseURL := strings.TrimSpace(os.Getenv("ROUTING_BASE_URL"))
 	if routingBaseURL == "" {
@@ -150,6 +165,7 @@ func Load() (*Config, error) {
 	return &Config{
 		Port:                    port,
 		DatabaseURL:             dbURL,
+		TripReplicaDatabaseURL:  replicaURL,
 		AllowedOrigins:          origins,
 		JWTSecret:               jwtSecret,
 		AccessTokenTTL:          accessTTL,
@@ -161,9 +177,13 @@ func Load() (*Config, error) {
 		RedisAddr:               redisAddr,
 		RedisPassword:           redisPassword,
 		RedisDB:                 redisDB,
+		HomeCacheTTL:            homeCacheTTL,
+		MatchQueueBackend:       matchQueueBackend,
 		MatchQueueAddr:          matchQueueAddr,
 		MatchQueueDB:            matchQueueDB,
 		MatchQueueName:          matchQueueName,
+		MatchQueueSQSURL:        matchQueueSQSURL,
+		AWSRegion:               awsRegion,
 		FirebaseCredentialsFile: firebaseCredsFile,
 		FirebaseCredentialsJSON: firebaseCredsJSON,
 		SentryDSN:               sentryDSN,

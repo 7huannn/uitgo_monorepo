@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
+	"uitgo/backend/internal/cache"
 	"uitgo/backend/internal/config"
 	dbrepo "uitgo/backend/internal/db"
 	"uitgo/backend/internal/domain"
@@ -80,6 +81,16 @@ func New(cfg *config.Config, db *gorm.DB, driverProvisioner handlers.DriverProvi
 	savedRepo := dbrepo.NewSavedPlaceRepository(db)
 	promoRepo := dbrepo.NewPromotionRepository(db)
 	newsRepo := dbrepo.NewNewsRepository(db)
+
+	if cfg.HomeCacheTTL > 0 {
+		homeCache, err := cache.NewHomeCache(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB, cfg.HomeCacheTTL)
+		if err != nil {
+			log.Printf("warn: home cache disabled: %v", err)
+		} else if homeCache != nil {
+			promoRepo = cache.NewCachedPromotionRepository(promoRepo, homeCache)
+			newsRepo = cache.NewCachedNewsRepository(newsRepo, homeCache)
+		}
+	}
 	homeService := domain.NewHomeService(walletRepo, savedRepo, promoRepo, newsRepo)
 	handlers.RegisterWalletRoutes(router, walletService)
 	handlers.RegisterHomeRoutes(router, homeService)

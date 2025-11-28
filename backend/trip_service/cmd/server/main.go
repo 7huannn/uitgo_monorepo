@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"path/filepath"
@@ -42,23 +43,49 @@ func main() {
 	}
 	defer sqlDB.Close()
 
+	readDB := pool
+	var replicaSQLClose func()
+	if cfg.TripReplicaDatabaseURL != "" {
+		replica, err := db.Connect(cfg.TripReplicaDatabaseURL)
+		if err != nil {
+			log.Fatalf("connect replica database: %v", err)
+		}
+		readDB = replica
+		if replicaSQL, err := replica.DB(); err == nil {
+			replicaSQLClose = func() {
+				_ = replicaSQL.Close()
+			}
+		} else {
+			log.Printf("warn: replica db handle: %v", err)
+		}
+	}
+	if replicaSQLClose != nil {
+		defer replicaSQLClose()
+	}
+
 	var locationWriter handlers.DriverLocationWriter
 	if cfg.DriverServiceURL != "" {
 		locationWriter = clients.NewLocationClient(cfg.DriverServiceURL, cfg.InternalAPIKey)
 	}
 
 	var dispatcher matching.TripDispatcher
-	if cfg.MatchQueueAddr != "" {
-		queue, err := matching.NewRedisQueue(cfg.MatchQueueAddr, cfg.RedisPassword, cfg.MatchQueueDB, cfg.MatchQueueName)
-		if err != nil {
-			log.Printf("warn: unable to initialize trip queue: %v", err)
-		} else {
-			dispatcher = queue
-			defer queue.Close()
-		}
+	queue, err := matching.NewQueue(context.Background(), matching.QueueOptions{
+		Backend:       cfg.MatchQueueBackend,
+		RedisAddr:     cfg.MatchQueueAddr,
+		RedisPassword: cfg.RedisPassword,
+		RedisDB:       cfg.MatchQueueDB,
+		QueueName:     cfg.MatchQueueName,
+		SQSQueueURL:   cfg.MatchQueueSQSURL,
+		SQSRegion:     cfg.AWSRegion,
+	})
+	if err != nil {
+		log.Printf("warn: unable to initialize trip queue: %v", err)
+	} else if queue != nil {
+		dispatcher = queue
+		defer queue.Close()
 	}
 
-	srv, err := server.New(cfg, pool, locationWriter, dispatcher)
+	srv, err := server.New(cfg, pool, readDB, locationWriter, dispatcher)
 	if err != nil {
 		log.Fatalf("init server: %v", err)
 	}
