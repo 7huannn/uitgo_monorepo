@@ -11,4 +11,5 @@ type User struct {
 	PasswordHash string
 	Role         string
 	CreatedAt    time.Time
+	Disabled     bool
 }

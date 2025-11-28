@@ -194,13 +194,23 @@ docker run --rm -p 8081:8080 \
 
 Then open [http://localhost:8081](http://localhost:8081).
 
-### Admin playground
+### Admin web
 
-A static testing console lives in [`admin/index.html`](../admin/index.html). Open it in the browser, set the API base, and you can:
+Use the Flutter admin console at [`apps/admin_app`](../apps/admin_app):
 
-- Hit `/health`, `/v1/trips`, `/v1/trips/:id`, `/v1/trips/:id/status`
-- Connect to the WebSocket channel. Browsers can’t set custom headers, so the page appends `?role=` and `?userId=` query params that the backend accepts.
-- Register and log in; on success the playground keeps your JWT in `localStorage` and attaches it to subsequent requests.
+```bash
+cd apps/admin_app
+flutter pub get
+flutter run -d chrome --web-renderer html
+```
+
+Set `API base` to `http://localhost:8080`, log in with the seeded admin
+(`admin@example.com` / `admin123` in dev compose), and you can create users,
+manage trips, and drive the WebSocket channel from the browser.
+
+Admin-only endpoints:
+- `GET /admin/users?role=&disabled=&q=&limit=&offset=` – list users with filters.
+- `PATCH /admin/users/{id}` – update `role` (rider/driver/admin) and enable/disable an account.
 
 ## Architecture Overview
 

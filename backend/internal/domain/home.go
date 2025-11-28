@@ -29,6 +29,7 @@ type Promotion struct {
 	GradientEnd   string     `json:"gradientEnd"`
 	ExpiresAt     *time.Time `json:"expiresAt,omitempty"`
 	Priority      int        `json:"priority"`
+	IsActive      bool       `json:"isActive"`
 }
 
 // NewsItem highlights product updates on home.
@@ -51,6 +52,9 @@ type SavedPlaceRepository interface {
 // PromotionRepository exposes marketing banners.
 type PromotionRepository interface {
 	ListActive(ctx context.Context) ([]*Promotion, error)
+	ListAll(ctx context.Context) ([]*Promotion, error)
+	Create(ctx context.Context, promo *Promotion) (*Promotion, error)
+	Deactivate(ctx context.Context, id string) error
 }
 
 // NewsRepository returns newsfeed entries.

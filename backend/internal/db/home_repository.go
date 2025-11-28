@@ -161,9 +161,77 @@ func (r *promotionRepository) ListActive(ctx context.Context) ([]*domain.Promoti
 			GradientEnd:   row.GradientEnd,
 			ExpiresAt:     row.ExpiresAt,
 			Priority:      row.Priority,
+			IsActive:      row.IsActive,
 		})
 	}
 	return items, nil
+}
+
+func (r *promotionRepository) ListAll(ctx context.Context) ([]*domain.Promotion, error) {
+	var rows []promotionModel
+	if err := r.db.WithContext(ctx).
+		Order("priority DESC, created_at DESC").
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	items := make([]*domain.Promotion, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, &domain.Promotion{
+			ID:            row.ID.String(),
+			Title:         row.Title,
+			Description:   row.Description,
+			Code:          row.Code,
+			ImageURL:      row.ImageURL,
+			GradientStart: row.GradientStart,
+			GradientEnd:   row.GradientEnd,
+			ExpiresAt:     row.ExpiresAt,
+			Priority:      row.Priority,
+			IsActive:      row.IsActive,
+		})
+	}
+	return items, nil
+}
+
+func (r *promotionRepository) Create(ctx context.Context, promo *domain.Promotion) (*domain.Promotion, error) {
+	if promo == nil {
+		return nil, gorm.ErrInvalidData
+	}
+	id := uuid.New()
+	model := promotionModel{
+		ID:            id,
+		Title:         promo.Title,
+		Description:   promo.Description,
+		Code:          promo.Code,
+		ImageURL:      promo.ImageURL,
+		GradientStart: promo.GradientStart,
+		GradientEnd:   promo.GradientEnd,
+		ExpiresAt:     promo.ExpiresAt,
+		Priority:      promo.Priority,
+		IsActive:      true,
+	}
+	if err := r.db.WithContext(ctx).Create(&model).Error; err != nil {
+		return nil, err
+	}
+	promo.ID = model.ID.String()
+	return promo, nil
+}
+
+func (r *promotionRepository) Deactivate(ctx context.Context, id string) error {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return gorm.ErrRecordNotFound
+	}
+	res := r.db.WithContext(ctx).
+		Model(&promotionModel{}).
+		Where("id = ?", uid).
+		Update("is_active", false)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // News repository ----------------------------------------------------------

@@ -15,6 +15,8 @@ type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (*User, error)
 	FindByID(ctx context.Context, id string) (*User, error)
 	UpdateProfile(ctx context.Context, id string, name *string, phone *string) (*User, error)
+	List(ctx context.Context, role string, disabled *bool, q string, limit, offset int) ([]*User, int64, error)
+	UpdateRoleAndStatus(ctx context.Context, id string, role *string, disabled *bool) (*User, error)
 }
 
 // NewUserRepository returns a GORM-backed user repository.
@@ -30,6 +32,7 @@ type userModel struct {
 	PasswordHash string
 	Role         string    `gorm:"default:rider"`
 	CreatedAt    time.Time `gorm:"autoCreateTime"`
+	Disabled     bool      `gorm:"default:false"`
 }
 
 func (userModel) TableName() string {
@@ -56,6 +59,7 @@ func (r *gormUserRepository) Create(ctx context.Context, user *User) error {
 		PasswordHash: user.PasswordHash,
 		Role:         role,
 		CreatedAt:    now,
+		Disabled:     user.Disabled,
 	}
 
 	if err := r.db.WithContext(ctx).Create(&model).Error; err != nil {
@@ -65,6 +69,7 @@ func (r *gormUserRepository) Create(ctx context.Context, user *User) error {
 	user.ID = model.ID.String()
 	user.CreatedAt = model.CreatedAt
 	user.Role = model.Role
+	user.Disabled = model.Disabled
 	return nil
 }
 
@@ -84,6 +89,7 @@ func (r *gormUserRepository) FindByEmail(ctx context.Context, email string) (*Us
 		PasswordHash: model.PasswordHash,
 		Role:         model.Role,
 		CreatedAt:    model.CreatedAt,
+		Disabled:     model.Disabled,
 	}, nil
 }
 
@@ -106,6 +112,7 @@ func (r *gormUserRepository) FindByID(ctx context.Context, id string) (*User, er
 		PasswordHash: model.PasswordHash,
 		Role:         model.Role,
 		CreatedAt:    model.CreatedAt,
+		Disabled:     model.Disabled,
 	}, nil
 }
 
@@ -141,5 +148,76 @@ func (r *gormUserRepository) UpdateProfile(ctx context.Context, id string, name 
 		}
 	}
 
+	return r.FindByID(ctx, id)
+}
+
+func (r *gormUserRepository) List(ctx context.Context, role string, disabled *bool, q string, limit, offset int) ([]*User, int64, error) {
+	var models []userModel
+	db := r.db.WithContext(ctx).Model(&userModel{})
+	role = strings.TrimSpace(strings.ToLower(role))
+	if role != "" {
+		db = db.Where("role = ?", role)
+	}
+	if disabled != nil {
+		db = db.Where("disabled = ?", *disabled)
+	}
+	q = strings.TrimSpace(strings.ToLower(q))
+	if q != "" {
+		like := "%" + q + "%"
+		db = db.Where("LOWER(email) LIKE ? OR LOWER(name) LIKE ?", like, like)
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	var total int64
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	if err := db.Limit(limit).Offset(offset).Order("created_at DESC").Find(&models).Error; err != nil {
+		return nil, 0, err
+	}
+
+	users := make([]*User, 0, len(models))
+	for _, m := range models {
+		users = append(users, &User{
+			ID:           m.ID.String(),
+			Name:         m.Name,
+			Email:        m.Email,
+			Phone:        m.Phone,
+			PasswordHash: m.PasswordHash,
+			Role:         m.Role,
+			CreatedAt:    m.CreatedAt,
+			Disabled:     m.Disabled,
+		})
+	}
+	return users, total, nil
+}
+
+func (r *gormUserRepository) UpdateRoleAndStatus(ctx context.Context, id string, role *string, disabled *bool) (*User, error) {
+	uid, err := uuid.Parse(id)
+	if err != nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+	updates := map[string]any{}
+	if role != nil {
+		updates["role"] = strings.TrimSpace(strings.ToLower(*role))
+	}
+	if disabled != nil {
+		updates["disabled"] = *disabled
+	}
+	if len(updates) > 0 {
+		res := r.db.WithContext(ctx).Model(&userModel{}).Where("id = ?", uid).Updates(updates)
+		if res.Error != nil {
+			return nil, res.Error
+		}
+		if res.RowsAffected == 0 {
+			return nil, gorm.ErrRecordNotFound
+		}
+	}
 	return r.FindByID(ctx, id)
 }

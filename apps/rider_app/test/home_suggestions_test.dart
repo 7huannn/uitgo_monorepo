@@ -88,8 +88,7 @@ void main() {
         providers: [
           ChangeNotifierProvider(create: (_) => WalletNotifier()),
         ],
-        child:
-            MaterialApp(home: HomePage(debugStartReady: debugStartReady)),
+        child: MaterialApp(home: HomePage(debugStartReady: debugStartReady)),
       ),
     );
     // Wait until the destination input appears.
