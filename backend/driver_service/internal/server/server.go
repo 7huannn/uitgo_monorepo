@@ -26,7 +26,7 @@ import (
 type Server struct {
 	engine      *gin.Engine
 	cfg         *config.Config
-	queue       *matching.RedisQueue
+	queue       matching.Queue
 	queueCancel context.CancelFunc
 }
 
@@ -65,14 +65,17 @@ func New(cfg *config.Config, db *gorm.DB, tripSync domain.TripSyncRepository) (*
 	}
 	driverService := domain.NewDriverService(driverRepo, assignmentRepo, tripSync, notificationSvc, locator)
 
-	var matchQueue *matching.RedisQueue
-	if cfg.MatchQueueAddr != "" {
-		queue, err := matching.NewRedisQueue(cfg.MatchQueueAddr, cfg.RedisPassword, cfg.MatchQueueDB, cfg.MatchQueueName)
-		if err != nil {
-			log.Printf("warn: init trip queue failed: %v", err)
-		} else {
-			matchQueue = queue
-		}
+	matchQueue, err := matching.NewQueue(context.Background(), matching.QueueOptions{
+		Backend:       cfg.MatchQueueBackend,
+		RedisAddr:     cfg.MatchQueueAddr,
+		RedisPassword: cfg.RedisPassword,
+		RedisDB:       cfg.MatchQueueDB,
+		QueueName:     cfg.MatchQueueName,
+		SQSQueueURL:   cfg.MatchQueueSQSURL,
+		SQSRegion:     cfg.AWSRegion,
+	})
+	if err != nil {
+		log.Printf("warn: init trip queue failed: %v", err)
 	}
 
 	handlers.RegisterDriverRoutes(router, driverService)

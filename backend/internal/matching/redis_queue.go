@@ -11,29 +11,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// TripEvent captures payloads pushed onto the async matching queue.
-type TripEvent struct {
-	TripID     string    `json:"tripId"`
-	RiderID    string    `json:"riderId"`
-	ServiceID  string    `json:"serviceId"`
-	OriginText string    `json:"originText"`
-	DestText   string    `json:"destText"`
-	Requested  time.Time `json:"requestedAt"`
-}
-
-// TripDispatcher publishes trip events for asynchronous processing.
-type TripDispatcher interface {
-	Publish(ctx context.Context, event *TripEvent) error
-}
-
-// TripEventHandler processes a single trip event from the matching queue.
-type TripEventHandler func(ctx context.Context, event *TripEvent) error
-
-// TripConsumer consumes trip events.
-type TripConsumer interface {
-	Consume(ctx context.Context, handler TripEventHandler) error
-}
-
 // RedisQueue implements TripDispatcher and TripConsumer.
 type RedisQueue struct {
 	client  *redis.Client
@@ -127,5 +104,4 @@ func (q *RedisQueue) Consume(ctx context.Context, handler TripEventHandler) erro
 	}
 }
 
-var _ TripDispatcher = (*RedisQueue)(nil)
-var _ TripConsumer = (*RedisQueue)(nil)
+var _ Queue = (*RedisQueue)(nil)

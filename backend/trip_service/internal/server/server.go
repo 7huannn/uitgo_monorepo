@@ -30,7 +30,7 @@ type Server struct {
 }
 
 // New constructs the HTTP server with trip routes and internal hooks.
-func New(cfg *config.Config, db *gorm.DB, driverLocations handlers.DriverLocationWriter, dispatcher matching.TripDispatcher) (*Server, error) {
+func New(cfg *config.Config, db *gorm.DB, readDB *gorm.DB, driverLocations handlers.DriverLocationWriter, dispatcher matching.TripDispatcher) (*Server, error) {
 	const serviceName = "trip-service"
 	router := gin.New()
 	gin.DisableConsoleColor()
@@ -54,7 +54,7 @@ func New(cfg *config.Config, db *gorm.DB, driverLocations handlers.DriverLocatio
 
 	walletRepo := dbrepo.NewWalletRepository(db)
 	walletService := domain.NewWalletService(walletRepo)
-	tripRepo := dbrepo.NewTripRepository(db)
+	tripRepo := dbrepo.NewTripRepositoryWithReplica(db, readDB)
 	notificationRepo := dbrepo.NewNotificationRepository(db)
 	deviceTokenRepo := dbrepo.NewDeviceTokenRepository(db)
 	pushSender, err := notification.BuildSenderFromConfig(context.Background(), cfg)

@@ -34,7 +34,13 @@ output "trip_db_replica" {
 
 output "autoscaling" {
   value = {
-    driver_asg = module.driver_service_asg.asg_name
-    trip_asg   = module.trip_service_asg.asg_name
+    stack_asg = module.trip_service_asg.asg_name
+  }
+}
+
+output "alb" {
+  value = {
+    dns_name = aws_lb.api.dns_name
+    arn      = aws_lb.api.arn
   }
 }

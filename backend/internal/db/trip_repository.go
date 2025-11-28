@@ -12,7 +12,8 @@ import (
 )
 
 type tripRepository struct {
-	db *gorm.DB
+	db   *gorm.DB
+	read *gorm.DB
 }
 
 var (
@@ -22,7 +23,25 @@ var (
 
 // NewTripRepository returns a GORM-backed TripRepository.
 func NewTripRepository(db *gorm.DB) domain.TripRepository {
-	return &tripRepository{db: db}
+	return NewTripRepositoryWithReplica(db, nil)
+}
+
+// NewTripRepositoryWithReplica wires a repository that reads from replica when provided.
+func NewTripRepositoryWithReplica(primary *gorm.DB, replica *gorm.DB) domain.TripRepository {
+	if primary == nil {
+		return &tripRepository{}
+	}
+	if replica == nil {
+		replica = primary
+	}
+	return &tripRepository{db: primary, read: replica}
+}
+
+func (r *tripRepository) reader() *gorm.DB {
+	if r.read != nil {
+		return r.read
+	}
+	return r.db
 }
 
 type tripModel struct {
@@ -106,7 +125,7 @@ func (r *tripRepository) GetTrip(id string) (*domain.Trip, error) {
 	}
 
 	var model tripModel
-	if err := r.db.First(&model, "id = ?", uid).Error; err != nil {
+	if err := r.reader().First(&model, "id = ?", uid).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, domain.ErrTripNotFound
 		}
@@ -214,7 +233,7 @@ func (r *tripRepository) GetLatestLocation(tripID string) (*domain.LocationUpdat
 	}
 
 	var event tripEventModel
-	err = r.db.
+	err = r.reader().
 		Where("trip_id = ? AND type = ?", uid, "location").
 		Order("created_at DESC").
 		First(&event).Error
@@ -244,7 +263,8 @@ func (r *tripRepository) ListTrips(userID string, role string, limit, offset int
 		offset = 0
 	}
 
-	query := r.db.Model(&tripModel{})
+	readDB := r.reader()
+	query := readDB.Model(&tripModel{})
 	switch role {
 	case "driver":
 		uid, err := uuid.Parse(userID)
@@ -252,7 +272,7 @@ func (r *tripRepository) ListTrips(userID string, role string, limit, offset int
 			return nil, 0, domain.ErrDriverNotFound
 		}
 		var driver driverModel
-		if err := r.db.Select("id").First(&driver, "user_id = ?", uid).Error; err != nil {
+		if err := readDB.Select("id").First(&driver, "user_id = ?", uid).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return []*domain.Trip{}, 0, nil
 			}

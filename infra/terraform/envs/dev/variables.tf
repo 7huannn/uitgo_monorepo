@@ -43,14 +43,53 @@ variable "availability_zones" {
   default = ["ap-southeast-1a", "ap-southeast-1b"]
 }
 
-variable "driver_service_ami" {
-  description = "AMI ID for driver-service instances"
+variable "container_registry" {
+  description = "Container registry base (e.g. ghcr.io/uitgo)"
   type        = string
-  default     = "ami-xxxxxxxx"
+  default     = "ghcr.io/uitgo"
+}
+
+variable "backend_image_tag" {
+  description = "Tag for backend service Docker images"
+  type        = string
+  default     = "latest"
 }
 
 variable "trip_service_ami" {
   description = "AMI ID for trip-service instances"
   type        = string
   default     = "ami-xxxxxxxx"
+}
+
+variable "alb_certificate_arn" {
+  description = "Optional ACM certificate ARN for HTTPS listener"
+  type        = string
+  default     = ""
+}
+
+variable "jwt_secret" {
+  description = "JWT signing secret for backend services"
+  type        = string
+  default     = "uitgo-prod-secret-change-me"
+  sensitive   = true
+}
+
+variable "refresh_token_encryption_key" {
+  description = "32-byte key for refresh token encryption"
+  type        = string
+  default     = "uitgo-dev-refresh-key-32bytes!!!"
+  sensitive   = true
+}
+
+variable "internal_api_key" {
+  description = "Internal API key used between services"
+  type        = string
+  default     = "uitgo-internal-secret"
+  sensitive   = true
+}
+
+variable "cors_allowed_origins" {
+  description = "Comma separated list of allowed origins"
+  type        = string
+  default     = "https://app.uitgo.vn"
 }
