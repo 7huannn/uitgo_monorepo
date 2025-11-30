@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.22 AS builder
+FROM golang:1.25.3 AS builder
 WORKDIR /workspace
-COPY go.mod go.sum ./
+COPY backend/go.mod backend/go.sum ./backend/
 COPY backend ./backend
 RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/workspace/backend/.cache/go-build,sharing=locked \

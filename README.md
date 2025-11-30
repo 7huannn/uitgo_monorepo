@@ -1,6 +1,6 @@
 # UITGo Monorepo
 
-Nền tảng gọi xe gồm các Go microservice (user, trip, driver) sau API gateway, ứng dụng Flutter cho rider/driver, cùng stack quan sát (Prometheus, Grafana, Sentry) và bộ Terraform/hạ tầng mẫu. Kho repo này dành cho phát triển nội bộ, demo, và triển khai thử nghiệm.
+UITGo là nền tảng gọi xe mẫu, trong đó ứng dụng Flutter cho rider và driver giao tiếp qua API Gateway tới các microservice viết bằng Go (user, trip, driver). Dự án tích hợp sẵn hệ thống quan sát (Prometheus, Grafana, Sentry) và hạ tầng mẫu bằng Terraform, phục vụ phát triển, demo và triển khai thử nghiệm.
 
 ## Toàn cảnh
 - Backend: `user-service`, `trip-service`, `driver-service` chạy sau gateway Nginx; Redis dùng cho geospatial index và hàng đợi ghép chuyến.

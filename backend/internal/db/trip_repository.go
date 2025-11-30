@@ -267,18 +267,8 @@ func (r *tripRepository) ListTrips(userID string, role string, limit, offset int
 	query := readDB.Model(&tripModel{})
 	switch role {
 	case "driver":
-		uid, err := uuid.Parse(userID)
-		if err != nil {
-			return nil, 0, domain.ErrDriverNotFound
-		}
-		var driver driverModel
-		if err := readDB.Select("id").First(&driver, "user_id = ?", uid).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return []*domain.Trip{}, 0, nil
-			}
-			return nil, 0, err
-		}
-		query = query.Where("driver_id = ?", driver.ID.String())
+		// In demo mode we don't have drivers table in this DB; show available trips.
+		query = query.Where("driver_id IS NULL OR driver_id = ?", userID)
 	default:
 		query = query.Where("rider_id = ?", userID)
 	}
