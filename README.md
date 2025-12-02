@@ -31,6 +31,7 @@ UITGo là nền tảng gọi xe mẫu, trong đó ứng dụng Flutter cho rider
 docker compose up --build
 ```
 - Khởi tạo 3 Postgres, 3 service Go, Redis, API Gateway, Prometheus, Grafana.
+- Mỗi service dùng DB riêng (user/trip/driver); trip-service đã tách khỏi DB của user-service.
 - Endpoint: API `http://localhost:8080`, Prometheus `http://localhost:9090`, Grafana `http://localhost:3000` (admin/`uitgo`).
 - Grafana tự nạp dashboard `observability/grafana/dashboards/uitgo-overview.json`.
 
@@ -107,6 +108,7 @@ curl -s http://localhost:8080/auth/refresh \
 
 ## Triển khai & hạ tầng
 - Staging Compose: `infra/staging` (copy `.env.staging.example` → `.env.staging`, rồi `docker compose up -d`).
+- Terraform scaffold & hướng dẫn: `infra/terraform/README.md` (VPC, RDS, Redis, SQS; deploy app hiện chạy docker compose trên EC2/ASG).
 - Terraform scaffold: `infra/terraform` (module network, rds, redis, sqs, asg). Đặt `TF_VAR_db_password` (hoặc file `dev.tfvars`) rồi `terraform init && terraform apply` trong `infra/terraform/envs/dev`.
 - AWS triển khai dùng **một Auto Scaling Group** chạy script `backend.sh.tpl` để khởi động toàn bộ stack Docker Compose (user/trip/driver + nginx). Cách này đơn giản hoá vận hành nhưng mọi service cùng scale theo số node EC2 chung; cần tăng kích thước instance hoặc nhân bản toàn bộ stack nếu muốn mở rộng.
 

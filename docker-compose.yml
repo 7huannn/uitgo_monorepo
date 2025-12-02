@@ -74,8 +74,7 @@ services:
       dockerfile: backend/trip_service/Dockerfile
     environment:
       PORT: 8082
-      # Share user-service DB so wallet data is consistent for demo
-      POSTGRES_DSN: postgres://uitgo:uitgo@user-db:5432/user_service?sslmode=disable
+      POSTGRES_DSN: postgres://uitgo:uitgo@trip-db:5432/trip_service?sslmode=disable
       JWT_SECRET: uitgo-dev-secret
       REFRESH_TOKEN_ENCRYPTION_KEY: uitgo-dev-refresh-key-32bytes!!!
       CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:*,http://127.0.0.1:*,https://localhost:8080,https://127.0.0.1:8080,https://localhost:*,https://127.0.0.1:*
@@ -85,7 +84,7 @@ services:
       MATCH_QUEUE_NAME: trip:requests
       QUEUE_BACKEND: redis
     depends_on:
-      user-db:
+      trip-db:
         condition: service_healthy
     networks:
       - uitgo-net
