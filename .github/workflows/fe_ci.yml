@@ -1,0 +1,59 @@
+name: Flutter CI
+
+on:
+  pull_request:
+    paths:
+      - 'apps/rider_app/**'
+      - 'apps/driver_app/**'
+      - '.github/workflows/fe_ci.yml'
+      - 'analysis_options.yaml'
+      - 'apps/**/analysis_options.yaml'
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'apps/rider_app/**'
+      - 'apps/driver_app/**'
+      - '.github/workflows/fe_ci.yml'
+      - 'analysis_options.yaml'
+      - 'apps/**/analysis_options.yaml'
+
+jobs:
+  flutter:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app:
+          - name: rider
+            path: apps/rider_app
+          - name: driver
+            path: apps/driver_app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter Doctor
+        run: flutter --version
+
+      - name: Install dependencies
+        working-directory: ${{ matrix.app.path }}
+        run: flutter pub get
+
+      - name: Flutter analyze
+        working-directory: ${{ matrix.app.path }}
+        run: flutter analyze
+
+      - name: Flutter tests
+        working-directory: ${{ matrix.app.path }}
+        run: flutter test --coverage
+
+      - name: Flutter build web
+        working-directory: ${{ matrix.app.path }}
+        run: flutter build web --release

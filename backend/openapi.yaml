@@ -1,0 +1,820 @@
+openapi: 3.1.0
+info:
+  title: UITGo Backend API
+  version: 0.4.0
+  description: |
+    Minimal trip & auth API powering the UITGo rider/driver apps.
+    Realtime updates stream over WebSocket at `ws://{host}/v1/trips/{tripId}/ws`.
+servers:
+  - url: http://localhost:8080
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+  /auth/register:
+    post:
+      summary: Register user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid payload
+        '409':
+          description: Email already registered
+  /auth/login:
+    post:
+      summary: Login user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid payload
+        '401':
+          description: Invalid credentials
+  /auth/me:
+    get:
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized
+        '404':
+          description: User not found
+  /users/me:
+    patch:
+      summary: Update current user profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid payload
+        '401':
+          description: Unauthorized
+        '404':
+          description: User not found
+  /v1/trips:
+    get:
+      summary: List trips for current user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [rider, driver]
+            default: rider
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: page
+          in: query
+          required: false
+          description: Optional 1-based page index (takes precedence over limit/offset)
+          schema:
+            type: integer
+            minimum: 1
+        - name: pageSize
+          in: query
+          required: false
+          description: Page size when using the page parameter
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Trip page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripListResponse'
+        '401':
+          description: Unauthorized
+    post:
+      summary: Create a trip
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTripRequest'
+      responses:
+        '201':
+          description: Trip created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripResponse'
+        '401':
+          description: Unauthorized
+  /v1/trips/{id}:
+    get:
+      summary: Get trip details
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TripId'
+      responses:
+        '200':
+          description: Trip fetched
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripResponse'
+        '404':
+          description: Trip not found
+    patch:
+      summary: Update trip status
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TripId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStatusRequest'
+      responses:
+        '200':
+          description: Trip updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TripResponse'
+        '400':
+          description: Invalid request
+        '404':
+          description: Trip not found
+  /v1/trips/{id}/ws:
+    get:
+      summary: Trip realtime channel
+      description: |
+        Upgrades to WebSocket. Drivers send `{"type":"location","lat":0,"lng":0}` messages.
+        Riders receive broadcasts including driver locations and status changes.
+        Optional query parameters `role` and `userId` can be supplied when custom headers
+        are not available (e.g. browser clients).
+      parameters:
+        - $ref: '#/components/parameters/TripId'
+        - name: role
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [rider, driver]
+        - name: userId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '101':
+          description: WebSocket Upgrade
+  /notifications:
+    get:
+      summary: List notifications
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: unreadOnly
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Notification page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationListResponse'
+        '401':
+          description: Unauthorized
+  /notifications/{id}/read:
+    patch:
+      summary: Mark notification as read
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/NotificationId'
+      responses:
+        '204':
+          description: Marked as read
+        '401':
+          description: Unauthorized
+        '404':
+          description: Notification not found
+  /wallet:
+    get:
+      summary: '[Deprecated] Get rider wallet summary'
+      description: This legacy endpoint is kept for backward compatibility. Use `/v1/wallet` instead.
+      deprecated: true
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Wallet summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+        '401':
+          description: Unauthorized
+  /v1/wallet:
+    get:
+      summary: Get wallet balance and rewards
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Wallet summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+        '401':
+          description: Unauthorized
+  /v1/wallet/transactions:
+    get:
+      summary: List wallet transactions
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Paginated transactions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletTransactionListResponse'
+        '401':
+          description: Unauthorized
+  /v1/wallet/topup:
+    post:
+      summary: Mock wallet top-up
+      description: Validates the amount and instantly credits the rider wallet.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WalletTopUpRequest'
+      responses:
+        '201':
+          description: Updated wallet summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wallet'
+        '400':
+          description: Invalid amount
+        '401':
+          description: Unauthorized
+  /saved_places:
+    get:
+      summary: List saved places
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Saved places
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SavedPlace'
+        '401':
+          description: Unauthorized
+    post:
+      summary: Create a saved place
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSavedPlaceRequest'
+      responses:
+        '201':
+          description: Saved place created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedPlace'
+        '400':
+          description: Invalid payload
+        '401':
+          description: Unauthorized
+  /saved_places/{id}:
+    delete:
+      summary: Delete a saved place
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SavedPlaceId'
+      responses:
+        '204':
+          description: Deleted
+        '401':
+          description: Unauthorized
+        '404':
+          description: Saved place not found
+  /promotions:
+    get:
+      summary: List active promotions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Promotions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Promotion'
+        '401':
+          description: Unauthorized
+  /news:
+    get:
+      summary: List UITGo news items
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 5
+      responses:
+        '200':
+          description: News items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NewsItem'
+        '401':
+          description: Unauthorized
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TripId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    NotificationId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SavedPlaceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    AuthResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        token:
+          type: string
+    User:
+      type: object
+      required:
+        - id
+        - email
+        - name
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        phone:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    UpdateUserRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+    RegisterRequest:
+      type: object
+      required:
+        - name
+        - email
+        - password
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        password:
+          type: string
+          format: password
+          minLength: 6
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    TripResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        riderId:
+          type: string
+        driverId:
+          type: string
+          nullable: true
+        serviceId:
+          type: string
+        originText:
+          type: string
+        destText:
+          type: string
+        status:
+          $ref: '#/components/schemas/TripStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lastLocation:
+          $ref: '#/components/schemas/LocationUpdate'
+          nullable: true
+    TripListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TripResponse'
+        total:
+          type: integer
+          format: int64
+        limit:
+          type: integer
+        offset:
+          type: integer
+    CreateTripRequest:
+      type: object
+      required:
+        - originText
+        - destText
+        - serviceId
+      properties:
+        originText:
+          type: string
+        destText:
+          type: string
+        serviceId:
+          type: string
+    UpdateStatusRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          $ref: '#/components/schemas/TripStatus'
+    TripStatus:
+      type: string
+      enum: [requested, accepted, arriving, in_ride, completed, cancelled]
+    LocationUpdate:
+      type: object
+      properties:
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        timestamp:
+          type: string
+          format: date-time
+    Notification:
+      type: object
+      required:
+        - id
+        - userId
+        - title
+        - body
+        - type
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+        title:
+          type: string
+        body:
+          type: string
+        type:
+          type: string
+        tripId:
+          type: string
+          format: uuid
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        readAt:
+          type: string
+          format: date-time
+          nullable: true
+    NotificationListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+        total:
+          type: integer
+          format: int64
+        limit:
+          type: integer
+        offset:
+          type: integer
+    Wallet:
+      type: object
+      properties:
+        balance:
+          type: integer
+          format: int64
+        rewardPoints:
+          type: integer
+        updatedAt:
+          type: string
+          format: date-time
+    WalletTopUpRequest:
+      type: object
+      required:
+        - amount
+      properties:
+        amount:
+          type: integer
+          format: int64
+          minimum: 10000
+          description: Amount in VND to credit immediately.
+    WalletTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [topup, reward, deduction]
+        amount:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+    WalletTransactionListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WalletTransaction'
+        total:
+          type: integer
+          format: int64
+        limit:
+          type: integer
+        offset:
+          type: integer
+    SavedPlace:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateSavedPlaceRequest:
+      type: object
+      required:
+        - name
+        - address
+        - lat
+        - lng
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+    Promotion:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+        code:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+          nullable: true
+        gradientStart:
+          type: string
+          description: Hex color string (#RRGGBB)
+        gradientEnd:
+          type: string
+          description: Hex color string (#RRGGBB)
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        priority:
+          type: integer
+    NewsItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        category:
+          type: string
+        icon:
+          type: string
+        publishedAt:
+          type: string
+          format: date-time
