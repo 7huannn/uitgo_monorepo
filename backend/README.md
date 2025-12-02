@@ -1,0 +1,268 @@
+# UITGo Backend
+
+Go service powering the UITGo rider and driver applications. It exposes a minimal trip API backed by PostgreSQL and streams driver locations over WebSocket.
+
+## Prerequisites
+
+- Go 1.22 (or higher) if you plan to run locally without Docker.
+- Docker & Docker Compose v2 for containerised development.
+- `make`
+
+## Stage 1 microservices
+
+The monolith is now split into three Go services that run behind an API gateway. The easiest way to run the full stack (gateway + 3× Postgres) is via the top-level `docker-compose.yml`:
+
+```bash
+cd <repo-root>
+docker compose up --build
+```
+
+The gateway listens on `http://localhost:8080`, so the Flutter apps can keep their existing `API_BASE`. Each service still loads configuration from the same environment variables listed below (`POSTGRES_DSN`, `JWT_SECRET`, etc.) and runs its own migrations automatically.
+
+### Docker Compose (local)
+- Full stack: `docker compose up --build` starts all 3 services, 3 Postgres instances, Redis, gateway, Prometheus, Grafana.
+- Single service + dependencies (examples):
+  - User only: `docker compose up user-db user-service api-gateway redis`
+  - Trip only: `docker compose up trip-db trip-service redis`
+  - Driver only: `docker compose up driver-db driver-service redis`
+- Tail logs while developing: `docker compose logs -f trip-service` (swap the service name as needed).
+
+You can still work on a single service by building its Dockerfile (e.g. `backend/user_service/Dockerfile`) or by running `go run ./user_service/cmd/server` with an appropriate `.env`.
+
+## Security & telemetry snapshot
+
+- Access tokens now expire after 15 minutes; refresh tokens (stored encrypted) last 30 days and are rotated on every `/auth/refresh`.
+- Login, registration, refresh, and trip creation endpoints are rate limited to 10 requests per minute per IP.
+- All requests are written to the `audit_logs` table (user ID, method, path, status, latency, error message).
+- Prometheus scrapes `/metrics` from every service and Grafana automatically provisions the provided dashboard when using `docker compose up`.
+- Sentry captures Go panics and Flutter crashes—trigger a test event via `curl -H "X-Internal-Token: $INTERNAL_API_KEY" http://localhost:8080/internal/debug/panic`.
+
+### Local development without Docker
+
+```bash
+cd backend
+make migrate     # applies SQL migrations against the configured POSTGRES_DSN
+make run         # starts the HTTP server on $PORT (default 8080)
+```
+
+### Helpful commands
+
+```bash
+make test   # run Go unit tests
+make fmt    # gofmt all packages
+make tidy   # tidy go.mod / go.sum
+make seed   # seed demo riders, drivers, wallets, and trips
+```
+
+The seed command connects to the configured `POSTGRES_DSN`, creates two demo riders, one driver (with vehicle + availability), tops up wallets, and inserts trips in multiple statuses so the Flutter apps have realistic data out of the box.
+
+## API Quickstart
+
+Health check:
+
+```bash
+curl http://localhost:8080/health
+```
+
+Authentication:
+
+```bash
+# Register (201 Created)
+curl -X POST http://localhost:8080/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"UIT Rider","email":"rider@example.com","phone":"0900000000","password":"123456"}'
+
+# Login (200 OK)
+curl -X POST http://localhost:8080/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"rider@example.com","password":"123456"}'
+
+# Refresh (200 OK)
+curl -X POST http://localhost:8080/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"<refresh token from login>"}'
+```
+
+The responses contain a JWT (`token`), user id, name, and email. Pass the token via `Authorization: Bearer <token>` for authenticated requests.
+
+Profile:
+
+```bash
+# Current user
+curl http://localhost:8080/auth/me \
+  -H "Authorization: Bearer <token>"
+
+# Update name/phone
+curl -X PATCH http://localhost:8080/users/me \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"UIT Rider","phone":"0900000000"}'
+```
+
+Create a trip:
+
+```bash
+curl -X POST http://localhost:8080/v1/trips \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <token>" \
+  -d '{"originText":"UIT Campus A","destText":"Dormitory","serviceId":"UIT-Bike"}'
+```
+
+Fetch a trip (replace `<tripId>`):
+
+```bash
+curl http://localhost:8080/v1/trips/<tripId>
+```
+
+Update status:
+
+```bash
+curl -X PATCH http://localhost:8080/v1/trips/<tripId>/status \
+  -H "Content-Type: application/json" \
+  -d '{"status":"arriving"}'
+```
+
+Trip history for the logged-in rider or driver (supports both `limit/offset` and `page/pageSize`):
+
+```bash
+curl "http://localhost:8080/v1/trips?role=rider&page=1&pageSize=5" \
+  -H "Authorization: Bearer <token>"
+```
+
+Notifications:
+
+```bash
+# Fetch unread notifications (default limit 20)
+curl "http://localhost:8080/notifications?unreadOnly=true" \
+  -H "Authorization: Bearer <token>"
+
+# Mark as read
+curl -X PATCH http://localhost:8080/notifications/<notificationId>/read \
+  -H "Authorization: Bearer <token>"
+```
+
+Wallet & saved places:
+
+```bash
+# Wallet summary
+curl http://localhost:8080/wallet \
+  -H "Authorization: Bearer <token>"
+
+# List saved places
+curl http://localhost:8080/saved_places \
+  -H "Authorization: Bearer <token>"
+
+# Create saved place
+curl -X POST http://localhost:8080/saved_places \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Nhà","address":"12 Võ Oanh, Bình Thạnh","lat":10.79698,"lng":106.72098}'
+
+# Delete saved place
+curl -X DELETE http://localhost:8080/saved_places/<placeId> \
+  -H "Authorization: Bearer <token>"
+```
+
+Home promotions & news:
+
+```bash
+curl http://localhost:8080/promotions \
+  -H "Authorization: Bearer <token>"
+
+curl "http://localhost:8080/news?limit=5" \
+  -H "Authorization: Bearer <token>"
+```
+
+WebSocket (requires `wscat` or similar):
+
+```bash
+# Rider subscriber
+wscat -c ws://localhost:8080/v1/trips/<tripId>/ws \
+  -H "Authorization: Bearer <rider token>"
+
+# Driver publishing locations
+wscat -c ws://localhost:8080/v1/trips/<tripId>/ws \
+  -H "Authorization: Bearer <driver token>" \
+  -H "X-Role: driver"
+> {"type":"location","lat":10.8705,"lng":106.8032}
+```
+
+Each driver location message is persisted to `trip_events` and fanned out to all connected riders and drivers on that trip.
+
+### Swagger UI
+
+Preview the OpenAPI spec via Docker:
+
+```bash
+docker run --rm -p 8081:8080 \
+  -e SWAGGER_JSON=/spec/openapi.yaml \
+  -v "$PWD/backend/openapi.yaml:/spec/openapi.yaml" \
+  swaggerapi/swagger-ui
+```
+
+Then open [http://localhost:8081](http://localhost:8081).
+
+### Admin web
+
+Use the Flutter admin console at [`apps/admin_app`](../apps/admin_app):
+
+```bash
+cd apps/admin_app
+flutter pub get
+flutter run -d chrome --web-renderer html
+```
+
+Set `API base` to `http://localhost:8080`, log in with the seeded admin
+(`admin@example.com` / `***REMOVED***` in dev compose), and you can create users,
+manage trips, and drive the WebSocket channel from the browser.
+
+Admin-only endpoints:
+- `GET /admin/users?role=&disabled=&q=&limit=&offset=` – list users with filters.
+- `PATCH /admin/users/{id}` – update `role` (rider/driver/admin) and enable/disable an account.
+
+## Architecture Overview
+
+- **Gin** for HTTP routing & middleware.
+- **GORM** for PostgreSQL persistence (trips + trip_events tables).
+- **Notifications** table stores user alerts and read state for `/notifications` endpoints.
+- **WebSocket** hub per trip broadcasting location/status updates.
+- `.env` configuration (`PORT`, `POSTGRES_DSN`, `CORS_ALLOWED_ORIGINS`).
+
+Database schema is managed with SQL files under `backend/migrations`. The bootstrap migrator (`make migrate`) runs them sequentially.
+
+OpenAPI contract lives in [`openapi.yaml`](openapi.yaml).
+
+> The Docker entrypoint runs `/app/migrate` on every boot, so the API container always applies pending migrations before serving traffic.
+
+## Flutter Rider App Integration Notes
+
+- **Create Trip:** `POST /v1/trips` with body `{originText, destText, serviceId}` and `Authorization: Bearer <accessToken>`.
+- **Fetch Trip:** `GET /v1/trips/{id}` returns the trip plus `lastLocation` (if the driver has reported one).
+- **Realtime Channel:** connect to `ws://{API_BASE_HOST}/v1/trips/{id}/ws`.
+  - Riders simply listen for messages with `Authorization: Bearer <accessToken>` (Flutter web automatically appends `?accessToken=...`).
+  - Drivers rely on the `role` claim in their JWT but may additionally include `X-Role: driver` along with the Authorization header when testing manually.
+
+Minimal Dart snippet:
+
+```dart
+final socket = WebSocketChannel.connect(
+  Uri.parse('ws://localhost:8080/v1/trips/$tripId/ws'),
+  headers: {'Authorization': 'Bearer $accessToken'},
+);
+
+socket.stream.listen((event) {
+  final data = jsonDecode(event as String);
+  if (data['type'] == 'location') {
+    final lat = (data['location']['lat'] as num).toDouble();
+    final lng = (data['location']['lng'] as num).toDouble();
+    // update map marker here
+  }
+});
+```
+
+Drivers can send updates (e.g. using `web_socket_channel`) by writing JSON payloads through `socket.sink.add`.
+
+### CORS for Flutter web builds
+
+- `CORS_ALLOWED_ORIGINS` keeps working as before, but the default list now includes both HTTP and HTTPS localhost wildcards so `flutter run -d chrome` works out of the box.
+- To allow deployed Flutter web builds, set `WEB_APP_ORIGINS` (comma-separated) or `WEB_APP_ORIGIN` in the environment to the exact origins you deploy (for example `https://rider.uitgo.dev,https://driver.uitgo.dev`). The API automatically merges these with the configured `CORS_ALLOWED_ORIGINS`.
