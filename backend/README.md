@@ -19,6 +19,14 @@ docker compose up --build
 
 The gateway listens on `http://localhost:8080`, so the Flutter apps can keep their existing `API_BASE`. Each service still loads configuration from the same environment variables listed below (`POSTGRES_DSN`, `JWT_SECRET`, etc.) and runs its own migrations automatically.
 
+### Docker Compose (local)
+- Full stack: `docker compose up --build` starts all 3 services, 3 Postgres instances, Redis, gateway, Prometheus, Grafana.
+- Single service + dependencies (examples):
+  - User only: `docker compose up user-db user-service api-gateway redis`
+  - Trip only: `docker compose up trip-db trip-service redis`
+  - Driver only: `docker compose up driver-db driver-service redis`
+- Tail logs while developing: `docker compose logs -f trip-service` (swap the service name as needed).
+
 You can still work on a single service by building its Dockerfile (e.g. `backend/user_service/Dockerfile`) or by running `go run ./user_service/cmd/server` with an appropriate `.env`.
 
 ## Security & telemetry snapshot
