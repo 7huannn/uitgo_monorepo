@@ -2,48 +2,67 @@
 Plot p95 latency vs RPS for UIT-Go load tests.
 
 Behaviour:
-- If there are k6 summaries in `loadtests/results/run_*.json`, the script
-  will load them and plot the real p95 vs RPS curve.
-- If no data is found, it falls back to the synthetic AIMD-like curve
-  used in the report.
+- Prefer real p95 data from k6 summaries in `loadtests/results/*run_*.json`
+  (supports env prefixes: local_run_XX.json, aws_run_XX.json).
+- Fall back to the synthetic AIMD-like curve only when no real data exists.
 
 Usage:
   python aimd_latency.py
 
 Output:
-  - loadtests/plots/rps_p95.png (real data if available, otherwise synthetic)
+  - loadtests/plots/rps_p95.png (local vs aws series if present, otherwise synthetic)
 """
 
 import json
 import re
 from pathlib import Path
+from typing import Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 
-def load_k6_results(results_dir: Path):
-    """Load p95 latency from k6 summary json files named run_<R>.json."""
-    points = []
-    for path in sorted(results_dir.glob("run_*.json")):
-        m = re.search(r"run_(\d+)", path.name)
-        if not m:
+def parse_env_and_rps(path: Path) -> Tuple[str, int]:
+    m = re.search(r"(?:(local|aws)[_-])?run_(\d+)", path.stem, flags=re.IGNORECASE)
+    env = (m.group(1).lower() if m and m.group(1) else "unknown")
+    rps = int(m.group(2)) if m else -1
+    return env, rps
+
+
+def extract_p95(data: Dict) -> float:
+    metrics = data.get("metrics", {})
+    duration = metrics.get("http_req_duration", {}) or {}
+    trend = duration.get("trend") if isinstance(duration, dict) else {}
+
+    if isinstance(duration, dict) and "p(95)" in duration:
+        return duration["p(95)"]
+    if isinstance(trend, dict):
+        return trend.get("p(95)")
+    return None
+
+
+def load_k6_results(results_dir: Path) -> Dict[str, List[Tuple[int, float]]]:
+    """Load p95 latency per env from k6 summary json files named *run_<R>.json."""
+    series: Dict[str, List[Tuple[int, float]]] = {}
+    for path in sorted(results_dir.glob("*run_*.json")):
+        env, rps = parse_env_and_rps(path)
+        if rps < 0:
             continue
-        rps = int(m.group(1))
         with path.open() as f:
             data = json.load(f)
-        try:
-            p95 = data["metrics"]["http_req_duration"]["trend"]["p(95)"]
-        except KeyError:
+        p95 = extract_p95(data)
+        if p95 is None:
             continue
-        points.append((rps, p95))
-    points.sort()
-    return points
+        series.setdefault(env, []).append((rps, p95))
+    for env in list(series.keys()):
+        series[env].sort()
+    return {k: v for k, v in series.items() if v}
 
 
 def generate_synthetic_data():
-    """Create a synthetic AIMD-like curve for fallback."""
+    """Create a deterministic synthetic AIMD-like curve for fallback."""
     rps = np.linspace(0, 200, 201)
+    rng = np.random.default_rng(seed=0)
 
     latency = []
     for x in rps:
@@ -61,7 +80,7 @@ def generate_synthetic_data():
             base = 900 + (y ** 2.0) * 1100
 
         # Add a small jitter to avoid a perfectly smooth line
-        jitter = np.random.normal(0, 20)
+        jitter = rng.normal(0, 20)
         latency.append(max(50.0, base + jitter))
 
     return list(zip(rps.tolist(), latency))
@@ -71,21 +90,28 @@ def main():
     base_dir = Path(__file__).resolve().parent
     results_dir = base_dir.parent / "results"
 
-    points = load_k6_results(results_dir)
-    used_real_data = bool(points)
-
-    if not points:
-        points = generate_synthetic_data()
-
-    x, y = zip(*points)
-
     plt.style.use("seaborn-v0_8")
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    label = "p95 latency (k6)" if used_real_data else "p95 latency (synthetic)"
-    ax.plot(x, y, marker="o" if used_real_data else None, label=label, color="#3366CC")
+    series = load_k6_results(results_dir)
+    used_real_data = bool(series)
 
-    if not used_real_data:
+    if used_real_data:
+        colors = {"local": "#3366CC", "aws": "#FF7F0E", "unknown": "#777777"}
+        markers = {"local": "o", "aws": "s", "unknown": "^"}
+        for env, points in sorted(series.items()):
+            x, y = zip(*points)
+            ax.plot(
+                x,
+                y,
+                marker=markers.get(env, "o"),
+                linestyle="-",
+                label=f"{env.upper()} p95 latency",
+                color=colors.get(env, None),
+            )
+    else:
+        x, y = zip(*generate_synthetic_data())
+        ax.plot(x, y, label="p95 latency (synthetic)", color="#3366CC")
         # Only show synthetic annotations when no real data is present
         ax.axvline(60, color="#999999", linestyle="--", linewidth=1)
         ax.axvline(120, color="#999999", linestyle="--", linewidth=1)

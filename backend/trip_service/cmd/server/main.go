@@ -8,6 +8,7 @@ import (
 
 	"uitgo/backend/internal/config"
 	"uitgo/backend/internal/db"
+	"uitgo/backend/internal/domain"
 	"uitgo/backend/internal/http/handlers"
 	"uitgo/backend/internal/logging"
 	"uitgo/backend/internal/matching"
@@ -85,7 +86,14 @@ func main() {
 		defer queue.Close()
 	}
 
-	srv, err := server.New(cfg, pool, readDB, locationWriter, dispatcher)
+	var walletOps domain.WalletOperations
+	if cfg.UserServiceURL != "" {
+		walletOps = clients.NewWalletClient(cfg.UserServiceURL, cfg.InternalAPIKey)
+	} else {
+		log.Printf("warn: user service url not configured; wallet enforcement disabled")
+	}
+
+	srv, err := server.New(cfg, pool, readDB, locationWriter, dispatcher, walletOps)
 	if err != nil {
 		log.Fatalf("init server: %v", err)
 	}

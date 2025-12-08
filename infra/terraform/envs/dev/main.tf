@@ -5,11 +5,20 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 }
 
 provider "aws" {
   region = var.aws_region
+}
+
+resource "random_password" "driver_cache_auth_token" {
+  length  = 32
+  special = true
 }
 
 locals {
@@ -79,6 +88,7 @@ module "driver_cache" {
   subnet_ids    = module.network.private_subnet_ids
   allowed_cidrs = [module.network.cidr_block]
   tags          = merge(local.tags, { Service = "driver" })
+  auth_token    = random_password.driver_cache_auth_token.result
 }
 
 resource "aws_security_group" "services" {
@@ -211,6 +221,7 @@ locals {
     trip_db_replica_dsn = format("postgres://%s:%s@%s:5432/%s?sslmode=disable", var.db_username, var.db_password, module.trip_db_replica.endpoint, "trip_service")
     driver_db_dsn = format("postgres://%s:%s@%s:5432/%s?sslmode=disable", var.db_username, var.db_password, module.driver_db.endpoint, "driver_service")
     redis_addr    = format("%s:%d", module.driver_cache.primary_endpoint, module.driver_cache.port)
+    redis_password = random_password.driver_cache_auth_token.result
     sqs_queue_url = module.trip_match_queue.url
   }
 
@@ -225,6 +236,7 @@ locals {
     trip_db_replica_dsn   = local.backend_env.trip_db_replica_dsn
     driver_db_dsn         = local.backend_env.driver_db_dsn
     redis_addr            = local.backend_env.redis_addr
+    redis_password        = local.backend_env.redis_password
     sqs_queue_url         = local.backend_env.sqs_queue_url
     cors_allowed_origins  = var.cors_allowed_origins
     jwt_secret            = var.jwt_secret
@@ -247,7 +259,7 @@ module "trip_service_asg" {
 
 resource "aws_autoscaling_attachment" "trip_service" {
   autoscaling_group_name = module.trip_service_asg.asg_name
-  alb_target_group_arn   = aws_lb_target_group.api.arn
+  lb_target_group_arn    = aws_lb_target_group.api.arn
 }
 
 resource "aws_cloudwatch_log_group" "service_logs" {

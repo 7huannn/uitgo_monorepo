@@ -30,7 +30,7 @@ type Server struct {
 }
 
 // New constructs the HTTP server with trip routes and internal hooks.
-func New(cfg *config.Config, db *gorm.DB, readDB *gorm.DB, driverLocations handlers.DriverLocationWriter, dispatcher matching.TripDispatcher) (*Server, error) {
+func New(cfg *config.Config, db *gorm.DB, readDB *gorm.DB, driverLocations handlers.DriverLocationWriter, dispatcher matching.TripDispatcher, wallets domain.WalletOperations) (*Server, error) {
 	const serviceName = "trip-service"
 	router := gin.New()
 	gin.DisableConsoleColor()
@@ -52,8 +52,6 @@ func New(cfg *config.Config, db *gorm.DB, readDB *gorm.DB, driverLocations handl
 	handlers.RegisterRouteRoutes(router, routeProvider)
 	tripLimiter := middleware.NewTokenBucketRateLimiter(10, time.Minute)
 
-	walletRepo := dbrepo.NewWalletRepository(db)
-	walletService := domain.NewWalletService(walletRepo)
 	tripRepo := dbrepo.NewTripRepositoryWithReplica(db, readDB)
 	notificationRepo := dbrepo.NewNotificationRepository(db)
 	deviceTokenRepo := dbrepo.NewDeviceTokenRepository(db)
@@ -62,7 +60,7 @@ func New(cfg *config.Config, db *gorm.DB, readDB *gorm.DB, driverLocations handl
 		log.Printf("warn: unable to initialize FCM: %v", err)
 	}
 	notificationSvc := notification.NewService(notificationRepo, deviceTokenRepo, pushSender)
-	tripService := domain.NewTripService(tripRepo, walletService, notificationSvc)
+	tripService := domain.NewTripService(tripRepo, wallets, notificationSvc)
 	hubManager := handlers.NewHubManager(tripService, driverLocations)
 
 	handlers.RegisterTripRoutes(router, tripService, nil, hubManager, dispatcher, tripLimiter.Middleware("trip_create"))

@@ -52,8 +52,17 @@ variable "maintenance_window" {
 
 variable "auth_token" {
   type      = string
-  default   = ""
   sensitive = true
+
+  validation {
+    condition     = length(var.auth_token) >= 16 && length(var.auth_token) <= 128
+    error_message = "auth_token must contain from 16 to 128 characters."
+  }
+
+  validation {
+    condition     = length(regexall("[@\"/]", var.auth_token)) == 0
+    error_message = "auth_token may not contain @, \", or /."
+  }
 }
 
 variable "preferred_azs" {

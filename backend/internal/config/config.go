@@ -23,6 +23,7 @@ type Config struct {
 	RefreshTokenKey         string
 	InternalAPIKey          string
 	DriverServiceURL        string
+	UserServiceURL          string
 	TripServiceURL          string
 	RedisAddr               string
 	RedisPassword           string
@@ -63,6 +64,7 @@ func Load() (*Config, error) {
 	jwtSecret := os.Getenv("JWT_SECRET")
 	internalAPIKey := os.Getenv("INTERNAL_API_KEY")
 	driverServiceURL := strings.TrimSpace(os.Getenv("DRIVER_SERVICE_URL"))
+	userServiceURL := strings.TrimSpace(os.Getenv("USER_SERVICE_URL"))
 	tripServiceURL := strings.TrimSpace(os.Getenv("TRIP_SERVICE_URL"))
 	firebaseCredsFile := strings.TrimSpace(os.Getenv("FIREBASE_CREDENTIALS_FILE"))
 	firebaseCredsJSON := strings.TrimSpace(os.Getenv("FIREBASE_CREDENTIALS_JSON"))
@@ -105,7 +107,7 @@ func Load() (*Config, error) {
 
 	routingBaseURL := strings.TrimSpace(os.Getenv("ROUTING_BASE_URL"))
 	if routingBaseURL == "" {
-		routingBaseURL = "https://router.project-osrm.org"
+		routingBaseURL = "https://routing.openstreetmap.de/routed-bike"
 	}
 
 	adminEmail := strings.TrimSpace(os.Getenv("ADMIN_EMAIL"))
@@ -173,6 +175,7 @@ func Load() (*Config, error) {
 		RefreshTokenKey:         refreshKey,
 		InternalAPIKey:          internalAPIKey,
 		DriverServiceURL:        driverServiceURL,
+		UserServiceURL:          userServiceURL,
 		TripServiceURL:          tripServiceURL,
 		RedisAddr:               redisAddr,
 		RedisPassword:           redisPassword,

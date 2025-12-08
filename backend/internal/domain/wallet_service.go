@@ -52,7 +52,7 @@ func WithWalletConfig(cfg WalletServiceConfig) WalletServiceOption {
 
 // NewWalletService wires a domain service for wallet operations.
 func NewWalletService(repo WalletRepository, opts ...WalletServiceOption) *WalletService {
-	cfg := defaultWalletConfig()
+	cfg := DefaultWalletConfig()
 	for _, opt := range opts {
 		if opt != nil {
 			opt(&cfg)
@@ -64,7 +64,8 @@ func NewWalletService(repo WalletRepository, opts ...WalletServiceOption) *Walle
 	}
 }
 
-func defaultWalletConfig() WalletServiceConfig {
+// DefaultWalletConfig returns the baseline wallet configuration.
+func DefaultWalletConfig() WalletServiceConfig {
 	return WalletServiceConfig{
 		MinTopUpAmount:      10000,
 		MaxTopUpAmount:      5000000,
@@ -110,7 +111,7 @@ func (s *WalletService) TopUp(ctx context.Context, userID string, amount int64) 
 	if amount < s.cfg.MinTopUpAmount || amount > s.cfg.MaxTopUpAmount {
 		return nil, ErrWalletInvalidAmount
 	}
-	return s.repo.ApplyTransaction(ctx, &WalletTransaction{
+	return s.ApplyTransaction(ctx, &WalletTransaction{
 		UserID: userID,
 		Amount: amount,
 		Type:   WalletTransactionTypeTopUp,
@@ -139,7 +140,7 @@ func (s *WalletService) DeductTripFare(ctx context.Context, userID, serviceID st
 		return nil, 0, errors.New("user id required")
 	}
 	fare := s.fareForService(serviceID)
-	summary, err := s.repo.ApplyTransaction(ctx, &WalletTransaction{
+	summary, err := s.ApplyTransaction(ctx, &WalletTransaction{
 		UserID: userID,
 		Amount: fare,
 		Type:   WalletTransactionTypeDeduction,
@@ -156,12 +157,37 @@ func (s *WalletService) RewardTripCompletion(ctx context.Context, userID string)
 		summary, err := s.repo.Get(ctx, userID)
 		return summary, 0, err
 	}
-	summary, err := s.repo.ApplyTransaction(ctx, &WalletTransaction{
+	summary, err := s.ApplyTransaction(ctx, &WalletTransaction{
 		UserID: userID,
 		Amount: s.cfg.RewardPointsPerTrip,
 		Type:   WalletTransactionTypeReward,
 	})
 	return summary, s.cfg.RewardPointsPerTrip, err
+}
+
+// ApplyTransaction applies a wallet transaction with validation.
+func (s *WalletService) ApplyTransaction(ctx context.Context, tx *WalletTransaction) (*WalletSummary, error) {
+	if tx == nil {
+		return nil, errors.New("transaction required")
+	}
+	if tx.UserID == "" {
+		return nil, errors.New("user id required")
+	}
+	if tx.Amount <= 0 {
+		return nil, ErrWalletInvalidAmount
+	}
+
+	switch tx.Type {
+	case WalletTransactionTypeTopUp:
+		if tx.Amount < s.cfg.MinTopUpAmount || tx.Amount > s.cfg.MaxTopUpAmount {
+			return nil, ErrWalletInvalidAmount
+		}
+	case WalletTransactionTypeDeduction, WalletTransactionTypeReward:
+	default:
+		return nil, ErrWalletInvalidAmount
+	}
+
+	return s.repo.ApplyTransaction(ctx, tx)
 }
 
 func (s *WalletService) fareForService(serviceID string) int64 {

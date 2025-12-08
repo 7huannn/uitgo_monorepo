@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,8 +15,9 @@ import (
 )
 
 const (
-	defaultBaseURL        = "https://router.project-osrm.org"
-	defaultRequestTimeout = 8 * time.Second
+	defaultBaseURL         = "https://router.project-osrm.org"
+	defaultRequestTimeout  = 8 * time.Second
+	fallbackAverageSpeedMS = 11.0 // ~40km/h
 )
 
 // ErrRouteNotFound indicates the routing engine could not find a path.
@@ -100,17 +103,20 @@ func (c *Client) GetRoute(ctx context.Context, origin, destination Coordinate) (
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return c.syntheticRoute(origin, destination, fmt.Errorf("routing request: %w", err))
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, ErrRouteNotFound
+	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("routing upstream returned %d", resp.StatusCode)
+		return c.syntheticRoute(origin, destination, fmt.Errorf("routing upstream returned %d", resp.StatusCode))
 	}
 
 	var payload osrmResponse
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, fmt.Errorf("decode routing response: %w", err)
+		return c.syntheticRoute(origin, destination, fmt.Errorf("decode routing response: %w", err))
 	}
 
 	route, err := mapOSRM(&payload)
@@ -281,4 +287,58 @@ func prettify(text string) string {
 	}
 	lower := strings.ToLower(text)
 	return strings.ToUpper(lower[:1]) + lower[1:]
+}
+
+func (c *Client) syntheticRoute(origin, destination Coordinate, reason error) (*Route, error) {
+	if reason != nil {
+		log.Printf("routing upstream unavailable, using fallback: %v", reason)
+	}
+	distance := haversineDistance(origin, destination)
+	if distance <= 0 {
+		return nil, fmt.Errorf("unable to compute fallback route")
+	}
+	duration := distance / fallbackAverageSpeedMS
+	if duration < 60 {
+		duration = 60
+	}
+
+	coords := [][]float64{
+		{origin.Lng, origin.Lat},
+		{destination.Lng, destination.Lat},
+	}
+	step := Step{
+		Name:        "Direct route",
+		Instruction: "Proceed to your destination",
+		Location:    []float64{origin.Lng, origin.Lat},
+		Distance:    distance,
+		Duration:    duration,
+	}
+
+	route := &Route{
+		Distance:    distance,
+		Duration:    duration,
+		Coordinates: coords,
+		Steps:       []Step{step},
+	}
+	c.saveCache(cacheKey(origin, destination), route)
+	return route, nil
+}
+
+func haversineDistance(a, b Coordinate) float64 {
+	const earthRadius = 6371000.0
+	lat1 := toRadians(a.Lat)
+	lat2 := toRadians(b.Lat)
+	deltaLat := toRadians(b.Lat - a.Lat)
+	deltaLng := toRadians(b.Lng - a.Lng)
+
+	sinLat := math.Sin(deltaLat / 2)
+	sinLng := math.Sin(deltaLng / 2)
+
+	h := sinLat*sinLat + math.Cos(lat1)*math.Cos(lat2)*sinLng*sinLng
+	c := 2 * math.Atan2(math.Sqrt(h), math.Sqrt(1-h))
+	return earthRadius * c
+}
+
+func toRadians(deg float64) float64 {
+	return deg * math.Pi / 180
 }

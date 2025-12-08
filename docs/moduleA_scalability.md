@@ -59,12 +59,37 @@ Graph snapshots (omitted here) show backlog + latency drop once queue drained. E
    - `modules/rds_replica` provisioning PostgreSQL read replica; trip-service bật `TRIP_DB_REPLICA_DSN` thì các luồng đọc như `GET /v1/trips`, `GET /v1/trips/{id}`, `GET /v1/trips/{id}/ws` (phần đọc location) được route sang replica trong khi ghi (tạo trip, cập nhật trạng thái, ghi location) vẫn bám primary.
 
 ## 4. Trade-off analysis
-- **Consistency vs Latency**: Async queue means riders may wait a few seconds before a driver is assigned. We accept eventual assignment (<10 s) to guarantee API responsiveness. Critical updates (status transitions) still go directly to trip DB (strong consistency).
-- **Cost vs Performance**: Extra ASG nodes + read replica roughly double infra spend for driver/trip plane, but they postpone costlier sharding/partitioning work while meeting p95 <250 ms SLA.
+- **Consistency vs Latency**: Async queue means riders may wait a few seconds before a driver is assigned. We accept eventual assignment (<10 s) to guarantee API responsiveness. Critical updates (status transitions) still go directly to trip DB (strong consistency).
+- **Cost vs Performance**: Extra ASG nodes + read replica roughly double infra spend for driver/trip plane, but they postpone costlier sharding/partitioning work while meeting p95 <250 ms SLA.
 - **Operational complexity**: We now operate Redis, SQS, ASGs, and replicas. Automation (Terraform modules, dashboards) keeps the blast radius manageable. Runbooks cover queue drain, consumer lag, replica lag.
 
-## 5. Next steps
+## 5. Extended Load Test Suite
+
+Ngoài `trip_matching.js` chính, bổ sung các kịch bản test để kiểm chứng toàn diện:
+
+| Test Script | Mục đích | Thời lượng | Metrics chính |
+|-------------|----------|------------|---------------|
+| `soak_test.js` | Phát hiện memory leak, connection leak qua thời gian dài | 10-30m | Latency trend, error accumulation |
+| `stress_test.js` | Tìm breaking point, xác định max capacity | ~4m | Max RPS trước khi fail, error threshold |
+| `spike_test.js` | Test đột biến traffic (5x, 10x) | ~3m | Recovery time, queue absorption |
+| `websocket_test.js` | Đo latency cập nhật realtime qua WebSocket | 2m | Connection time, message latency |
+| `driver_location_test.js` | Test Redis GEO với nhiều driver cập nhật vị trí | 3m | Update latency, geo query latency |
+
+### Chạy full suite (local, không cần AWS):
+```bash
+ACCESS_TOKEN=... make loadtest-full-suite
+```
+
+### Kết quả mong đợi khi tối ưu hoàn chỉnh:
+- **Soak test**: Không có latency degradation sau 30 phút, error rate <1%
+- **Stress test**: Hệ thống chịu được 150+ RPS trước khi error rate vượt 5%
+- **Spike test**: Recovery trong <30s sau spike 10x, error rate <15%
+- **WebSocket**: Message latency p95 <500ms
+- **Driver location**: Update latency p95 <100ms (Redis GEO)
+
+## 6. Next steps
 - Point read-heavy endpoints to replica endpoint (app config switch).
 - Add dead-letter queue handling (retry policy + compensating jobs).
-- Extend k6 suite with soak tests + websocket latency probes.
+- ~~Extend k6 suite with soak tests + websocket latency probes.~~ ✅ Done
 - Feed ASG metrics + queue depth into scaling policy (step scaling when backlog >1k).
+- Generate biểu đồ PNG từ kết quả test để đưa vào báo cáo chính thức.

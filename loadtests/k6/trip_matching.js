@@ -1,15 +1,19 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
+// TARGET_RPS allows overriding the rider arrival rate without changing defaults.
+const TARGET_RPS = Number(__ENV.TARGET_RPS) || 50;
+const START_RATE = Number.isFinite(TARGET_RPS) && TARGET_RPS > 0 ? Math.max(1, Math.round(TARGET_RPS / 5)) : 10;
+
 export const options = {
   scenarios: {
     riders: {
       executor: 'ramping-arrival-rate',
-      startRate: 10,
+      startRate: START_RATE,
       timeUnit: '1s',
       stages: [
-        { target: 50, duration: '1m' },
-        { target: 50, duration: '2m' },
+        { target: TARGET_RPS, duration: '1m' },
+        { target: TARGET_RPS, duration: '2m' },
         { target: 0, duration: '30s' },
       ],
       preAllocatedVUs: 20,
@@ -30,6 +34,10 @@ export const options = {
 const BASE_URL = __ENV.API_BASE || 'http://localhost:8080';
 const TOKEN = __ENV.ACCESS_TOKEN || '';
 
+// Track rate limited requests separately
+import { Counter } from 'k6/metrics';
+const rateLimitedRequests = new Counter('rate_limited_requests');
+
 export default function tripScenario() {
   const payload = JSON.stringify({
     originText: 'UIT Campus',
@@ -41,8 +49,15 @@ export default function tripScenario() {
     Authorization: `Bearer ${TOKEN}`,
   };
   const res = http.post(`${BASE_URL}/v1/trips`, payload, { headers });
+  
+  // Track rate limited requests
+  if (res.status === 429) {
+    rateLimitedRequests.add(1);
+  }
+  
   check(res, {
-    'trip created': (r) => r.status === 201 || r.status === 402,
+    // 201 = created, 402 = insufficient balance, 429 = rate limited (expected in load test)
+    'trip created or rate limited': (r) => r.status === 201 || r.status === 402 || r.status === 429,
   });
   sleep(1);
 }

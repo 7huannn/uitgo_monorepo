@@ -95,6 +95,10 @@ func New(cfg *config.Config, db *gorm.DB, driverProvisioner handlers.DriverProvi
 	handlers.RegisterWalletRoutes(router, walletService)
 	handlers.RegisterHomeRoutes(router, homeService)
 
+	internal := router.Group("/internal")
+	internal.Use(middleware.InternalOnly(cfg.InternalAPIKey))
+	handlers.RegisterWalletInternalRoutes(internal, walletService)
+
 	metrics.Expose(router)
 
 	return &Server{engine: router, cfg: cfg}, nil
