@@ -1,0 +1,52 @@
+# Staging overlay - closer to production
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: uitgo
+
+resources:
+  - ../../base
+
+# Higher replica counts for staging
+replicas:
+  - name: user-service
+    count: 2
+  - name: trip-service
+    count: 2
+  - name: driver-service
+    count: 2
+
+# Use GHCR images (from CI/CD)
+images:
+  - name: uitgo/user-service
+    newName: ghcr.io/7huannn/uitgo-user-service
+    newTag: latest
+  - name: uitgo/trip-service
+    newName: ghcr.io/7huannn/uitgo-trip-service
+    newTag: latest
+  - name: uitgo/driver-service
+    newName: ghcr.io/7huannn/uitgo-driver-service
+    newTag: latest
+
+commonLabels:
+  environment: staging
+
+# Staging-specific patches
+patches:
+  # Increase resources for staging
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "512Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "1000m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "128Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "100m"
+    target:
+      kind: Deployment
+      labelSelector: "app.kubernetes.io/component=backend"

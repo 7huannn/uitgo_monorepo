@@ -1,0 +1,47 @@
+# Development overlay - uses local images
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: uitgo
+
+resources:
+  - ../../base
+
+# Override replica counts for dev (minimal resources)
+replicas:
+  - name: user-service
+    count: 1
+  - name: trip-service
+    count: 1
+  - name: driver-service
+    count: 1
+
+# Use locally built images
+images:
+  - name: uitgo/user-service
+    newName: localhost:5000/uitgo/user-service
+    newTag: dev
+  - name: uitgo/trip-service
+    newName: localhost:5000/uitgo/trip-service
+    newTag: dev
+  - name: uitgo/driver-service
+    newName: localhost:5000/uitgo/driver-service
+    newTag: dev
+
+# Development-specific labels
+commonLabels:
+  environment: development
+
+# Patches for dev-specific configurations
+patches:
+  # Reduce resource limits for local development
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "128Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "200m"
+    target:
+      kind: Deployment
+      labelSelector: "app.kubernetes.io/component=backend"

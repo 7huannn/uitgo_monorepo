@@ -1,0 +1,107 @@
+# Ingress for API Gateway (replaces Nginx container)
+# Uses k3s built-in Traefik ingress controller
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: uitgo-ingress
+  namespace: uitgo
+  labels:
+    app: uitgo-gateway
+  annotations:
+    # Traefik annotations for k3s
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  rules:
+    - host: uitgo.local  # Add to /etc/hosts: 127.0.0.1 uitgo.local
+      http:
+        paths:
+          # Auth routes → user-service
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8081
+          # User routes → user-service
+          - path: /users
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8081
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8081
+          - path: /wallet
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8081
+          - path: /saved_places
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8081
+          - path: /promotions
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8081
+          - path: /news
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8081
+          - path: /notifications
+            pathType: Prefix
+            backend:
+              service:
+                name: user-service
+                port:
+                  number: 8081
+          
+          # Trip routes → trip-service
+          - path: /v1/trips
+            pathType: Prefix
+            backend:
+              service:
+                name: trip-service
+                port:
+                  number: 8082
+          - path: /ws/trips
+            pathType: Prefix
+            backend:
+              service:
+                name: trip-service
+                port:
+                  number: 8082
+          
+          # Driver routes → driver-service
+          - path: /v1/drivers
+            pathType: Prefix
+            backend:
+              service:
+                name: driver-service
+                port:
+                  number: 8083
+          - path: /v1/driver
+            pathType: Prefix
+            backend:
+              service:
+                name: driver-service
+                port:
+                  number: 8083

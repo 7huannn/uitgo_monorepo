@@ -1,0 +1,46 @@
+# ArgoCD Application for UITGo - Development Environment
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: uitgo-dev
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: uitgo
+    environment: development
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  source:
+    # Point to your GitHub repository
+    repoURL: https://github.com/7huannn/uitgo_monorepo.git
+    targetRevision: dev  # Track the dev branch
+    path: k8s/overlays/dev
+    
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: uitgo
+  
+  syncPolicy:
+    automated:
+      prune: true      # Delete resources that are removed from Git
+      selfHeal: true   # Revert manual changes
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Health checks
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas  # Ignore replica count changes from HPA

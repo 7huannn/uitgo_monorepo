@@ -1,0 +1,55 @@
+# ArgoCD Project for UITGo
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: uitgo
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: uitgo
+spec:
+  description: UITGo ride-hailing platform project
+  
+  # Allow deployments only to uitgo namespace
+  destinations:
+    - namespace: uitgo
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+  
+  # Only allow sources from our repository
+  sourceRepos:
+    - https://github.com/7huannn/uitgo_monorepo.git
+    - https://github.com/7huannn/uitgo_monorepo
+  
+  # Allow all cluster-scoped resources
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: networking.k8s.io
+      kind: Ingress
+  
+  # Allow all namespaced resources
+  namespaceResourceWhitelist:
+    - group: ''
+      kind: '*'
+    - group: apps
+      kind: '*'
+    - group: networking.k8s.io
+      kind: '*'
+  
+  # Roles for access control
+  roles:
+    - name: developer
+      description: Developer access - can sync and view
+      policies:
+        - p, proj:uitgo:developer, applications, get, uitgo/*, allow
+        - p, proj:uitgo:developer, applications, sync, uitgo/*, allow
+      groups:
+        - developers
+    
+    - name: admin
+      description: Admin access - full control
+      policies:
+        - p, proj:uitgo:admin, applications, *, uitgo/*, allow
+      groups:
+        - admins

@@ -119,3 +119,69 @@ secrets/
 *.log
 .DS_Store
 Thumbs.db
+
+#############################
+# Kubernetes / DevOps
+#############################
+
+# k3s / Kubernetes local
+kubeconfig
+*.kubeconfig
+k3s.yaml
+
+# Helm
+charts/*/charts/
+*.tgz
+
+# ArgoCD
+argocd-initial-admin-secret.txt
+
+# Kustomize build output
+k8s/rendered/
+kustomize-build/
+
+# Local registry data
+registry-data/
+
+#############################
+# CI/CD Local Testing
+#############################
+
+# Act (local GitHub Actions runner)
+.act/
+.actrc
+act-secrets
+
+# CI artifacts
+*.sarif
+trivy-results*.json
+
+#############################
+# Load Testing Results
+#############################
+loadtests/results/*.json
+loadtests/results/*.csv
+loadtests/report/*.html
+loadtests/report/*.pdf
+
+#############################
+# Docker
+#############################
+docker-compose.override.yml
+.docker/
+
+#############################
+# Monitoring Data (local)
+#############################
+prometheus-data/
+grafana-data/
+loki-data/
+
+#############################
+# Misc
+#############################
+tmp/
+temp/
+*.bak
+*.backup
+*.orig

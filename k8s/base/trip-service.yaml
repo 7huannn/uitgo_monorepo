@@ -1,0 +1,92 @@
+# Trip Service Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trip-service
+  namespace: uitgo
+  labels:
+    app: trip-service
+    app.kubernetes.io/name: trip-service
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trip-service
+  template:
+    metadata:
+      labels:
+        app: trip-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: trip-service
+          image: uitgo/trip-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+              name: http
+          env:
+            - name: PORT
+              value: "8082"
+            - name: POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: uitgo-db-secrets
+                  key: TRIP_SERVICE_DSN
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: uitgo-secrets
+                  key: JWT_SECRET
+            - name: REFRESH_TOKEN_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: uitgo-secrets
+                  key: REFRESH_TOKEN_ENCRYPTION_KEY
+            - name: INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: uitgo-secrets
+                  key: INTERNAL_API_KEY
+          envFrom:
+            - configMapRef:
+                name: uitgo-config
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8082
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trip-service
+  namespace: uitgo
+  labels:
+    app: trip-service
+spec:
+  ports:
+    - port: 8082
+      targetPort: 8082
+      name: http
+  selector:
+    app: trip-service

@@ -2,12 +2,16 @@
 
 ## 1. Kiến trúc tổng quan
 
-- Mô hình cloud-native/microservices gồm 3 service Go: `user-service`, `trip-service`, `driver-service` đứng sau API Gateway (Nginx). Mỗi service có Postgres riêng để tách schema và blast radius.
+- Mô hình cloud-native/microservices gồm 3 service Go: `user-service`, `trip-service`, `driver-service` đứng sau API Gateway (Nginx/K8s Ingress). Mỗi service có Postgres riêng để tách schema và blast radius.
 - Redis đảm nhiệm 3 vai trò: geospatial index cho driver search, cache (home feed), và hàng đợi ghép chuyến (Redis list/Streams, có biến `MATCH_QUEUE_*`).
-- Quan sát & vận hành: Prometheus + Grafana (auto-provision dashboard), log JSON, Sentry hook cho backend/Flutter. Healthcheck và `/metrics` có mặt ở mọi service.
-- Hạ tầng mẫu: Docker Compose cho dev/staging; Terraform scaffold ASG + RDS + Redis + SQS (dev) trong `infra/terraform`. Staging đơn giản chạy **một** ASG khởi động toàn bộ stack Compose (xem ADR-004).
+- Quan sát & vận hành: Prometheus + Grafana + Loki (centralized logging), Sentry hook cho backend/Flutter. Healthcheck và `/metrics` có mặt ở mọi service.
+- Hạ tầng:
+  - **Local/Dev**: Docker Compose hoặc k3s Kubernetes
+  - **Staging**: Kubernetes với Kustomize overlays, ArgoCD GitOps
+  - **Cloud**: Terraform scaffold ASG + RDS + Redis + SQS
 - Bảo mật: JWT bắt buộc cho route bảo vệ, refresh token mã hóa/rotate, rate limit cho auth/trip create, header `X-Internal-Token` cho internal/debug.
 
+### 1.1 Kiến trúc Docker Compose (Development)
 ```
                 +-----------------+
                 |  Flutter apps   |
@@ -15,6 +19,7 @@
                 +---------+-------+
                           |
                      API Gateway
+                       (Nginx)
                           |
       +-------------------+-------------------+
       |                   |                   |
@@ -31,10 +36,63 @@
           Prometheus / Grafana / Sentry
 ```
 
+### 1.2 Kiến trúc Kubernetes (Staging/Production)
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            Kubernetes Cluster (k3s)                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                        argocd namespace                               │  │
+│  │  ┌─────────────┐                                                      │  │
+│  │  │   ArgoCD    │◀──── Watches Git repo ────▶ Auto-sync to cluster    │  │
+│  │  │  (GitOps)   │                                                      │  │
+│  │  └─────────────┘                                                      │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                         uitgo namespace                               │  │
+│  │                                                                        │  │
+│  │        Ingress Controller (Traefik)                                   │  │
+│  │              /auth/* │ /v1/trips/* │ /v1/drivers/*                    │  │
+│  │                 │          │              │                           │  │
+│  │                 ▼          ▼              ▼                           │  │
+│  │  ┌──────────────────┬──────────────────┬──────────────────┐          │  │
+│  │  │   user-service   │   trip-service   │  driver-service  │          │  │
+│  │  │   Deployment     │   Deployment     │   Deployment     │          │  │
+│  │  │   replicas: 1-2  │   replicas: 1-2  │   replicas: 1-2  │          │  │
+│  │  └────────┬─────────┴────────┬─────────┴────────┬─────────┘          │  │
+│  │           │                  │                  │                     │  │
+│  │  ┌────────▼─────────┬────────▼─────────┬────────▼─────────┐          │  │
+│  │  │   user-db        │   trip-db        │   driver-db      │          │  │
+│  │  │  StatefulSet     │  StatefulSet     │  StatefulSet     │          │  │
+│  │  │  PostgreSQL      │  PostgreSQL      │  PostgreSQL      │          │  │
+│  │  └──────────────────┴──────────────────┴──────────────────┘          │  │
+│  │                                                                        │  │
+│  │                    ┌──────────────────┐                               │  │
+│  │                    │      Redis       │                               │  │
+│  │                    │   Deployment     │                               │  │
+│  │                    │  GEO + Queue     │                               │  │
+│  │                    └──────────────────┘                               │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                      monitoring namespace                             │  │
+│  │                                                                        │  │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │  │
+│  │  │ Prometheus  │  │   Grafana   │  │    Loki     │  │  Promtail   │  │  │
+│  │  │  (metrics)  │  │ (dashboards)│  │   (logs)    │  │ (DaemonSet) │  │  │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘  │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
 **Luồng chính**
-- Request từ app → Gateway → route tới service tương ứng (REST + WebSocket).
-- Mỗi service tự apply migration khi khởi động container.
-- Observability sidecar (Prometheus scrape + Grafana dashboard) chạy cùng network Compose.
+- Request từ app → Ingress → route tới service tương ứng (REST + WebSocket)
+- Mỗi service tự apply migration khi khởi động container
+- ArgoCD watch Git repository và auto-sync changes vào cluster
+- Prometheus scrape `/metrics` từ tất cả services; logs ship qua Promtail → Loki
 
 ## 2. Kiến trúc module chuyên sâu: Trip Matching & Driver Search
 
@@ -67,3 +125,115 @@
 - ADR-002: Redis GEO thay vì SQL thuần cho driver search.
 - ADR-003: giữ mô hình đồng bộ ở Stage 1 để giảm độ phức tạp ban đầu, sau đó bật queue khi nhu cầu tăng.
 - ADR-004: chọn Compose + ASG/Terraform cho staging thay vì EKS/ECS ở giai đoạn hiện tại.
+
+## 3. CI/CD & GitOps Architecture
+
+### 3.1 Pipeline Stages
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           CI/CD PIPELINE                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐  │
+│  │   STAGE 1   │    │   STAGE 2   │    │   STAGE 3   │    │   STAGE 4   │  │
+│  │    TEST     │───▶│    BUILD    │───▶│  SECURITY   │───▶│   GITOPS    │  │
+│  │             │    │             │    │             │    │             │  │
+│  │ • go test   │    │ • docker    │    │ • Trivy     │    │ • kustomize │  │
+│  │ • go vet    │    │   build     │    │   scan      │    │   edit      │  │
+│  │ • lint      │    │ • push GHCR │    │ • SBOM gen  │    │ • git push  │  │
+│  │ • coverage  │    │ • caching   │    │             │    │ • [skip ci] │  │
+│  │   ≥80%      │    │             │    │             │    │             │  │
+│  └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 3.2 GitOps Workflow
+```
+Developer                    GitHub                      Kubernetes
+    │                           │                            │
+    │  git push                 │                            │
+    ├──────────────────────────▶│                            │
+    │                           │  trigger CI                │
+    │                           ├────────┐                   │
+    │                           │        │ test, build       │
+    │                           │◀───────┘                   │
+    │                           │                            │
+    │                           │  update k8s/overlays/      │
+    │                           │  kustomization.yaml        │
+    │                           ├────────┐                   │
+    │                           │        │ commit [skip ci]  │
+    │                           │◀───────┘                   │
+    │                           │                            │
+    │                           │         ArgoCD watches     │
+    │                           │◀───────────────────────────┤
+    │                           │                            │
+    │                           │         sync changes       │
+    │                           ├───────────────────────────▶│
+    │                           │                            │
+    │                           │         health check       │
+    │                           │◀───────────────────────────┤
+    │                           │                            │
+```
+
+### 3.3 Kustomize Overlays Strategy
+
+| Overlay | Branch | Replicas | Image Source | ArgoCD Sync |
+|---------|--------|----------|--------------|-------------|
+| `dev` | `dev` | 1 | localhost:5000 | Auto |
+| `staging` | `main` | 2 | ghcr.io | Manual |
+
+### 3.4 Observability Stack
+
+| Component | Purpose | Data Flow |
+|-----------|---------|-----------|
+| **Prometheus** | Metrics collection | Scrape `/metrics` from all pods |
+| **Grafana** | Visualization | Query Prometheus + Loki |
+| **Loki** | Log aggregation | Receive logs from Promtail |
+| **Promtail** | Log shipping | DaemonSet, ships container logs |
+
+## 4. Cấu trúc Kubernetes Manifests
+
+```
+k8s/
+├── base/                          # Base Kustomize resources
+│   ├── namespace.yaml             # uitgo namespace
+│   ├── configmap.yaml             # Shared config (service URLs, Redis addr)
+│   ├── secrets.yaml               # Dev secrets (encrypt for prod!)
+│   ├── databases.yaml             # 3× PostgreSQL StatefulSets
+│   ├── redis.yaml                 # Redis Deployment
+│   ├── user-service.yaml          # user-service Deployment + Service
+│   ├── trip-service.yaml          # trip-service Deployment + Service
+│   ├── driver-service.yaml        # driver-service Deployment + Service
+│   ├── ingress.yaml               # Traefik Ingress rules
+│   └── kustomization.yaml         # Base kustomization config
+│
+├── overlays/
+│   ├── dev/                       # Development overrides
+│   │   └── kustomization.yaml     # Local registry, 1 replica
+│   └── staging/                   # Staging overrides
+│       └── kustomization.yaml     # GHCR images, 2 replicas
+│
+├── monitoring/                    # Observability stack
+│   ├── namespace.yaml
+│   ├── prometheus.yaml            # Prometheus + RBAC
+│   ├── grafana.yaml               # Grafana + datasources
+│   ├── loki.yaml                  # Loki log aggregation
+│   ├── promtail.yaml              # Promtail DaemonSet
+│   └── kustomization.yaml
+│
+└── argocd/                        # GitOps applications
+    ├── project.yaml               # ArgoCD project definition
+    ├── uitgo-dev.yaml             # Dev application (auto-sync)
+    └── uitgo-staging.yaml         # Staging application (manual sync)
+```
+
+## 5. Liên kết tài liệu
+
+| Tài liệu | Mô tả |
+|----------|-------|
+| `docs/DEVOPS_IMPLEMENTATION_SUMMARY.md` | Tổng quan DevOps và hướng dẫn sử dụng |
+| `docs/architecture-stage1.md` | Skeleton microservice và biến môi trường |
+| `docs/moduleA_scalability.md` | Báo cáo tối ưu hiệu năng và kết quả k6 |
+| `ADR/*.md` | Architecture Decision Records |
+| `backend/README.md` | Chi tiết API và hướng dẫn service Go |

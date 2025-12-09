@@ -1,0 +1,35 @@
+# ArgoCD Application for UITGo - Local Development (filesystem-based)
+# This uses the local filesystem for GitOps demo without requiring GitHub push
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: uitgo-local
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: uitgo
+    environment: local
+spec:
+  project: default
+  
+  source:
+    # For local development, we'll use the in-cluster config
+    # In production, this would point to your Git repository
+    repoURL: https://github.com/7huannn/uitgo_monorepo.git
+    targetRevision: HEAD
+    path: k8s/overlays/dev
+    
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: uitgo
+  
+  syncPolicy:
+    # Manual sync for local development
+    # automated:
+    #   prune: true
+    #   selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+---
+# Alternative: Use directory-based source for truly local GitOps
+# This requires argocd-repo-server to have access to local filesystem

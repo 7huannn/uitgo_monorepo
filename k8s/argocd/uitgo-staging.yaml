@@ -1,0 +1,40 @@
+# ArgoCD Application for UITGo - Staging Environment
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: uitgo-staging
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: uitgo
+    environment: staging
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  source:
+    repoURL: https://github.com/7huannn/uitgo_monorepo.git
+    targetRevision: main  # Track main branch for staging
+    path: k8s/overlays/staging
+    
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: uitgo
+  
+  syncPolicy:
+    # Manual sync for staging - require approval
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas

@@ -1,0 +1,244 @@
+# Enhanced Backend CI/CD Pipeline with Security Scanning and GitOps
+name: Backend CI/CD
+
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'k8s/**'
+      - '.github/workflows/backend-cicd.yml'
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'backend/**'
+      - 'k8s/**'
+      - '.github/workflows/backend-cicd.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/uitgo
+
+jobs:
+  # ==================== STAGE 1: Test & Lint ====================
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.3'
+          cache-dependency-path: backend/go.sum
+
+      - name: Download dependencies
+        working-directory: backend
+        run: go mod download
+
+      - name: Run go vet
+        working-directory: backend
+        run: go vet ./...
+
+      - name: Run tests with coverage
+        working-directory: backend
+        run: |
+          go test ./... -covermode=atomic -coverprofile=coverage.out -race
+          go tool cover -func=coverage.out | tee coverage.txt
+
+      - name: Check coverage threshold (80%)
+        working-directory: backend
+        run: |
+          total=$(grep total coverage.txt | awk '{print substr($3, 1, length($3)-1)}')
+          echo "Total coverage: $total%"
+          if (( $(echo "$total < 80.0" | bc -l) )); then
+            echo "❌ Coverage $total% is below 80% threshold"
+            exit 1
+          fi
+          echo "✅ Coverage $total% meets threshold"
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.59.0
+          working-directory: backend
+          args: --timeout=5m
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: backend/coverage.out
+
+  # ==================== STAGE 2: Build Images ====================
+  build:
+    name: Build Images
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        service:
+          - name: user-service
+            dockerfile: backend/user_service/Dockerfile
+          - name: trip-service
+            dockerfile: backend/trip_service/Dockerfile
+          - name: driver-service
+            dockerfile: backend/driver_service/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service.name }}
+          tags: |
+            type=sha,prefix=
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.service.dockerfile }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+  # ==================== STAGE 3: Security Scanning ====================
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+    strategy:
+      matrix:
+        service: [user-service, trip-service, driver-service]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ github.sha }}'
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.service }}.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
+
+  # ==================== STAGE 4: Update K8s Manifests (GitOps) ====================
+  update-manifests:
+    name: Update K8s Manifests
+    runs-on: ubuntu-latest
+    needs: [build, security-scan]
+    if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Determine overlay
+        id: overlay
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "overlay=staging" >> $GITHUB_OUTPUT
+          else
+            echo "overlay=dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update image tags in Kustomize
+        run: |
+          cd k8s/overlays/${{ steps.overlay.outputs.overlay }}
+          
+          # Update all service images to new tag
+          kustomize edit set image \
+            uitgo/user-service=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-user-service:${{ github.sha }} \
+            uitgo/trip-service=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-trip-service:${{ github.sha }} \
+            uitgo/driver-service=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-driver-service:${{ github.sha }}
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add k8s/overlays/${{ steps.overlay.outputs.overlay }}/kustomization.yaml
+          git diff --staged --quiet || git commit -m "chore(k8s): update images to ${{ github.sha }} [skip ci]"
+          git push
+
+  # ==================== STAGE 5: Validate K8s Manifests ====================
+  validate-manifests:
+    name: Validate K8s Manifests
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Validate base manifests
+        run: |
+          kustomize build k8s/base > /dev/null
+          echo "✅ Base manifests are valid"
+
+      - name: Validate dev overlay
+        run: |
+          kustomize build k8s/overlays/dev > /dev/null
+          echo "✅ Dev overlay is valid"
+
+      - name: Validate staging overlay
+        run: |
+          kustomize build k8s/overlays/staging > /dev/null
+          echo "✅ Staging overlay is valid"
+
+      - name: Lint with kubeval
+        uses: instrumenta/kubeval-action@master
+        with:
+          files: k8s/base/*.yaml

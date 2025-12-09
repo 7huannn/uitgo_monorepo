@@ -1,0 +1,253 @@
+# PostgreSQL for user-service
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: user-db
+  namespace: uitgo
+  labels:
+    app: user-db
+    app.kubernetes.io/name: user-db
+    app.kubernetes.io/component: database
+spec:
+  serviceName: user-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-db
+  template:
+    metadata:
+      labels:
+        app: user-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: "user_service"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: uitgo-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: uitgo-secrets
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: user-db-data
+              mountPath: /var/lib/postgresql/data
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "uitgo", "-d", "user_service"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "uitgo", "-d", "user_service"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+  volumeClaimTemplates:
+    - metadata:
+        name: user-db-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-db
+  namespace: uitgo
+  labels:
+    app: user-db
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: user-db
+  clusterIP: None  # Headless service for StatefulSet
+
+---
+# PostgreSQL for trip-service
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: trip-db
+  namespace: uitgo
+  labels:
+    app: trip-db
+    app.kubernetes.io/name: trip-db
+    app.kubernetes.io/component: database
+spec:
+  serviceName: trip-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trip-db
+  template:
+    metadata:
+      labels:
+        app: trip-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: "trip_service"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: uitgo-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: uitgo-secrets
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: trip-db-data
+              mountPath: /var/lib/postgresql/data
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "uitgo", "-d", "trip_service"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "uitgo", "-d", "trip_service"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+  volumeClaimTemplates:
+    - metadata:
+        name: trip-db-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trip-db
+  namespace: uitgo
+  labels:
+    app: trip-db
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: trip-db
+  clusterIP: None
+
+---
+# PostgreSQL for driver-service
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: driver-db
+  namespace: uitgo
+  labels:
+    app: driver-db
+    app.kubernetes.io/name: driver-db
+    app.kubernetes.io/component: database
+spec:
+  serviceName: driver-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: driver-db
+  template:
+    metadata:
+      labels:
+        app: driver-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: "driver_service"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: uitgo-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: uitgo-secrets
+                  key: POSTGRES_PASSWORD
+          volumeMounts:
+            - name: driver-db-data
+              mountPath: /var/lib/postgresql/data
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "uitgo", "-d", "driver_service"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "uitgo", "-d", "driver_service"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+  volumeClaimTemplates:
+    - metadata:
+        name: driver-db-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: driver-db
+  namespace: uitgo
+  labels:
+    app: driver-db
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: driver-db
+  clusterIP: None

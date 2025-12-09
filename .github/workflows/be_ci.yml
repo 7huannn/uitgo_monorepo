@@ -60,11 +60,7 @@ jobs:
           go tool cover -func=coverage.out | tee coverage.txt
           total=$(grep total coverage.txt | awk '{print substr($3, 1, length($3)-1)}')
           echo "Total coverage: $total%"
-          TOTAL=$total python - <<'PY'
-import os, sys
-pct = float(os.environ.get("TOTAL", "0"))
-sys.exit(0 if pct >= 80.0 else 1)
-PY
+          python3 -c "import sys; sys.exit(0 if float('$total') >= 80.0 else 1)"
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6

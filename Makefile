@@ -122,3 +122,116 @@ loadtest-full-suite: loadtest-local loadtest-soak loadtest-stress loadtest-spike
 loadtest-charts:
 	$(PYTHON) loadtests/plots/generate_report_charts.py
 	@echo "Charts generated in loadtests/plots/"
+
+# ============ Kubernetes / DevOps Commands ============
+
+.PHONY: k8s-setup
+k8s-setup:
+	@echo "Setting up local Kubernetes environment..."
+	chmod +x scripts/setup-local-devops.sh
+	./scripts/setup-local-devops.sh full
+
+.PHONY: k8s-build
+k8s-build:
+	@echo "Building Docker images for Kubernetes..."
+	docker build -t localhost:5000/uitgo/user-service:dev -f backend/user_service/Dockerfile .
+	docker build -t localhost:5000/uitgo/trip-service:dev -f backend/trip_service/Dockerfile .
+	docker build -t localhost:5000/uitgo/driver-service:dev -f backend/driver_service/Dockerfile .
+	docker push localhost:5000/uitgo/user-service:dev
+	docker push localhost:5000/uitgo/trip-service:dev
+	docker push localhost:5000/uitgo/driver-service:dev
+	@echo "Images built and pushed to local registry"
+
+.PHONY: k8s-deploy
+k8s-deploy:
+	@echo "Deploying to Kubernetes (dev overlay)..."
+	kubectl apply -k k8s/overlays/dev
+	kubectl get pods -n uitgo
+
+.PHONY: k8s-deploy-staging
+k8s-deploy-staging:
+	@echo "Deploying to Kubernetes (staging overlay)..."
+	kubectl apply -k k8s/overlays/staging
+	kubectl get pods -n uitgo
+
+.PHONY: k8s-monitoring
+k8s-monitoring:
+	@echo "Deploying monitoring stack..."
+	kubectl apply -k k8s/monitoring
+	kubectl get pods -n monitoring
+
+.PHONY: k8s-status
+k8s-status:
+	@echo "=== Nodes ==="
+	kubectl get nodes
+	@echo "\n=== UITGo Pods ==="
+	kubectl get pods -n uitgo
+	@echo "\n=== UITGo Services ==="
+	kubectl get svc -n uitgo
+	@echo "\n=== Monitoring Pods ==="
+	kubectl get pods -n monitoring
+	@echo "\n=== ArgoCD Apps ==="
+	kubectl get applications -n argocd 2>/dev/null || echo "ArgoCD not installed"
+
+.PHONY: k8s-logs-user
+k8s-logs-user:
+	kubectl logs -n uitgo -l app=user-service --tail=100 -f
+
+.PHONY: k8s-logs-trip
+k8s-logs-trip:
+	kubectl logs -n uitgo -l app=trip-service --tail=100 -f
+
+.PHONY: k8s-logs-driver
+k8s-logs-driver:
+	kubectl logs -n uitgo -l app=driver-service --tail=100 -f
+
+.PHONY: k8s-port-forward
+k8s-port-forward:
+	@echo "Starting port forwards..."
+	@echo "API Gateway: http://localhost:8080"
+	@echo "Grafana: http://localhost:3000"
+	@echo "Prometheus: http://localhost:9090"
+	@echo "Press Ctrl+C to stop"
+	kubectl port-forward svc/user-service -n uitgo 8081:8081 &
+	kubectl port-forward svc/trip-service -n uitgo 8082:8082 &
+	kubectl port-forward svc/driver-service -n uitgo 8083:8083 &
+	kubectl port-forward svc/grafana -n monitoring 3000:3000 &
+	kubectl port-forward svc/prometheus -n monitoring 9090:9090 &
+	wait
+
+.PHONY: k8s-clean
+k8s-clean:
+	@echo "Cleaning up Kubernetes resources..."
+	kubectl delete -k k8s/overlays/dev --ignore-not-found
+	kubectl delete -k k8s/monitoring --ignore-not-found
+	kubectl delete namespace uitgo --ignore-not-found
+	kubectl delete namespace monitoring --ignore-not-found
+
+.PHONY: k8s-restart
+k8s-restart:
+	@echo "Restarting all UITGo deployments..."
+	kubectl rollout restart deployment -n uitgo
+
+.PHONY: argocd-sync
+argocd-sync:
+	@echo "Syncing ArgoCD applications..."
+	argocd app sync uitgo-dev
+
+.PHONY: argocd-status
+argocd-status:
+	@echo "ArgoCD application status..."
+	argocd app list
+	argocd app get uitgo-dev
+
+.PHONY: ci-local
+ci-local:
+	@echo "Running CI pipeline locally with Act..."
+	act push -W .github/workflows/be_ci.yml
+
+.PHONY: validate-manifests
+validate-manifests:
+	@echo "Validating Kubernetes manifests..."
+	kustomize build k8s/base > /dev/null && echo "✓ Base manifests valid"
+	kustomize build k8s/overlays/dev > /dev/null && echo "✓ Dev overlay valid"
+	kustomize build k8s/overlays/staging > /dev/null && echo "✓ Staging overlay valid"
+

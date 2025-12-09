@@ -1,12 +1,16 @@
 # UITGo Monorepo
 
-UITGo là nền tảng gọi xe mẫu, trong đó ứng dụng Flutter cho rider và driver giao tiếp qua API Gateway tới các microservice viết bằng Go (user, trip, driver). Dự án tích hợp sẵn hệ thống quan sát (Prometheus, Grafana, Sentry) và hạ tầng mẫu bằng Terraform, phục vụ phát triển, demo và triển khai thử nghiệm.
+UITGo là nền tảng gọi xe mẫu, trong đó ứng dụng Flutter cho rider và driver giao tiếp qua API Gateway tới các microservice viết bằng Go (user, trip, driver). Dự án tích hợp sẵn hệ thống quan sát (Prometheus, Grafana, Loki), GitOps với ArgoCD, và hạ tầng Kubernetes/Terraform, phục vụ phát triển, demo và triển khai thử nghiệm.
 
 ## Toàn cảnh
-- Backend: `user-service`, `trip-service`, `driver-service` chạy sau gateway Nginx; Redis dùng cho geospatial index và hàng đợi ghép chuyến.
-- Ứng dụng: Flutter rider/driver (`apps/rider_app`, `apps/driver_app`) và admin prototype (`apps/admin_app`).
-- Quan sát: Prometheus + Grafana auto-provisioned dashboard, Sentry hook cho backend và Flutter, log JSON sẵn sàng ship sang Loki/ELK.
-- Hạ tầng: Docker Compose cho dev/staging, scaffold Terraform cho VPC, Postgres, Redis, SQS/ASG.
+- **Backend**: `user-service`, `trip-service`, `driver-service` chạy sau gateway Nginx/Ingress; Redis dùng cho geospatial index và hàng đợi ghép chuyến.
+- **Ứng dụng**: Flutter rider/driver (`apps/rider_app`, `apps/driver_app`) và admin prototype (`apps/admin_app`).
+- **Quan sát**: Prometheus + Grafana + Loki (centralized logging), Sentry hook cho backend và Flutter.
+- **Hạ tầng**: 
+  - **Local/Dev**: Docker Compose hoặc k3s Kubernetes
+  - **Staging**: Kubernetes với Kustomize overlays
+  - **Cloud**: Terraform scaffold cho VPC, Postgres, Redis, SQS/ASG
+- **GitOps**: ArgoCD tự động đồng bộ từ Git repository vào Kubernetes cluster.
 
 ## Kiến trúc dịch vụ
 | Service | Vai trò | Port | Lưu trữ |
@@ -24,16 +28,36 @@ UITGo là nền tảng gọi xe mẫu, trong đó ứng dụng Flutter cho rider
 - `make`
 - Go 1.22+ (nếu chạy dịch vụ trực tiếp)
 - Flutter stable (nếu build rider/driver)
+- **Kubernetes local** (tùy chọn): k3s hoặc kind
+- **Helm** (tùy chọn): để cài đặt monitoring stack
 
 ## Khởi chạy nhanh
+
+### Option 1: Docker Compose (đơn giản nhất)
 ```bash
 # từ thư mục gốc
 docker compose up --build
 ```
-- Khởi tạo 3 Postgres, 3 service Go, Redis, API Gateway, Prometheus, Grafana.
-- Mỗi service dùng DB riêng (user/trip/driver); trip-service đã tách khỏi DB của user-service.
-- Endpoint: API `http://localhost:8080`, Prometheus `http://localhost:9090`, Grafana `http://localhost:3000` (admin/`uitgo`).
-- Grafana tự nạp dashboard `observability/grafana/dashboards/uitgo-overview.json`.
+
+### Option 2: Kubernetes với k3s (production-like)
+```bash
+# Chạy script setup tự động
+./scripts/setup-local-devops.sh full
+
+# Hoặc từng bước:
+make k8s-build       # Build và push images
+make k8s-deploy      # Deploy lên Kubernetes
+make k8s-monitoring  # Deploy Prometheus + Grafana + Loki
+make k8s-status      # Kiểm tra trạng thái
+```
+
+### Endpoints
+| Service | Docker Compose | Kubernetes |
+|---------|---------------|------------|
+| API Gateway | http://localhost:8080 | http://uitgo.local |
+| Prometheus | http://localhost:9090 | `make k8s-port-forward` |
+| Grafana | http://localhost:3000 | `make k8s-port-forward` |
+| ArgoCD | — | https://localhost:&lt;nodeport&gt; |
 
 ## Cấu hình chính
 ### Backend (biến dùng chung cho các service)
@@ -106,13 +130,107 @@ curl -s http://localhost:8080/auth/refresh \
 - Load test: `make loadtest-trip-matching ACCESS_TOKEN=<jwt>` (sử dụng kịch bản rider/driver search, đặt `API_BASE` nếu không phải localhost; kết quả JSON nằm trong `loadtests/results/`).
 - CI: `.github/workflows/be_ci.yml` (Go), `.github/workflows/fe_ci.yml` (Flutter), `.github/workflows/deploy.yml` build/push image `ghcr.io/.../uitgo-backend:<sha>`, build APK/IPA/Web, validate stack `infra/staging`.
 
+### CI/CD Pipeline Stages
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│    TEST     │───▶│    BUILD    │───▶│  SECURITY   │───▶│   GITOPS    │
+│ • go test   │    │ • docker    │    │ • Trivy     │    │ • kustomize │
+│ • lint      │    │   build     │    │   scan      │    │ • ArgoCD    │
+│ • coverage  │    │ • push GHCR │    │ • SBOM      │    │   sync      │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+```
+
+### Chạy CI locally
+```bash
+make ci-local   # Sử dụng Act để chạy GitHub Actions trên máy local
+```
+
+## GitOps với ArgoCD
+Dự án sử dụng GitOps pattern: thay đổi trong `k8s/overlays/` được ArgoCD tự động sync vào cluster.
+
+```bash
+# Xem trạng thái ArgoCD
+make argocd-status
+
+# Sync thủ công
+make argocd-sync
+
+# Workflow:
+# 1. Push code → GitHub Actions chạy
+# 2. CI build image mới → push GHCR
+# 3. CI update image tag trong k8s/overlays/*/kustomization.yaml
+# 4. ArgoCD phát hiện thay đổi → auto-sync vào K8s
+```
+
 ## Triển khai & hạ tầng
-- Staging Compose: `infra/staging` (copy `.env.staging.example` → `.env.staging`, rồi `docker compose up -d`).
-- Terraform scaffold & hướng dẫn: `infra/terraform/README.md` (VPC, RDS, Redis, SQS; deploy app hiện chạy docker compose trên EC2/ASG).
-- Terraform scaffold: `infra/terraform` (module network, rds, redis, sqs, asg). Đặt `TF_VAR_db_password` (hoặc file `dev.tfvars`) rồi `terraform init && terraform apply` trong `infra/terraform/envs/dev`.
-- AWS triển khai dùng **một Auto Scaling Group** chạy script `backend.sh.tpl` để khởi động toàn bộ stack Docker Compose (user/trip/driver + nginx). Cách này đơn giản hoá vận hành nhưng mọi service cùng scale theo số node EC2 chung; cần tăng kích thước instance hoặc nhân bản toàn bộ stack nếu muốn mở rộng.
+
+### Kubernetes (Local/Staging)
+```bash
+# Cấu trúc Kubernetes manifests
+k8s/
+├── base/                 # Base configurations (Kustomize)
+│   ├── namespace.yaml
+│   ├── configmap.yaml
+│   ├── secrets.yaml
+│   ├── databases.yaml    # 3× PostgreSQL StatefulSets
+│   ├── redis.yaml
+│   ├── *-service.yaml    # user/trip/driver deployments
+│   └── ingress.yaml
+├── overlays/
+│   ├── dev/              # Development overrides
+│   └── staging/          # Staging overrides (more replicas)
+├── monitoring/           # Prometheus + Grafana + Loki
+└── argocd/               # GitOps application definitions
+
+# Deploy commands
+make k8s-deploy           # Deploy dev overlay
+make k8s-deploy-staging   # Deploy staging overlay
+make k8s-monitoring       # Deploy observability stack
+make k8s-clean            # Cleanup all resources
+```
+
+### Docker Compose
+- **Development**: `docker compose up --build` (root)
+- **Staging**: `infra/staging` (copy `.env.staging.example` → `.env.staging`, rồi `docker compose up -d`)
+
+### Terraform (Cloud)
+- Scaffold & hướng dẫn: `infra/terraform/README.md`
+- Modules: network, rds, redis, sqs, asg
+- AWS triển khai dùng Auto Scaling Group chạy script `backend.sh.tpl` để khởi động toàn bộ stack Docker Compose.
 
 ## Tài liệu thêm
-- `docs/architecture-stage1.md` – mô tả skeleton microservice và biến môi trường.
-- `docs/moduleA_scalability.md` – báo cáo tối ưu hiệu năng và kết quả k6.
-- `backend/README.md` – chi tiết API và hướng dẫn service Go.
+- `docs/DEVOPS_IMPLEMENTATION_SUMMARY.md` – tổng quan hạ tầng DevOps và hướng dẫn sử dụng
+- `docs/architecture-stage1.md` – mô tả skeleton microservice và biến môi trường
+- `docs/moduleA_scalability.md` – báo cáo tối ưu hiệu năng và kết quả k6
+- `backend/README.md` – chi tiết API và hướng dẫn service Go
+
+## Makefile Commands
+
+### Development
+```bash
+make dev          # Docker Compose up --build
+make down         # Docker Compose down
+```
+
+### Kubernetes
+```bash
+make k8s-setup    # Setup full local K8s environment
+make k8s-build    # Build & push images to local registry
+make k8s-deploy   # Deploy to K8s (dev overlay)
+make k8s-status   # Check cluster status
+make k8s-logs-*   # View service logs (user/trip/driver)
+make k8s-clean    # Cleanup all K8s resources
+```
+
+### CI/CD
+```bash
+make ci-local         # Run CI locally with Act
+make argocd-sync      # Sync ArgoCD applications
+make validate-manifests  # Validate K8s manifests
+```
+
+### Load Testing
+```bash
+make loadtest-local       # Run load tests locally
+make loadtest-full-suite  # Complete load test suite
+```

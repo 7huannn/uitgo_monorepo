@@ -1,0 +1,36 @@
+# Kustomization for base resources
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: uitgo-base
+
+namespace: uitgo
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secrets.yaml
+  - databases.yaml
+  - redis.yaml
+  - user-service.yaml
+  - trip-service.yaml
+  - driver-service.yaml
+  - ingress.yaml
+
+# Common labels applied to all resources
+commonLabels:
+  app.kubernetes.io/part-of: uitgo-platform
+  app.kubernetes.io/managed-by: kustomize
+
+# Image configuration (to be overridden in overlays)
+images:
+  - name: uitgo/user-service
+    newName: uitgo/user-service
+    newTag: latest
+  - name: uitgo/trip-service
+    newName: uitgo/trip-service
+    newTag: latest
+  - name: uitgo/driver-service
+    newName: uitgo/driver-service
+    newTag: latest

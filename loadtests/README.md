@@ -20,7 +20,7 @@
 
 - Python 3 với `matplotlib` và `numpy`: `pip install matplotlib numpy`
 
-## 🔐 Chuẩn bị tài khoản test
+## Chuẩn bị tài khoản test
 
 - `make` có sẵn trong terminal- `k6` installed locally.
 
@@ -106,7 +106,7 @@ export ACCESS_TOKEN=$(curl -s -X POST http://localhost:8080/auth/login \
 
 
 
-## ⚠️ Lưu ý quan trọng về Rate Limit  -d '{"email":"test.rider@example.com","password":"test123456"}' | jq -r '.accessToken')
+## Lưu ý quan trọng về Rate Limit  -d '{"email":"test.rider@example.com","password":"test123456"}' | jq -r '.accessToken')
 
 
 
@@ -140,7 +140,7 @@ NUM_USERS=20 ./loadtests/scripts/setup_test_users.sh  -d '{"amount":1000000}' | 
 
 
 
-## 🚀 Chạy Load Test
+## Chạy Load Test
 
 ### Bước 3: Export token để sử dụng  -d '{"name":"Test Rider","email":"test.rider@example.com","password":"test123456","phone":"0900000001"}' | jq .```sh
 
@@ -174,7 +174,7 @@ make loadtest-trip-matching ACCESS_TOKEN=$ACCESS_TOKEN
 
 
 
-## 📋 Các kịch bản testecho $ACCESS_TOKEN
+## Các kịch bản testecho $ACCESS_TOKEN
 
 
 
@@ -252,7 +252,7 @@ make loadtest-full-suite ACCESS_TOKEN=$ACCESS_TOKEN```ACCESS_TOKEN=... make load
 
 ```
 
-## 📊 Kết quả đầu ra
+## Kết quả đầu ra
 
 ```
 
@@ -284,7 +284,7 @@ make loadtest-chartsmake loadtest-local ACCESS_TOKEN=$ACCESS_TOKEN
 
 # Test trip matching với nhiều mức RPS
 
-## 📈 Tổng quan các kịch bản test
+##  Tổng quan các kịch bản test
 
 make loadtest-trip-matching ACCESS_TOKEN=$ACCESS_TOKENcurl -s -X POST http://localhost:8080/auth/login \ACCESS_TOKEN=... make loadtest-soak
 
@@ -310,7 +310,7 @@ make loadtest-trip-matching ACCESS_TOKEN=$ACCESS_TOKENcurl -s -X POST http://loc
 
 
 
-## 🔍 Cách đọc kết quả```
+## Cách đọc kết quả```
 
 
 
@@ -346,7 +346,7 @@ http_req_duration p(95): 7.03ms
 
 
 
-## ⚙️ Biến môi trường
+## Biến môi trường
 
 
 
