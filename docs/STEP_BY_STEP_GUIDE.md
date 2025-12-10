@@ -122,6 +122,10 @@ kubectl get pods -n monitoring
 
 # → Mở browser: http://localhost:3000 (Grafana)
 # → Login: admin / uitgo
+# → Dashboards:
+#   - UITGo Services: http://localhost:3000/d/uitgo-services
+#   - UITGo Alerts: http://localhost:3000/d/uitgo-alerts  
+#   - UITGo SLO: http://localhost:3000/d/uitgo-slo
 
 # ═══════════════════════════════════════════════════════════════
 # SLIDE 5: ArgoCD GitOps
@@ -180,6 +184,47 @@ kubectl describe pod <pod-name> -n uitgo  # Chi tiết pod
 # Deploy lại
 kubectl apply -k k8s/overlays/dev
 ```
+
+---
+
+## PHẦN 4: ALERTING & SLO
+
+### Alert Rules đã cấu hình
+
+| Alert | Severity | Điều kiện | Mô tả |
+|-------|----------|-----------|-------|
+| ServiceDown | 🔴 Critical | `up == 0` trong 1 phút | Service bị down |
+| HighMemory | 🟡 Warning | `heap > 256MB` trong 5 phút | Memory usage cao |
+| CriticalMemory | 🔴 Critical | `heap > 384MB` trong 2 phút | Memory quá cao |
+| HighGoroutines | 🟡 Warning | `goroutines > 500` trong 5 phút | Có thể bị leak |
+| GoroutineLeak | 🟡 Warning | Tăng >100 trong 1h | Goroutine leak |
+| ServiceRestarted | ℹ️ Info | Restart detected | Service bị restart |
+
+### SLO Targets
+
+| Metric | Target | Ý nghĩa |
+|--------|--------|---------|
+| **Availability** | ≥ 99.9% | Uptime cao |
+| **Memory** | ≤ 256MB | Hiệu quả tài nguyên |
+| **Goroutines** | ≤ 100 | Không bị leak |
+| **GC Duration** | ≤ 100ms | Performance tốt |
+
+### Error Budget
+- Monthly downtime allowed: **43.2 minutes** (99.9% SLO)
+- Tính theo: `30 days × 24h × 60min × 0.001 = 43.2 minutes`
+
+### Kiểm tra Alerts
+```bash
+# Xem alerts đang firing trong Prometheus
+curl -s localhost:9090/api/v1/alerts | jq '.data.alerts'
+
+# Xem rules được load
+curl -s localhost:9090/api/v1/rules | jq '.data.groups[].name'
+```
+
+---
+
+## PHẦN 5: TROUBLESHOOTING
 
 ### Lỗi "connection refused" khi curl
 ```bash
@@ -240,7 +285,24 @@ kubectl apply -k k8s/overlays/dev
 | Driver Service | http://localhost:8083 | - |
 | Prometheus | http://localhost:9090 | - |
 | Grafana | http://localhost:3000 | admin / uitgo |
-| ArgoCD | https://localhost:8443 | admin / (xem bằng lệnh) |
+| ArgoCD | https://localhost:8443 | admin / LFLCTz5yGEog1k5X |
+
+### Grafana Dashboards
+
+| Dashboard | URL | Mô tả |
+|-----------|-----|-------|
+| UITGo Services | http://localhost:3000/d/uitgo-services | Go runtime metrics, memory, goroutines |
+| UITGo Alerts | http://localhost:3000/d/uitgo-alerts | Health status, uptime, alerts |
+| UITGo SLO | http://localhost:3000/d/uitgo-slo | SLI/SLO, availability, reliability |
+
+### Lấy password ArgoCD (nếu quên):
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d && echo ""
+```
+
+> **Lưu ý:** Password ArgoCD được tạo 1 lần khi cài đặt và không thay đổi (trừ khi cài lại ArgoCD).
+
+> **Lưu ý:** Khi truy cập https://localhost:8443, browser sẽ cảnh báo SSL → Click **Advanced** → **Proceed to localhost (unsafe)**
 
 ---
 

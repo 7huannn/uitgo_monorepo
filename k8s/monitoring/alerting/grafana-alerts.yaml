@@ -1,0 +1,174 @@
+# Grafana Alert Provisioning for UITGo
+# File: k8s/monitoring/alerting/grafana-alerts.yaml
+# This configures Grafana's unified alerting system
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerting
+  namespace: monitoring
+  labels:
+    app: grafana
+    grafana_alert: "1"
+data:
+  alerting.yaml: |
+    # Contact Points (where alerts are sent)
+    contactPoints:
+      - orgId: 1
+        name: UITGo-Alerts
+        receivers:
+          # Console/Log Output (always enabled for demo)
+          - uid: console-receiver
+            type: oncall
+            disableResolveMessage: false
+          
+          # Slack Integration (configure webhook URL)
+          # - uid: slack-receiver
+          #   type: slack
+          #   settings:
+          #     url: "${SLACK_WEBHOOK_URL}"
+          #     recipient: "#devops-alerts"
+          #     text: |
+          #       {{ template "default.message" . }}
+          
+          # Discord Integration
+          # - uid: discord-receiver
+          #   type: discord
+          #   settings:
+          #     url: "${DISCORD_WEBHOOK_URL}"
+          
+          # Email (configure SMTP first)
+          # - uid: email-receiver
+          #   type: email
+          #   settings:
+          #     addresses: team@uitgo.com
+          #     singleEmail: false
+
+    # Notification Policies (routing rules)
+    policies:
+      - orgId: 1
+        receiver: UITGo-Alerts
+        group_by: ['alertname', 'job']
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 4h
+        routes:
+          # Critical alerts - immediate notification
+          - receiver: UITGo-Alerts
+            matchers:
+              - severity = critical
+            group_wait: 10s
+            repeat_interval: 1h
+          
+          # Warning alerts - normal notification
+          - receiver: UITGo-Alerts
+            matchers:
+              - severity = warning
+            group_wait: 1m
+            repeat_interval: 4h
+          
+          # Info alerts - low priority
+          - receiver: UITGo-Alerts
+            matchers:
+              - severity = info
+            group_wait: 5m
+            repeat_interval: 12h
+
+    # Alert Rules
+    groups:
+      - orgId: 1
+        name: UITGo Service Health
+        folder: UITGo Alerts
+        interval: 1m
+        rules:
+          # Service Down Alert
+          - uid: uitgo-service-down
+            title: UITGo Service Down
+            condition: A
+            data:
+              - refId: A
+                queryType: ""
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  expr: up{job=~"uitgo.*"} == 0
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+            noDataState: Alerting
+            execErrState: Alerting
+            for: 1m
+            annotations:
+              summary: "Service {{ $labels.job }} is DOWN"
+              description: "The UITGo service {{ $labels.job }} at {{ $labels.instance }} has been down for more than 1 minute."
+            labels:
+              severity: critical
+              team: backend
+
+          # High Memory Usage Alert
+          - uid: uitgo-high-memory
+            title: UITGo High Memory Usage
+            condition: A
+            data:
+              - refId: A
+                queryType: ""
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  expr: go_memstats_heap_alloc_bytes{job=~"uitgo.*"} / 1024 / 1024 > 256
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+            noDataState: OK
+            execErrState: Alerting
+            for: 5m
+            annotations:
+              summary: "High memory usage in {{ $labels.job }}"
+              description: "Service {{ $labels.job }} is using more than 256MB of heap memory."
+            labels:
+              severity: warning
+              team: backend
+
+          # High Goroutines Alert
+          - uid: uitgo-high-goroutines
+            title: UITGo High Goroutine Count
+            condition: A
+            data:
+              - refId: A
+                queryType: ""
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  expr: go_goroutines{job=~"uitgo.*"} > 500
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+            noDataState: OK
+            execErrState: Alerting
+            for: 5m
+            annotations:
+              summary: "High goroutine count in {{ $labels.job }}"
+              description: "Service {{ $labels.job }} has more than 500 goroutines, possible leak detected."
+            labels:
+              severity: warning
+              team: backend
+
+---
+# Grafana Alert Contact Points Secret Template
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-alert-secrets
+  namespace: monitoring
+type: Opaque
+stringData:
+  # Add your notification channel webhooks here
+  slack-webhook: ""
+  discord-webhook: ""
+  pagerduty-key: ""

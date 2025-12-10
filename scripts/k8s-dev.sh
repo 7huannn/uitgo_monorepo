@@ -86,11 +86,20 @@ cmd_forward() {
     kubectl port-forward -n $NAMESPACE svc/trip-service 8082:8082 &
     kubectl port-forward -n $NAMESPACE svc/driver-service 8083:8083 &
     
+    # Monitoring & ArgoCD
+    kubectl port-forward -n monitoring svc/grafana 3000:3000 2>/dev/null &
+    kubectl port-forward -n monitoring svc/prometheus 9090:9090 2>/dev/null &
+    kubectl port-forward -n argocd svc/argocd-server 8443:443 2>/dev/null &
+    
     sleep 2
     log_info " Port forwarding active:"
     echo "  • User Service:   http://localhost:8081"
     echo "  • Trip Service:   http://localhost:8082"  
     echo "  • Driver Service: http://localhost:8083"
+    echo ""
+    echo "  • Grafana:        http://localhost:3000  (admin/uitgo)"
+    echo "  • Prometheus:     http://localhost:9090"
+    echo "  • ArgoCD:         https://localhost:8443 (admin/LFLCTz5yGEog1k5X)"
     echo ""
     log_info "Press Ctrl+C to stop port forwarding"
     wait

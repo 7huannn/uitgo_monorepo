@@ -1,0 +1,153 @@
+# Prometheus Alert Rules for UITGo
+# File: k8s/monitoring/alerting/alert-rules.yaml
+# This file contains professional alert rules for production monitoring
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-alert-rules
+  namespace: monitoring
+  labels:
+    app: prometheus
+data:
+  alert-rules.yml: |
+    groups:
+      # ==========================================
+      # UITGo Service Alerts
+      # ==========================================
+      - name: uitgo-service-alerts
+        interval: 30s
+        rules:
+          # Service Down Alert - Critical
+          - alert: UITGoServiceDown
+            expr: up{job=~"uitgo.*"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              team: backend
+            annotations:
+              summary: " UITGo Service is DOWN"
+              description: "Service {{ $labels.job }} ({{ $labels.instance }}) has been down for more than 1 minute."
+              runbook_url: "https://github.com/your-repo/runbooks/service-down.md"
+
+          # High Memory Usage
+          - alert: UITGoHighMemoryUsage
+            expr: go_memstats_heap_alloc_bytes{job=~"uitgo.*"} / 1024 / 1024 > 256
+            for: 5m
+            labels:
+              severity: warning
+              team: backend
+            annotations:
+              summary: " High Memory Usage"
+              description: "Service {{ $labels.job }} heap memory usage is {{ $value | printf \"%.2f\" }}MB (threshold: 256MB)"
+
+          # Critical Memory Usage
+          - alert: UITGoCriticalMemoryUsage
+            expr: go_memstats_heap_alloc_bytes{job=~"uitgo.*"} / 1024 / 1024 > 384
+            for: 2m
+            labels:
+              severity: critical
+              team: backend
+            annotations:
+              summary: " Critical Memory Usage"
+              description: "Service {{ $labels.job }} heap memory is critically high at {{ $value | printf \"%.2f\" }}MB"
+
+          # Too Many Goroutines
+          - alert: UITGoHighGoroutines
+            expr: go_goroutines{job=~"uitgo.*"} > 500
+            for: 5m
+            labels:
+              severity: warning
+              team: backend
+            annotations:
+              summary: " High Goroutine Count"
+              description: "Service {{ $labels.job }} has {{ $value }} goroutines (threshold: 500)"
+
+          # Goroutine Leak Suspected
+          - alert: UITGoGoroutineLeak
+            expr: increase(go_goroutines{job=~"uitgo.*"}[1h]) > 100
+            for: 10m
+            labels:
+              severity: warning
+              team: backend
+            annotations:
+              summary: " Possible Goroutine Leak"
+              description: "Service {{ $labels.job }} goroutine count increased by {{ $value }} in the last hour"
+
+          # High GC Duration
+          - alert: UITGoHighGCDuration
+            expr: go_gc_duration_seconds{job=~"uitgo.*", quantile="0.75"} > 0.1
+            for: 5m
+            labels:
+              severity: warning
+              team: backend
+            annotations:
+              summary: " High GC Duration"
+              description: "Service {{ $labels.job }} GC duration is {{ $value | printf \"%.3f\" }}s (threshold: 100ms)"
+
+          # Service Restart Detected
+          - alert: UITGoServiceRestarted
+            expr: changes(process_start_time_seconds{job=~"uitgo.*"}[10m]) > 0
+            for: 1m
+            labels:
+              severity: info
+              team: backend
+            annotations:
+              summary: " Service Restarted"
+              description: "Service {{ $labels.job }} was restarted {{ $value }} time(s) in the last 10 minutes"
+
+          # Too Many Open File Descriptors
+          - alert: UITGoHighOpenFDs
+            expr: process_open_fds{job=~"uitgo.*"} > 1000
+            for: 5m
+            labels:
+              severity: warning
+              team: backend
+            annotations:
+              summary: " High Open File Descriptors"
+              description: "Service {{ $labels.job }} has {{ $value }} open file descriptors"
+
+      # ==========================================
+      # Database Alerts
+      # ==========================================
+      - name: database-alerts
+        interval: 30s
+        rules:
+          # PostgreSQL Down
+          - alert: PostgreSQLDown
+            expr: up{job=~".*postgres.*"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              team: database
+            annotations:
+              summary: " PostgreSQL is DOWN"
+              description: "PostgreSQL instance {{ $labels.instance }} is not responding"
+
+      # ==========================================
+      # Infrastructure Alerts  
+      # ==========================================
+      - name: infrastructure-alerts
+        interval: 30s
+        rules:
+          # Redis Down
+          - alert: RedisDown
+            expr: up{job=~".*redis.*"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              team: infrastructure
+            annotations:
+              summary: " Redis is DOWN"
+              description: "Redis instance {{ $labels.instance }} is not responding"
+
+          # High Scrape Duration
+          - alert: HighPrometheusScrapeLatency
+            expr: scrape_duration_seconds{job=~"uitgo.*"} > 5
+            for: 5m
+            labels:
+              severity: warning
+              team: devops
+            annotations:
+              summary: " High Prometheus Scrape Latency"
+              description: "Scraping {{ $labels.job }} is taking {{ $value | printf \"%.2f\" }}s"
