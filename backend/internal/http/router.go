@@ -132,7 +132,7 @@ func seedAdminUser(ctx context.Context, cfg *config.Config, repo domain.UserRepo
 	if email == "" || password == "" {
 		// fallback dev admin
 		email = "admin@example.com"
-		password = "***REMOVED***"
+		password = "admin123"
 		log.Printf("admin seed: using default dev admin credentials (%s)", email)
 	}
 

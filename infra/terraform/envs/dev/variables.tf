@@ -77,7 +77,7 @@ variable "jwt_secret" {
 variable "refresh_token_encryption_key" {
   description = "32-byte key for refresh token encryption"
   type        = string
-  default     = "***REMOVED***"
+  default     = "uitgo-dev-refresh-key-32bytes!!!"
   sensitive   = true
 }
 

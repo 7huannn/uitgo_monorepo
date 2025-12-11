@@ -41,7 +41,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   late ApiClient _client;
   final _apiController = TextEditingController(text: 'http://localhost:8080');
   final _loginEmail = TextEditingController(text: 'admin@example.com');
-  final _loginPassword = TextEditingController(text: '***REMOVED***');
+  final _loginPassword = TextEditingController(text: 'admin123');
   final _registerName = TextEditingController(text: 'UIT Rider');
   final _registerEmail = TextEditingController(text: 'rider@example.com');
   final _registerPhone = TextEditingController(text: '0900000000');

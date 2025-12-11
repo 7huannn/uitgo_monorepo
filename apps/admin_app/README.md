@@ -21,4 +21,4 @@ flutter run -d chrome --web-renderer html
 ```
 
 Set the API base (default `http://localhost:8080`), log in with an admin account
-(dev compose seeds `admin@example.com` / `***REMOVED***`), then start managing trips.
+(dev compose seeds `admin@example.com` / `admin123`), then start managing trips.

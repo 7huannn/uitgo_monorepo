@@ -48,7 +48,7 @@ type Config struct {
 	AdminName               string
 }
 
-const devRefreshFallback = "***REMOVED***"
+const devRefreshFallback = "uitgo-dev-refresh-key-32bytes!!!"
 
 // Load reads configuration from environment variables.
 func Load() (*Config, error) {

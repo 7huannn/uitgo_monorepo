@@ -213,7 +213,7 @@ flutter run -d chrome --web-renderer html
 ```
 
 Set `API base` to `http://localhost:8080`, log in with the seeded admin
-(`admin@example.com` / `***REMOVED***` in dev compose), and you can create users,
+(`admin@example.com` / `admin123` in dev compose), and you can create users,
 manage trips, and drive the WebSocket channel from the browser.
 
 Admin-only endpoints:
