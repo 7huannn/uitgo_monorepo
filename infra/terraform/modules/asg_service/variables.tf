@@ -44,6 +44,12 @@ variable "user_data" {
   default = ""
 }
 
+variable "iam_instance_profile_name" {
+  description = "IAM instance profile name for EC2 instances"
+  type        = string
+  default     = ""
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

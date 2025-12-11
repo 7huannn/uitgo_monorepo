@@ -110,6 +110,14 @@ secrets/
 *.crt
 *.p12
 
+# Terraform secrets
+*.tfvars
+!*.tfvars.example
+
+# Kubernetes secrets
+k8s/**/secrets.yaml
+!k8s/**/secrets.example.yaml
+
 #############################
 # IDE / OS
 #############################
@@ -185,3 +193,5 @@ temp/
 *.bak
 *.backup
 *.orig
+tfplan
+*.tfplan

@@ -38,7 +38,7 @@ variable "allowed_cidrs" {
 variable "engine_version" {
   description = "PostgreSQL engine version"
   type        = string
-  default     = "15.4"
+  default     = "15.10"
 }
 
 variable "instance_class" {

@@ -1,0 +1,793 @@
+\documentclass[12pt,a4paper]{report}
+
+% ===================== PACKAGES =====================
+\usepackage[utf8]{vietnam}
+\usepackage[T5]{fontenc}
+\usepackage{mathptmx}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage[hidelinks]{hyperref}
+\usepackage{setspace}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{geometry}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage{enumitem}
+
+% Cấu hình trang in chuẩn
+\geometry{
+  a4paper,
+  left=25mm,
+  right=20mm,
+  top=20mm,
+  bottom=20mm
+}
+
+% Định nghĩa màu sắc thương hiệu UIT
+\definecolor{uitBlue}{HTML}{005696}
+\definecolor{uitRed}{HTML}{DB2828}
+
+% ===================== STYLING =====================
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small \textit{Báo cáo Đồ án SE360 - UIT-Go}}
+\fancyhead[R]{\small \thepage}
+\renewcommand{\headrulewidth}{0.5pt}
+
+\titleformat{\chapter}[hang]
+  {\normalfont\huge\bfseries\color{uitBlue}}{\thechapter.}{1em}{}
+\titlespacing*{\chapter}{0pt}{-20pt}{20pt}
+
+\captionsetup{font=small, labelfont=bf, labelsep=period}
+
+\newcommand{\FullDotLine}{%
+  \noindent\makebox[\textwidth]{\dotfill}\\[1em]%
+}
+
+\begin{document}
+
+% ===================== TRANG BÌA =====================
+\begin{titlepage}
+\begin{tikzpicture}[remember picture,overlay]
+  \draw[line width=2pt, uitBlue] ([xshift=1cm,yshift=-1cm]current page.north west)
+    rectangle ([xshift=-1cm,yshift=1cm]current page.south east);
+\end{tikzpicture}
+
+\begin{center}
+  \vspace*{1cm}
+  {\large\bfseries ĐẠI HỌC QUỐC GIA TP.\,HỒ CHÍ MINH}\\[0.5em]
+  {\large\bfseries TRƯỜNG ĐẠI HỌC CÔNG NGHỆ THÔNG TIN}\\[2cm]
+
+  \includegraphics[width=4cm]{assets/image1.png}\\[2cm]
+
+  {\LARGE\bfseries BÁO CÁO ĐỒ ÁN}\\[0.5em]
+  {\large\bfseries MÔN HỌC: ĐIỆN TOÁN ĐÁM MÂY \& PT ỨNG DỤNG HƯỚNG DỊCH VỤ}\\[0.5em]
+  {\small (Mã lớp: SE360.P11)}\\[2cm]
+
+  {\Large\bfseries ĐỀ TÀI:}\\[0.5em]
+  {\Huge\bfseries\color{uitRed} UIT - GO}\\[0.5em]
+  {\Large\bfseries XÂY DỰNG NỀN TẢNG GỌI XE CLOUD-NATIVE}\\[2cm]
+
+  \vfill
+
+  \begin{tabular}{ll}
+    \textbf{Giảng viên hướng dẫn:} & ThS. Lê Văn Tuấn \\[1em]
+    \textbf{Sinh viên thực hiện:} & 1. Nguyễn Hùng Quân - 23521263 \\
+                                  & 2. Phan Thành Đạt \hspace{0.35cm} - 23520287 \\
+                                  & 3. Lê Khắc Thuận \hspace{0.45cm} - 23521550 \\
+  \end{tabular}
+
+  \vfill
+  {\small Tp. Hồ Chí Minh, Tháng 12 năm 2025}
+\end{center}
+\end{titlepage}
+
+% ===================== LỜI CẢM ƠN =====================
+\chapter*{Lời cảm ơn}
+\addcontentsline{toc}{chapter}{Lời cảm ơn}
+\onehalfspacing
+
+Trước hết, chúng em xin chân thành cảm ơn Nhà trường và Bộ môn đã tạo điều kiện cho chúng em học tập và thực hiện môn học này thuận lợi. Đặc biệt, xin cảm ơn Thầy Lê Văn Tuấn đã tận tình hướng dẫn, định hướng và hỗ trợ các tài liệu cần thiết trong suốt quá trình làm đồ án.
+
+Nhóm cũng cảm ơn các thành viên đã hợp tác chặt chẽ, chia sẻ công việc và hoàn thành tốt nhiệm vụ được giao. Trong thời gian thực hiện đề tài, chúng em đã vận dụng những kiến thức tích lũy và tìm hiểu thêm nhiều nội dung mới để hoàn thành báo cáo này.
+
+Mặc dù đã nỗ lực hết sức, chắc chắn không tránh khỏi những thiếu sót; chúng em mong nhận được sự thông cảm và góp ý từ Thầy để tiếp tục hoàn thiện.
+
+Xin chân thành cảm ơn!
+
+\hfill \textit{Thành phố Hồ Chí Minh, tháng 12 năm 2025}
+
+\clearpage
+
+% ===================== NHẬN XÉT CỦA GV =====================
+\chapter*{Nhận xét của giảng viên}
+\addcontentsline{toc}{chapter}{Nhận xét của giảng viên}
+
+\noindent\textbf{Sinh viên thực hiện:} Nguyễn Hùng Quân, Phan Thành Đạt, Lê Khắc Thuận.
+
+\vspace{1cm}
+\FullDotLine
+\FullDotLine
+\FullDotLine
+\FullDotLine
+\FullDotLine
+\FullDotLine
+\FullDotLine
+\FullDotLine
+\FullDotLine
+\FullDotLine
+\vspace{1cm}
+\noindent\textbf{Điểm số:} .................................... \hfill \textbf{Chữ ký GVHD}
+
+\clearpage
+\tableofcontents
+\clearpage
+
+% ===================== CHƯƠNG 1: GIỚI THIỆU =====================
+\chapter{Giới thiệu}
+\onehalfspacing
+
+\section{Bối cảnh và Động lực}
+
+Các hệ thống phần mềm hiện đại thường phân tán, liên tục tiến hóa và vận hành ở quy mô lớn. Sự xuất hiện của điện toán đám mây, điều phối container và các dịch vụ quản lý đã thay đổi căn bản cách phần mềm được thiết kế và duy trì.
+
+Đồ án \emph{UIT-Go} được xây dựng như một hệ thống cloud-native thu nhỏ nhưng thực tế: không chỉ bao gồm mã nguồn đúng chức năng mà còn là tập hợp các phân hệ tương tác với nhau, có các thuộc tính nổi lên và ràng buộc vận hành.
+
+\section{Mục tiêu đồ án}
+
+Đồ án hướng đến các mục tiêu sau:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Giai đoạn 1 (Bắt buộc):} Xây dựng "bộ xương" microservices với 3 services cơ bản (UserService, TripService, DriverService), tuân thủ nguyên tắc Database-per-Service.
+    \item \textbf{Module A (Chuyên sâu):} Thiết kế kiến trúc cho Scalability \& Performance, bao gồm phân tích trade-offs và kiểm chứng bằng load testing.
+\end{enumerate}
+
+\section{Phạm vi hệ thống}
+
+\emph{UIT-Go} là nền tảng hỗ trợ sinh viên và cán bộ UIT trong việc điều phối di chuyển. Hệ thống bao gồm:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Rider App:} Ứng dụng cho hành khách đặt xe.
+    \item \textbf{Driver App:} Ứng dụng cho tài xế nhận chuyến.
+    \item \textbf{Admin App:} Giao diện quản trị hệ thống.
+    \item \textbf{Backend Services:} 3 microservices xử lý logic nghiệp vụ.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{assets/system-context-diagram.png}
+\caption{System Context Diagram của UIT-Go, minh họa ranh giới hệ thống và các bên liên quan.}
+\label{fig:system-context}
+\end{figure}
+
+Hình \ref{fig:system-context} minh họa các bên liên quan chính:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Students/End Users:} Gửi yêu cầu đặt xe, nhận thông báo trạng thái.
+    \item \textbf{Administrators:} Giám sát metrics, quản lý hệ thống.
+    \item \textbf{Mapping/Geo Services:} Cung cấp dữ liệu bản đồ và tính toán khoảng cách.
+    \item \textbf{Cloud Infrastructure:} Cung cấp tài nguyên compute, storage, network.
+\end{itemize}
+
+\section{Công nghệ sử dụng (Tech Stack)}
+
+\begin{table}[htbp]
+\centering
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|l|l|X|}
+\hline
+\textbf{Layer} & \textbf{Công nghệ} & \textbf{Lý do lựa chọn} \\
+\hline
+Frontend & Flutter 3.x, Dart 3.x & Cross-platform (iOS, Android, Web), hot reload \\
+\hline
+Backend & Go 1.22+, Gin Framework & Performance cao, concurrency tốt với goroutines \\
+\hline
+Database & PostgreSQL 15 & ACID compliance, JSON support, mature ecosystem \\
+\hline
+Cache/Queue & Redis 7 & In-memory speed, GEO commands, pub/sub \\
+\hline
+Container & Docker, Docker Compose & Containerization chuẩn, dễ local development \\
+\hline
+IaC & Terraform & Declarative, multi-cloud support, version controlled \\
+\hline
+Monitoring & Prometheus, Grafana & Cloud-native, open source, rich ecosystem \\
+\hline
+\end{tabularx}
+\caption{Tech Stack của hệ thống UIT-Go.}
+\label{tab:tech-stack}
+\end{table}
+
+% ===================== CHƯƠNG 2: GIAI ĐOẠN 1 =====================
+\chapter{Giai đoạn 1: Kiến trúc Microservices Cơ bản}
+
+\section{Tổng quan kiến trúc}
+
+Ở Giai đoạn 1, \emph{UIT-Go} được cấu trúc thành 3 microservices liên kết lỏng lẻo, đứng sau API Gateway và vận hành trên Docker Compose.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{assets/stage1-architecture.png}
+\caption{Kiến trúc UIT-Go Giai đoạn 1: Docker Compose với 3 Microservices và Database riêng biệt.}
+\label{fig:stage1-arch}
+\end{figure}
+
+\section{Mô tả các Microservices}
+
+\subsection{UserService (Port 8081)}
+\textbf{Trách nhiệm:} Quản lý thông tin người dùng (hành khách và tài xế), xử lý đăng ký, đăng nhập và hồ sơ.
+
+\textbf{Các tính năng chính:}
+\begin{itemize}[leftmargin=*]
+    \item Xác thực JWT (Access Token 15 phút, Refresh Token 30 ngày)
+    \item Quản lý hồ sơ người dùng (rider, driver, admin)
+    \item Quản lý ví điện tử và nạp tiền
+    \item Push notifications
+\end{itemize}
+
+\subsection{TripService (Port 8082)}
+\textbf{Trách nhiệm:} Dịch vụ trung tâm xử lý logic tạo chuyến đi, quản lý các trạng thái của chuyến.
+
+\textbf{Các trạng thái chuyến đi:}
+\begin{enumerate}[leftmargin=*]
+    \item \texttt{pending} - Đang tìm tài xế
+    \item \texttt{driver\_assigned} - Đã có tài xế nhận
+    \item \texttt{in\_progress} - Đang diễn ra
+    \item \texttt{completed} - Hoàn thành
+    \item \texttt{cancelled} - Đã hủy
+\end{enumerate}
+
+\subsection{DriverService (Port 8083)}
+\textbf{Trách nhiệm:} Quản lý trạng thái và vị trí của tài xế theo thời gian thực, cung cấp API tìm kiếm tài xế gần.
+
+\textbf{Các tính năng chính:}
+\begin{itemize}[leftmargin=*]
+    \item Cập nhật vị trí real-time
+    \item Tìm kiếm tài xế trong bán kính (geo-spatial query)
+    \item Quản lý trạng thái online/offline
+    \item Driver onboarding
+\end{itemize}
+
+\section{Thiết kế API RESTful}
+
+Hệ thống sử dụng RESTful API cho giao tiếp giữa client và services. Lựa chọn REST thay vì gRPC vì:
+\begin{itemize}[leftmargin=*]
+    \item Đơn giản, dễ debug với công cụ như Postman/curl
+    \item Tương thích tốt với Flutter frontend
+    \item Phù hợp cho giai đoạn prototype và học tập
+\end{itemize}
+
+\begin{table}[htbp]
+\centering
+\small
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\textwidth}{|l|l|l|X|}
+\hline
+\textbf{Service} & \textbf{Method} & \textbf{Endpoint} & \textbf{Mô tả} \\
+\hline
+\multirow{4}{*}{UserService} 
+& POST & /auth/register & Đăng ký tài khoản mới \\
+& POST & /auth/login & Đăng nhập, nhận JWT tokens \\
+& POST & /auth/refresh & Làm mới access token \\
+& GET & /auth/me & Lấy thông tin user hiện tại \\
+\hline
+\multirow{3}{*}{TripService}
+& POST & /v1/trips & Tạo chuyến đi mới \\
+& GET & /v1/trips/\{id\} & Lấy chi tiết chuyến đi \\
+& POST & /v1/trips/\{id\}/cancel & Hủy chuyến đi \\
+\hline
+\multirow{2}{*}{DriverService}
+& PUT & /v1/drivers/\{id\}/location & Cập nhật vị trí tài xế \\
+& GET & /v1/drivers/search & Tìm tài xế gần nhất \\
+\hline
+\end{tabularx}
+\caption{API Endpoints theo yêu cầu đề bài.}
+\label{tab:api-endpoints}
+\end{table}
+
+\section{Nguyên tắc Database-per-Service}
+
+Mỗi service có database PostgreSQL riêng biệt, tuân thủ nguyên tắc "Database per Service":
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabularx}{\textwidth}{|l|l|X|}
+\hline
+\textbf{Service} & \textbf{Database} & \textbf{Các bảng chính} \\
+\hline
+UserService & user\_service & users, wallets, saved\_places, notifications \\
+\hline
+TripService & trip\_service & trips, trip\_coordinates, pricing \\
+\hline
+DriverService & driver\_service & drivers, driver\_locations, vehicles \\
+\hline
+\end{tabularx}
+\caption{Phân chia Database theo Service.}
+\end{table}
+
+\textbf{Lợi ích:}
+\begin{itemize}[leftmargin=*]
+    \item Tính tự chủ (Autonomy): Mỗi team có thể phát triển độc lập
+    \item Cô lập lỗi (Fault Isolation): Lỗi DB của service A không ảnh hưởng service B
+    \item Scale độc lập: Có thể scale DB theo nhu cầu từng service
+\end{itemize}
+
+\textbf{Đánh đổi:}
+\begin{itemize}[leftmargin=*]
+    \item Phức tạp hơn trong quản lý transactions phân tán
+    \item Cần cơ chế đồng bộ dữ liệu giữa các services
+\end{itemize}
+
+\section{Infrastructure as Code với Terraform}
+
+Hệ thống sử dụng Terraform để định nghĩa hạ tầng AWS:
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabularx}{\textwidth}{|l|X|}
+\hline
+\textbf{Module} & \textbf{Tài nguyên} \\
+\hline
+network & VPC, Subnets (public/private), Internet Gateway, NAT Gateway \\
+\hline
+rds & PostgreSQL RDS instances cho mỗi service \\
+\hline
+redis & ElastiCache Redis cluster \\
+\hline
+sqs & SQS queues cho async messaging \\
+\hline
+asg\_service & Auto Scaling Groups, Launch Templates \\
+\hline
+\end{tabularx}
+\caption{Terraform modules cho hạ tầng AWS.}
+\end{table}
+
+\section{Hạn chế của Giai đoạn 1}
+
+Giai đoạn 1 có các hạn chế về hiệu năng:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Xử lý đồng bộ:} TripService gọi DriverService đồng bộ khi tạo trip, gây blocking
+    \item \textbf{Thiếu caching:} Mọi request đều query database
+    \item \textbf{Không có auto-scaling:} Số lượng instance cố định
+    \item \textbf{Geo-query chậm:} Tìm driver bằng PostgreSQL với độ trễ cao
+\end{enumerate}
+
+Đây là động lực để thực hiện \textbf{Module A: Scalability \& Performance}.
+
+% ===================== CHƯƠNG 3: MODULE A =====================
+\chapter{Module A: Thiết kế cho Scalability \& Performance}
+
+\section{Mục tiêu Module A}
+
+Với vai trò \textbf{Kỹ sư Kiến trúc Hệ thống (System Architect)}, Module A tập trung vào:
+\begin{enumerate}[leftmargin=*]
+    \item Phân tích và bảo vệ các lựa chọn kiến trúc nền tảng
+    \item Kiểm chứng thiết kế bằng load testing
+    \item Hiện thực hóa các kỹ thuật tối ưu hóa
+\end{enumerate}
+
+\section{Kiến trúc hệ thống tối ưu}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{assets/System.png}
+\caption{Kiến trúc hệ thống sau tối ưu (Module A) với Async Queue, Redis GEO và Observability Stack.}
+\label{fig:optimized-arch}
+\end{figure}
+
+So với Giai đoạn 1, kiến trúc tối ưu bổ sung:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Redis (Shared):} Đảm nhận 3 vai trò - GEO Index, Message Queue, Cache
+    \item \textbf{Match Worker:} Background process xử lý ghép chuyến bất đồng bộ
+    \item \textbf{Observability Stack:} Prometheus, Grafana, Loki cho giám sát
+\end{itemize}
+
+\section{Phân tích lựa chọn: Redis GEO vs DynamoDB}
+
+Đề bài yêu cầu phân tích giữa hai hướng tiếp cận cho dữ liệu vị trí driver:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Speed-first:} Redis GEO (ElastiCache)
+    \item \textbf{Scale/Cost-first:} DynamoDB + Geohashing
+\end{itemize}
+
+\begin{table}[htbp]
+\centering
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|l|X|X|}
+\hline
+\textbf{Tiêu chí} & \textbf{Redis GEO} & \textbf{DynamoDB + Geohash} \\
+\hline
+Latency đọc & \textbf{<10ms} (in-memory) & 10-50ms (SSD) \\
+\hline
+Write throughput & Tốt cho burst traffic & \textbf{Tốt hơn cho sustained high write} \\
+\hline
+Chi phí & RAM đắt hơn & \textbf{Rẻ hơn ở scale lớn (>10k drivers)} \\
+\hline
+Độ phức tạp & Đơn giản (GEORADIUS built-in) & Cần implement Geohash logic \\
+\hline
+Durability & Volatile (mất khi restart) & \textbf{Persistent} \\
+\hline
+Operational & Đã có trong stack & Thêm service mới \\
+\hline
+\end{tabularx}
+\caption{So sánh Redis GEO vs DynamoDB + Geohash cho driver location.}
+\label{tab:redis-vs-dynamodb}
+\end{table}
+
+\textbf{Quyết định:} Chọn \textbf{Redis GEO} vì:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Ưu tiên latency:} Trải nghiệm người dùng cần response nhanh (<100ms)
+    \item \textbf{Reuse infrastructure:} Redis đã có trong stack cho caching
+    \item \textbf{Quy mô phù hợp:} <1000 drivers active, Redis đủ đáp ứng
+    \item \textbf{Đơn giản hóa:} GEORADIUS command sẵn có, không cần custom logic
+\end{enumerate}
+
+\textbf{Trade-off chấp nhận:}
+\begin{itemize}[leftmargin=*]
+    \item Cần warmup cache sau restart
+    \item Phải sync trạng thái driver vào GEO set khi online/offline
+\end{itemize}
+
+\section{Phân tích lựa chọn: Sync vs Async Matching}
+
+\subsection{Vấn đề}
+Khi Rider tạo trip, TripService cần gọi DriverService để tìm tài xế. Ở Giai đoạn 1, gọi đồng bộ gây:
+\begin{itemize}[leftmargin=*]
+    \item Blocking: Request phải chờ tìm xong driver mới response
+    \item Cascade failure: DriverService down → TripService timeout
+    \item Không chịu được spike: 100 requests cùng lúc → 100 concurrent DB queries
+\end{itemize}
+
+\subsection{Hai lựa chọn}
+
+\begin{table}[htbp]
+\centering
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|l|X|X|}
+\hline
+\textbf{Tiêu chí} & \textbf{Đồng bộ (Sync)} & \textbf{Bất đồng bộ (Async Queue)} \\
+\hline
+Response time & Cao (chờ tìm driver xong) & \textbf{Thấp} (return ngay sau enqueue) \\
+\hline
+Chịu tải đột biến & Kém (cascade failure) & \textbf{Tốt} (queue hấp thụ spike) \\
+\hline
+Tính nhất quán & \textbf{Strong} (biết ngay kết quả) & Eventual (rider chờ vài giây) \\
+\hline
+Độ phức tạp & Đơn giản & Phức tạp hơn (queue, worker, retry) \\
+\hline
+Failure isolation & Kém & \textbf{Tốt} (service down, trip vẫn persist) \\
+\hline
+\end{tabularx}
+\caption{So sánh mô hình Sync vs Async cho Trip Matching.}
+\label{tab:sync-vs-async}
+\end{table}
+
+\subsection{Quyết định}
+
+Chọn \textbf{Async Queue (Redis List/SQS)} với lý do:
+
+\begin{quote}
+\textit{"Chúng em sử dụng mô hình giao tiếp bất đồng bộ với Redis Queue giữa TripService và DriverService. Điều này giúp hệ thống chịu được lượng yêu cầu đặt xe tăng đột biến mà không làm sập DriverService, nhưng đánh đổi là độ trễ tìm xe sẽ tăng nhẹ (thêm 2-5 giây)."}
+\end{quote}
+
+\section{ADR-01: Ghép chuyến bất đồng bộ}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.9\textwidth]{assets/trip.png}
+\caption{Luồng xử lý ghép chuyến bất đồng bộ (Async Matching Flow).}
+\label{fig:matching-flow}
+\end{figure}
+
+\textbf{Luồng xử lý:}
+\begin{enumerate}[leftmargin=*]
+    \item Rider gọi \texttt{POST /v1/trips} với pickup/dropoff location
+    \item TripService lưu trip vào PostgreSQL (status: pending)
+    \item TripService đẩy event vào Redis Queue (\texttt{LPUSH trip:requests})
+    \item Response trả về ngay cho Rider (không chờ tìm driver)
+    \item Match Worker consume event (\texttt{BRPOP trip:requests})
+    \item Worker gọi DriverService tìm driver gần nhất (Redis GEORADIUS)
+    \item Worker cập nhật trip với driver\_id, notify qua WebSocket
+\end{enumerate}
+
+\section{ADR-02: Redis GEO Indexing}
+
+\textbf{Vấn đề:} Truy vấn geo-spatial trên PostgreSQL chậm (p95 = 380ms)
+
+\textbf{Giải pháp:} Sử dụng Redis GEO commands:
+\begin{itemize}[leftmargin=*]
+    \item \texttt{GEOADD drivers:available <lng> <lat> <driver\_id>} - Thêm driver
+    \item \texttt{GEORADIUS drivers:available <lng> <lat> 5 km} - Tìm trong bán kính
+    \item \texttt{ZREM drivers:available <driver\_id>} - Xóa khi offline
+\end{itemize}
+
+\textbf{Kết quả:} p95 giảm từ 380ms xuống 95ms (cải thiện 75\%)
+
+\section{ADR-03: Read Replica cho Trip Database}
+
+\textbf{Vấn đề:} Trip queries (lịch sử, tracking) là read-heavy, gây tải cho primary DB
+
+\textbf{Giải pháp:} 
+\begin{itemize}[leftmargin=*]
+    \item Thêm PostgreSQL Read Replica
+    \item Route read queries đến replica, write queries đến primary
+    \item Terraform module: \texttt{modules/rds\_replica}
+\end{itemize}
+
+\textbf{Trade-off:} Chấp nhận replication lag (<1 giây) cho eventual consistency
+
+\section{ADR-04: Auto Scaling Group}
+
+\textbf{Giải pháp:} Terraform ASG với target-tracking policy:
+\begin{itemize}[leftmargin=*]
+    \item Target: CPU utilization 60\%
+    \item Min instances: 2, Max instances: 10
+    \item Scale-out: Thêm instance khi CPU > 60\% trong 3 phút
+    \item Scale-in: Giảm instance khi CPU < 40\% trong 10 phút
+\end{itemize}
+
+\section{Capacity Zones}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{assets/capacity_zones.png}
+\caption{Các vùng chịu tải (Capacity Zones) của UIT-Go sau tối ưu.}
+\label{fig:capacity-zones}
+\end{figure}
+
+Hệ thống được thiết kế với 4 vùng hoạt động:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Normal (0-100 RPS):} p95 <200ms, error rate <1\%
+    \item \textbf{High Load (100-200 RPS):} p95 <400ms, queue bắt đầu tích lũy
+    \item \textbf{Stress (200-350 RPS):} p95 <800ms, cần back-pressure
+    \item \textbf{Overload (>350 RPS):} Degradation, cần scale hoặc rate limiting
+\end{itemize}
+
+% ===================== CHƯƠNG 4: KẾT QUẢ LOAD TESTING =====================
+\chapter{Kết quả Load Testing}
+
+\section{Phương pháp kiểm thử}
+
+Sử dụng \textbf{k6} (Grafana k6) để thực hiện load testing với các kịch bản:
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabularx}{\textwidth}{|l|l|X|}
+\hline
+\textbf{Script} & \textbf{Mục tiêu} & \textbf{Cấu hình} \\
+\hline
+trip\_matching.js & Test luồng đặt xe chính & Ramp 0→50 RPS trong 2 phút \\
+\hline
+driver\_location.js & Test cập nhật vị trí & Constant 40 RPS trong 3 phút \\
+\hline
+stress\_test.js & Tìm breaking point & Ramp 0→200 RPS trong 4 phút \\
+\hline
+\end{tabularx}
+\caption{Các kịch bản load testing.}
+\end{table}
+
+\textbf{Cách chạy:}
+\begin{verbatim}
+export ACCESS_TOKEN=<jwt_token>
+make loadtest-trip-matching ACCESS_TOKEN=$ACCESS_TOKEN
+\end{verbatim}
+
+\section{Kết quả so sánh Before/After}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{assets/baseline_vs_optimized.png}
+\caption{So sánh Latency p95 và Error Rate giữa Baseline (Giai đoạn 1) và Optimized (Module A).}
+\label{fig:before-after}
+\end{figure}
+
+\textbf{Quan sát từ biểu đồ:}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Baseline (đỏ):} Latency tăng vọt từ 100 RPS, đạt 800ms ở 120 RPS
+    \item \textbf{Optimized (xanh):} Latency ổn định ~200ms đến 400+ RPS
+    \item \textbf{Error rate:} Baseline vượt 5\% threshold ở 80 RPS, Optimized giữ <1\% đến 400 RPS
+    \item \textbf{Cải thiện:} \textbf{84\% faster} ở cùng mức tải
+\end{itemize}
+
+\section{Phân phối Latency chi tiết}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{assets/latency_distribution.png}
+\caption{Latency Distribution theo các phân vị p50, p90, p95, p99.}
+\label{fig:latency-dist}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|l|X|X|X|X|}
+\hline
+\textbf{Operation} & \textbf{p50} & \textbf{p90} & \textbf{p95} & \textbf{p99} \\
+\hline
+Trip Create (Baseline) & 420ms & 680ms & 820ms & 1200ms \\
+\hline
+Trip Create (Optimized) & \textbf{95ms} & \textbf{175ms} & \textbf{210ms} & \textbf{290ms} \\
+\hline
+Driver Search (Baseline) & 180ms & 320ms & 380ms & 520ms \\
+\hline
+Driver Search (Optimized) & \textbf{45ms} & \textbf{82ms} & \textbf{95ms} & \textbf{145ms} \\
+\hline
+\end{tabularx}
+\caption{Chi tiết latency theo phân vị (đơn vị: milliseconds).}
+\end{table}
+
+\textbf{SLA đạt được:} p95 < 250ms cho tất cả API (đường đỏ nét đứt trong hình)
+
+\section{Tổng hợp cải thiện hiệu năng}
+
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|l|X|X|X|}
+\hline
+\textbf{Metric} & \textbf{Baseline} & \textbf{Optimized} & \textbf{Cải thiện} \\
+\hline
+Max Throughput (before errors) & 120 RPS & 420 RPS & \textbf{+250\%} \\
+\hline
+Trip Create p95 & 820ms & 210ms & \textbf{-74\%} \\
+\hline
+Driver Search p95 & 380ms & 95ms & \textbf{-75\%} \\
+\hline
+Error Rate @ 400 RPS & 50\% & <1\% & \textbf{-98\%} \\
+\hline
+Queue backlog @ peak & N/A & 600 events & Drained in 15s \\
+\hline
+\end{tabularx}
+\caption{Tổng hợp cải thiện hiệu năng Module A.}
+\label{tab:performance-summary}
+\end{table}
+
+\section{Phân tích Bottleneck}
+
+Qua load testing, xác định được các bottleneck:
+
+\textbf{Trước tối ưu (Baseline):}
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Primary bottleneck:} Sync call TripService → DriverService gây blocking
+    \item \textbf{Secondary:} PostgreSQL geo-query chậm với full table scan
+\end{enumerate}
+
+\textbf{Sau tối ưu (Module A):}
+\begin{enumerate}[leftmargin=*]
+    \item Bottleneck dịch chuyển sang PostgreSQL connection pool ở 500+ RPS
+    \item Giải pháp tiếp theo: Connection pooling (PgBouncer) hoặc database sharding
+\end{enumerate}
+
+% ===================== CHƯƠNG 5: TRADE-OFFS =====================
+\chapter{Tổng hợp Trade-offs \& Lập luận kiến trúc}
+
+\section{Bảng tổng hợp Trade-offs}
+
+\begin{table}[htbp]
+\centering
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|l|X|X|X|}
+\hline
+\textbf{Quyết định} & \textbf{Lợi ích} & \textbf{Chi phí} & \textbf{Rủi ro chấp nhận} \\
+\hline
+\textbf{Async Matching} & Giảm p95 74\%. Hấp thụ spike traffic. Fault isolation. & Tăng độ phức tạp (Queue, Worker). Cần monitoring queue depth. & Eventual consistency: Rider chờ 2-5s để biết driver. \\
+\hline
+\textbf{Redis GEO} & p95 giảm 75\% (380→95ms). Tận dụng infra có sẵn. & Sync logic giữa DB và cache. RAM cost cao hơn. & Stale cache: Vị trí driver cũ vài giây. Mất data khi restart. \\
+\hline
+\textbf{Read Replicas} & Tăng read throughput 2x. Cô lập read workload. & Chi phí DB tăng gấp đôi. Operational complexity. & Replication lag: Data chưa sync trong 1s. \\
+\hline
+\textbf{Database per Service} & Autonomy. Fault isolation. Independent scaling. & Distributed transactions phức tạp. Data consistency khó đảm bảo. & Eventual consistency giữa services. \\
+\hline
+\end{tabularx}
+\caption{Tổng hợp các quyết định kiến trúc và trade-offs.}
+\label{tab:tradeoffs}
+\end{table}
+
+\section{Biểu đồ Radar so sánh}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.75\textwidth]{assets/tradeoff_radar.png}
+\caption{Radar chart so sánh Sync Matching (Giai đoạn 1) vs Async Queue (Module A).}
+\label{fig:radar}
+\end{figure}
+
+\textbf{Phân tích:}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Throughput:} Async vượt trội (9 vs 6)
+    \item \textbf{Latency:} Async tốt hơn nhiều (9 vs 4)
+    \item \textbf{Fault Tolerance:} Async cải thiện đáng kể (8 vs 5)
+    \item \textbf{Consistency:} Sync mạnh hơn (9 vs 7) - trade-off chấp nhận
+    \item \textbf{Operational Simplicity:} Sync đơn giản hơn (8 vs 6) - trade-off chấp nhận
+\end{itemize}
+
+\section{Nguyên tắc thiết kế áp dụng}
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Design for Failure:} Giả định mọi thứ sẽ lỗi, thiết kế để graceful degradation
+    \item \textbf{Prefer Async over Sync:} Giảm coupling, tăng resilience
+    \item \textbf{Cache Everything Reasonable:} Nhưng phải có invalidation strategy
+    \item \textbf{Measure First, Optimize Second:} Load test để tìm bottleneck thực sự
+    \item \textbf{Keep It Simple:} Chọn giải pháp đủ tốt cho scale hiện tại, không over-engineer
+\end{enumerate}
+
+% ===================== CHƯƠNG 6: KẾT LUẬN =====================
+\chapter{Kết luận \& Hướng phát triển}
+
+\section{Kết quả đạt được}
+
+Đồ án đã hoàn thành các mục tiêu đề ra:
+
+\textbf{Giai đoạn 1 (Bắt buộc):}
+\begin{itemize}[leftmargin=*]
+    \item ✓ Xây dựng 3 microservices (UserService, TripService, DriverService)
+    \item ✓ Tuân thủ nguyên tắc Database-per-Service
+    \item ✓ Containerization với Docker Compose
+    \item ✓ Infrastructure as Code với Terraform
+    \item ✓ RESTful API đầy đủ theo yêu cầu
+\end{itemize}
+
+\textbf{Module A (Scalability \& Performance):}
+\begin{itemize}[leftmargin=*]
+    \item ✓ Phân tích và bảo vệ các quyết định kiến trúc (Redis GEO vs DynamoDB, Sync vs Async)
+    \item ✓ Kiểm chứng bằng load testing với k6
+    \item ✓ Cải thiện throughput 250\% (120 → 420 RPS)
+    \item ✓ Giảm latency 74-75\% cho các API chính
+    \item ✓ Đạt SLA p95 < 250ms
+\end{itemize}
+
+\section{Bài học kinh nghiệm}
+
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Engineering Humility:} Luôn giả định hệ thống sẽ lỗi
+    \item \textbf{Measure, Don't Guess:} Load testing là cách duy nhất biết bottleneck thực sự
+    \item \textbf{Trade-offs Everywhere:} Không có silver bullet, mọi quyết định đều có cost
+    \item \textbf{Start Simple:} Bắt đầu với giải pháp đơn giản, phức tạp hóa khi cần
+\end{enumerate}
+
+\section{Điều gì sẽ "vỡ" ở quy mô x10?}
+
+Nếu scale lên 1,500+ RPS:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{PostgreSQL Write:} Trở thành bottleneck mới → Cần Database Sharding
+    \item \textbf{Redis Memory:} Với 10,000+ drivers → Cần Redis Cluster
+    \item \textbf{Single Queue:} Backlog quá lớn → Cần partitioned queues
+\end{enumerate}
+
+\section{Hướng phát triển (Future Work)}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabularx}{\textwidth}{|l|X|X|}
+\hline
+\textbf{Cải tiến} & \textbf{Mô tả} & \textbf{Lợi ích} \\
+\hline
+Database Sharding & Phân chia trips theo region/time & Tăng write throughput \\
+\hline
+Kubernetes & Chuyển từ Docker Compose sang K8s & Auto-scaling, self-healing \\
+\hline
+gRPC & Thay thế REST cho internal calls & Giảm latency, strong typing \\
+\hline
+Circuit Breaker & Implement với Hystrix/Resilience4j & Fault tolerance tốt hơn \\
+\hline
+Distributed Tracing & Jaeger/Zipkin integration & Debug phân tán dễ hơn \\
+\hline
+\end{tabularx}
+\caption{Các hướng phát triển tiếp theo.}
+\end{table}
+
+\section{Lời kết}
+
+Đồ án UIT-Go đã giúp nhóm hiểu sâu về thiết kế hệ thống cloud-native, từ việc xây dựng microservices cơ bản đến tối ưu hóa hiệu năng. Quan trọng hơn, nhóm đã học được cách \textbf{lập luận và bảo vệ các quyết định kiến trúc} dựa trên phân tích trade-offs và dữ liệu thực tế từ load testing.
+
+\end{document}

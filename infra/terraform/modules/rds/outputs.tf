@@ -8,5 +8,11 @@ output "security_group_id" {
 }
 
 output "identifier" {
-  value = aws_db_instance.this.id
+  description = "RDS instance identifier for replica"
+  value       = aws_db_instance.this.identifier
+}
+
+output "arn" {
+  description = "RDS instance ARN"
+  value       = aws_db_instance.this.arn
 }

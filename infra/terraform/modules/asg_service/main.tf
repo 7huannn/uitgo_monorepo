@@ -5,6 +5,13 @@ resource "aws_launch_template" "this" {
   user_data              = var.user_data == "" ? null : base64encode(var.user_data)
   vpc_security_group_ids = var.security_group_ids
 
+  dynamic "iam_instance_profile" {
+    for_each = var.iam_instance_profile_name != "" ? [1] : []
+    content {
+      name = var.iam_instance_profile_name
+    }
+  }
+
   lifecycle {
     create_before_destroy = true
   }

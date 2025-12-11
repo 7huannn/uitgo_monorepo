@@ -6,6 +6,7 @@ resource "aws_db_instance" "this" {
   apply_immediately          = true
   auto_minor_version_upgrade = true
   availability_zone          = var.availability_zone
+  skip_final_snapshot        = true
   tags                       = var.tags
 }
 
