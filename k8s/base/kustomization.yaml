@@ -10,7 +10,7 @@ namespace: uitgo
 resources:
   - namespace.yaml
   - configmap.yaml
-  - secrets.yaml
+  # - secrets.yaml  # Managed manually in cluster for security
   - databases.yaml
   - redis.yaml
   - user-service.yaml
