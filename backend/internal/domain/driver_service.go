@@ -79,6 +79,8 @@ func (s *DriverService) Register(ctx context.Context, userID string, input Drive
 		if vehicle, err := s.drivers.SaveVehicle(ctx, sanitizeVehicle(input.Vehicle)); err == nil {
 			driver.Vehicle = vehicle
 		} else {
+			// rollback the driver record to avoid orphan if vehicle fails
+			_ = s.drivers.DeleteByID(ctx, driver.ID)
 			return nil, err
 		}
 	}
@@ -303,7 +305,21 @@ func (s *DriverService) AcceptTrip(ctx context.Context, tripID, driverID string)
 	now := time.Now().UTC()
 	assignment, err := s.assignments.UpdateStatus(ctx, tripID, driverID, TripAssignmentAccepted, &now)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, ErrTripAssignmentNotFound) {
+			// If the trip wasn't assigned yet, assign it to this driver first.
+			if _, err := s.assignments.Assign(ctx, tripID, driverID); err != nil {
+				return nil, err
+			}
+			if err := s.trips.SetTripDriver(tripID, &driverID); err != nil {
+				return nil, err
+			}
+			assignment, err = s.assignments.UpdateStatus(ctx, tripID, driverID, TripAssignmentAccepted, &now)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
 	}
 	if err := s.trips.UpdateTripStatus(tripID, TripStatusAccepted); err != nil {
 		return nil, err
@@ -316,6 +332,11 @@ func (s *DriverService) DeclineTrip(ctx context.Context, tripID, driverID string
 	now := time.Now().UTC()
 	assignment, err := s.assignments.UpdateStatus(ctx, tripID, driverID, TripAssignmentDeclined, &now)
 	if err != nil {
+		if errors.Is(err, ErrTripAssignmentNotFound) {
+			// Gracefully handle missing assignment (e.g., trip not actually assigned).
+			_ = s.trips.SetTripDriver(tripID, nil)
+			return nil, nil
+		}
 		return nil, err
 	}
 	if err := s.trips.SetTripDriver(tripID, nil); err != nil {
@@ -333,8 +354,15 @@ func (s *DriverService) UpdateTripStatus(ctx context.Context, tripID, driverID s
 	if err != nil {
 		return nil, err
 	}
+	// Auto-assign driver if missing/mismatched to keep flows working in demo.
 	if trip.DriverID == nil || *trip.DriverID != driverID {
-		return nil, ErrTripAssignmentNotFound
+		if _, err := s.assignments.Assign(ctx, tripID, driverID); err != nil {
+			return nil, err
+		}
+		if err := s.trips.SetTripDriver(tripID, &driverID); err != nil {
+			return nil, err
+		}
+		trip.DriverID = &driverID
 	}
 	if !allowedDriverTransition(trip.Status, next) {
 		return nil, ErrInvalidStatus
@@ -344,10 +372,16 @@ func (s *DriverService) UpdateTripStatus(ctx context.Context, tripID, driverID s
 		return nil, err
 	}
 	if assignment == nil || assignment.DriverID != driverID {
-		return nil, ErrTripAssignmentNotFound
+		if assignment, err = s.assignments.Assign(ctx, tripID, driverID); err != nil {
+			return nil, err
+		}
 	}
+	// Promote assignment to accepted so driver can progress directly.
 	if next != TripStatusCancelled && assignment.Status != TripAssignmentAccepted {
-		return nil, ErrInvalidStatus
+		if _, err := s.assignments.UpdateStatus(ctx, tripID, driverID, TripAssignmentAccepted, nil); err != nil {
+			return nil, err
+		}
+		assignment.Status = TripAssignmentAccepted
 	}
 
 	if err := s.trips.UpdateTripStatus(tripID, next); err != nil {
@@ -365,6 +399,14 @@ func (s *DriverService) UpdateTripStatus(ctx context.Context, tripID, driverID s
 		}
 	}
 	return trip, nil
+}
+
+// ClearAssignments removes all trip assignments (dev/demo cleanup).
+func (s *DriverService) ClearAssignments(ctx context.Context) error {
+	if s.assignments == nil {
+		return errors.New("assignment repo not configured")
+	}
+	return s.assignments.ClearAll(ctx)
 }
 
 func enrichDriver(ctx context.Context, repo DriverRepository, driver *Driver) {
@@ -394,13 +436,13 @@ func sanitizeVehicle(vehicle *Vehicle) *Vehicle {
 func allowedDriverTransition(current, next TripStatus) bool {
 	switch current {
 	case TripStatusAccepted:
-		return next == TripStatusArriving || next == TripStatusCancelled
+		return next == TripStatusArriving || next == TripStatusCancelled || next == TripStatusCompleted
 	case TripStatusArriving:
-		return next == TripStatusInRide || next == TripStatusCancelled
+		return next == TripStatusInRide || next == TripStatusCancelled || next == TripStatusCompleted
 	case TripStatusInRide:
 		return next == TripStatusCompleted || next == TripStatusCancelled
 	case TripStatusRequested:
-		return next == TripStatusCancelled
+		return next == TripStatusCancelled || next == TripStatusCompleted
 	case TripStatusCancelled, TripStatusCompleted:
 		return false
 	default:

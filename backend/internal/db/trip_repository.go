@@ -267,8 +267,8 @@ func (r *tripRepository) ListTrips(userID string, role string, limit, offset int
 	query := readDB.Model(&tripModel{})
 	switch role {
 	case "driver":
-		// In demo mode we don't have drivers table in this DB; show available trips.
-		query = query.Where("driver_id IS NULL OR driver_id = ?", userID)
+		// Show all available requested trips plus trips already assigned to this driver.
+		query = query.Where("(status = ?) OR (driver_id = ?)", string(domain.TripStatusRequested), userID)
 	default:
 		query = query.Where("rider_id = ?", userID)
 	}
@@ -304,4 +304,20 @@ func (r *tripRepository) ListTrips(userID string, role string, limit, offset int
 	}
 
 	return trips, total, nil
+}
+
+// PurgeAll deletes all trips and related events (dev/demo only).
+func (r *tripRepository) PurgeAll() error {
+	if r.db == nil {
+		return errors.New("db not configured")
+	}
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("DELETE FROM trip_events").Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("DELETE FROM trips").Error; err != nil {
+			return err
+		}
+		return nil
+	})
 }

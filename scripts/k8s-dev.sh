@@ -107,12 +107,12 @@ cmd_forward() {
 
 cmd_build() {
     log_info "Building and pushing images to local registry..."
-    cd "$PROJECT_ROOT/backend"
+    cd "$PROJECT_ROOT"
     
     for svc in user_service trip_service driver_service; do
         svc_name=$(echo $svc | tr '_' '-')
         log_info "Building $svc_name..."
-        docker build -f ${svc}/Dockerfile -t localhost:5000/${svc_name}:dev .
+        docker build -f backend/${svc}/Dockerfile -t localhost:5000/${svc_name}:dev .
         docker push localhost:5000/${svc_name}:dev
     done
     

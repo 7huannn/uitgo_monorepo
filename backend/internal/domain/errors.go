@@ -10,6 +10,7 @@ var (
 	ErrSavedPlaceNotFound      = errors.New("saved place not found")
 	ErrDriverNotFound          = errors.New("driver not found")
 	ErrDriverAlreadyExists     = errors.New("driver already exists")
+	ErrVehicleAlreadyExists    = errors.New("vehicle already exists")
 	ErrDriverOffline           = errors.New("driver offline")
 	ErrNoDriversAvailable      = errors.New("no drivers available")
 	ErrTripAssignmentNotFound  = errors.New("trip assignment not found")

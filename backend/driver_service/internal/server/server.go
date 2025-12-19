@@ -39,7 +39,6 @@ func New(cfg *config.Config, db *gorm.DB, tripSync domain.TripSyncRepository) (*
 	router.Use(observability.GinMiddleware())
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID())
-	router.Use(middleware.CORS(cfg.AllowedOrigins))
 	router.Use(middleware.Auth(cfg.JWTSecret, cfg.InternalAPIKey))
 
 	metrics := middleware.NewHTTPMetrics(serviceName, cfg.PrometheusEnabled)
@@ -152,7 +151,7 @@ func registerInternalRoutes(router gin.IRouter, cfg *config.Config, service *dom
 		driver, err := service.Register(c.Request.Context(), req.UserID, input)
 		if err != nil {
 			status := http.StatusInternalServerError
-			if err == domain.ErrDriverAlreadyExists {
+			if err == domain.ErrDriverAlreadyExists || err == domain.ErrVehicleAlreadyExists {
 				status = http.StatusConflict
 			}
 			c.JSON(status, gin.H{"error": err.Error()})
@@ -193,6 +192,14 @@ func registerInternalRoutes(router gin.IRouter, cfg *config.Config, service *dom
 			return
 		}
 		c.Status(http.StatusAccepted)
+	})
+
+	group.DELETE("/trip-assignments", func(c *gin.Context) {
+		if err := service.ClearAssignments(c.Request.Context()); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.Status(http.StatusNoContent)
 	})
 }
 

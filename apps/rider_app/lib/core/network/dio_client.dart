@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/config.dart';
 import 'token_manager.dart';
@@ -29,7 +31,7 @@ class DioClient {
             if (provider != null) {
               token = await provider.accessToken();
             }
-            token ??= await _secure.read(key: 'auth_token');
+            token ??= await _readPersistedToken();
             if (token != null && token.isNotEmpty) {
               options.headers['Authorization'] = 'Bearer $token';
             }
@@ -72,6 +74,14 @@ class DioClient {
       _interceptorsConfigured = true;
     }
     return _dio;
+  }
+
+  Future<String?> _readPersistedToken() async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString('auth_token');
+    }
+    return _secure.read(key: 'auth_token');
   }
 
   Future<bool> _refreshToken(AuthTokenProvider provider) async {

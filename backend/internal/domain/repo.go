@@ -9,6 +9,7 @@ type TripRepository interface {
 	SaveLocation(tripID string, update LocationUpdate) error
 	GetLatestLocation(tripID string) (*LocationUpdate, error)
 	ListTrips(userID string, role string, limit, offset int) ([]*Trip, int64, error)
+	PurgeAll() error
 }
 
 // TripSyncRepository exposes the subset of trip operations needed by the driver service.

@@ -1,28 +1,28 @@
-# Hướng dẫn Load Testing - UITGo# Hướng dẫn Load Testing - UITGo# Hướng dẫn Load Testing - UITGo# UIT-Go Load Testing Guide
+# UITGo Load Testing Guide
 
+## 📚 Documentation Index
 
+### Quick Start
+- 🚀 **[QUICKSTART_AWS.md](QUICKSTART_AWS.md)** - Quick guide to run AWS load tests
+- 📖 **[AWS_LOADTEST_GUIDE.md](AWS_LOADTEST_GUIDE.md)** - Complete AWS testing guide
+- 📊 **[AWS_LOADTEST_SUMMARY.md](AWS_LOADTEST_SUMMARY.md)** - Project status & summary
+- 🏗️ **[AWS_LOADTEST_DIAGRAM.md](AWS_LOADTEST_DIAGRAM.md)** - Architecture diagrams
 
-## Yêu cầu cài đặt
-
-
-
-- `k6` đã cài đặt ([hướng dẫn](https://k6.io/docs/getting-started/installation/))## Yêu cầu cài đặt
-
-- Python 3 với `matplotlib` và `numpy`: `pip install matplotlib numpy`
-
-- `make` có sẵn trong terminal
-
-- Docker đang chạy backend: `docker compose up -d`
-
-- `k6` đã cài đặt ([hướng dẫn](https://k6.io/docs/getting-started/installation/))## Yêu cầu cài đặt## Prerequisites
+### For Local Testing (Current Guide)
+Continue reading below for local load testing setup.
 
 ---
 
-- Python 3 với `matplotlib` và `numpy`: `pip install matplotlib numpy`
+## Prerequisites
 
-## Chuẩn bị tài khoản test
+- `k6` installed locally ([installation guide](https://k6.io/docs/getting-started/installation/))
+- Python 3 with `matplotlib` and `numpy`: `pip install matplotlib numpy`
+- `make` available in terminal
+- Docker running backend: `docker compose up -d`
 
-- `make` có sẵn trong terminal- `k6` installed locally.
+---
+
+## Prepare Test Account
 
 ### Bước 1: Đăng ký user mới (chỉ cần làm 1 lần)
 

@@ -424,7 +424,21 @@ func (h *AuthHandler) RegisterDriver(c *gin.Context) {
 	}
 
 	if _, err := h.driverService.Register(c.Request.Context(), user.ID, driverInput); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create driver profile"})
+		status := http.StatusInternalServerError
+		msg := "failed to create driver profile"
+		if errors.Is(err, domain.ErrDriverAlreadyExists) {
+			status = http.StatusConflict
+			msg = "driver already exists"
+		}
+		if errors.Is(err, domain.ErrVehicleAlreadyExists) {
+			status = http.StatusConflict
+			msg = "vehicle already exists"
+		}
+		// Surface the underlying error for easier debugging in non-conflict cases.
+		if status == http.StatusInternalServerError {
+			msg = err.Error()
+		}
+		c.JSON(status, gin.H{"error": msg})
 		return
 	}
 

@@ -4,9 +4,11 @@
 # Required
 aws_region        = "ap-southeast-1"
 db_password       = "YOUR_STRONG_PASSWORD_HERE"
-trip_service_ami  = "ami-xxxxxxxxx"                # AMI with docker + compose plugin
-container_registry = "ghcr.io/YOUR_USERNAME"       # or your ECR repo
-backend_image_tag  = "latest"                      # tag pushed for user/trip/driver
+trip_service_ami          = "ami-xxxxxxxxx"                # AMI with docker + compose plugin
+container_registry        = "ghcr.io/YOUR_USERNAME"       # or your ECR repo
+container_registry_username = ""                           # set if registry is private
+container_registry_password = ""                           # set if registry is private (sensitive)
+backend_image_tag         = "latest"                      # tag pushed for user/trip/driver
 
 # Secrets - CHANGE THESE!
 jwt_secret                   = "generate-a-strong-jwt-secret-here"
@@ -14,5 +16,6 @@ refresh_token_encryption_key = "must-be-exactly-32-bytes-long!!"
 internal_api_key             = "generate-a-strong-api-key-here"
 
 # CORS / HTTPS
-cors_allowed_origins = "*"
+# Comma separated origins (supports wildcards like http://localhost:*)
+cors_allowed_origins = "https://app.uitgo.vn"
 alb_certificate_arn  = ""                          # set ACM ARN to enable HTTPS

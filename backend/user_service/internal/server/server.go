@@ -37,7 +37,6 @@ func New(cfg *config.Config, db *gorm.DB, driverProvisioner handlers.DriverProvi
 	router.Use(observability.GinMiddleware())
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID())
-	router.Use(middleware.CORS(cfg.AllowedOrigins))
 	router.Use(middleware.Auth(cfg.JWTSecret, cfg.InternalAPIKey))
 
 	metrics := middleware.NewHTTPMetrics(serviceName, cfg.PrometheusEnabled)

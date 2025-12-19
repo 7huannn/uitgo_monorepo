@@ -56,6 +56,7 @@ services:
       POSTGRES_DSN: postgres://uitgo:uitgo@user-db:5432/user_service?sslmode=disable
       JWT_SECRET: uitgo-dev-secret
       REFRESH_TOKEN_ENCRYPTION_KEY: uitgo-dev-refresh-key-32bytes!!!
+      ACCESS_TOKEN_TTL_MINUTES: 120  # 2 hours for load testing
       CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:*,http://127.0.0.1:*,https://localhost:8080,https://127.0.0.1:8080,https://localhost:*,https://127.0.0.1:*
       DRIVER_SERVICE_URL: http://driver-service:8083
       INTERNAL_API_KEY: uitgo-internal-secret
@@ -77,6 +78,7 @@ services:
       POSTGRES_DSN: postgres://uitgo:uitgo@trip-db:5432/trip_service?sslmode=disable
       JWT_SECRET: uitgo-dev-secret
       REFRESH_TOKEN_ENCRYPTION_KEY: uitgo-dev-refresh-key-32bytes!!!
+      ACCESS_TOKEN_TTL_MINUTES: 120  # 2 hours for load testing
       CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:*,http://127.0.0.1:*,https://localhost:8080,https://127.0.0.1:8080,https://localhost:*,https://127.0.0.1:*
       DRIVER_SERVICE_URL: http://driver-service:8083
       USER_SERVICE_URL: http://user-service:8081

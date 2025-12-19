@@ -86,6 +86,7 @@ type TripAssignment struct {
 // DriverRepository exposes persistence for driver entities.
 type DriverRepository interface {
 	Create(ctx context.Context, driver *Driver) error
+	DeleteByID(ctx context.Context, driverID string) error
 	Update(ctx context.Context, driver *Driver) error
 	FindByID(ctx context.Context, id string) (*Driver, error)
 	FindByUserID(ctx context.Context, userID string) (*Driver, error)
@@ -112,4 +113,5 @@ type TripAssignmentRepository interface {
 	GetByTripID(ctx context.Context, tripID string) (*TripAssignment, error)
 	FindActiveByDriver(ctx context.Context, driverID string) (*TripAssignment, error)
 	Clear(ctx context.Context, tripID string) error
+	ClearAll(ctx context.Context) error
 }

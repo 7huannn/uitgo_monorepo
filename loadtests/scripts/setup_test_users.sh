@@ -6,7 +6,7 @@ API_BASE="${API_BASE:-http://localhost:8080}"
 NUM_USERS="${NUM_USERS:-20}"
 WALLET_AMOUNT="${WALLET_AMOUNT:-2000000}"
 
-echo "🚀 Tạo $NUM_USERS user cho load testing..."
+echo " Tạo $NUM_USERS user cho load testing..."
 echo "API: $API_BASE"
 echo ""
 
@@ -33,7 +33,7 @@ for i in $(seq 1 $NUM_USERS); do
       -H "Authorization: Bearer $TOKEN" \
       -d "{\"amount\":$WALLET_AMOUNT}" > /dev/null 2>&1
     
-    echo "✅ User $i: $EMAIL - Token ready"
+    echo " User $i: $EMAIL - Token ready"
     TOKENS="$TOKENS$TOKEN\n"
   else
     echo "❌ User $i: Failed to get token"
@@ -44,7 +44,7 @@ done
 echo -e "$TOKENS" | head -n -1 > /tmp/loadtest_tokens.txt
 
 echo ""
-echo "📝 Tokens saved to /tmp/loadtest_tokens.txt"
+echo " Tokens saved to /tmp/loadtest_tokens.txt"
 echo ""
 echo "Sử dụng với k6:"
 echo "  export ACCESS_TOKEN=\$(head -1 /tmp/loadtest_tokens.txt)"

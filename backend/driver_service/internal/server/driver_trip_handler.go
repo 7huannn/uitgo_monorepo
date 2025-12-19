@@ -138,7 +138,18 @@ func (h *DriverTripHandler) proxyTripResponse(c *gin.Context, tripID string, use
 	}
 	defer resp.Body.Close()
 
+	// Avoid duplicating CORS headers (Gin middleware already sets them).
+	skipHeaders := map[string]struct{}{
+		"Access-Control-Allow-Origin":      {},
+		"Access-Control-Allow-Methods":     {},
+		"Access-Control-Allow-Headers":     {},
+		"Access-Control-Allow-Credentials": {},
+	}
+
 	for key, values := range resp.Header {
+		if _, skip := skipHeaders[http.CanonicalHeaderKey(key)]; skip {
+			continue
+		}
 		for _, value := range values {
 			c.Writer.Header().Add(key, value)
 		}

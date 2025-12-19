@@ -168,6 +168,14 @@ func (r *tripAssignmentRepository) Clear(ctx context.Context, tripID string) err
 	return nil
 }
 
+// ClearAll removes every assignment (dev/demo cleanup).
+func (r *tripAssignmentRepository) ClearAll(ctx context.Context) error {
+	if r.db == nil {
+		return errors.New("db not configured")
+	}
+	return r.db.WithContext(ctx).Exec("DELETE FROM trip_assignments").Error
+}
+
 func toTripAssignmentDomain(model *tripAssignmentModel) *domain.TripAssignment {
 	if model == nil {
 		return nil

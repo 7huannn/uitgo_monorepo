@@ -60,7 +60,16 @@ resource "aws_elasticache_replication_group" "this" {
   data_tiering_enabled        = false
 
   lifecycle {
-    ignore_changes = [auth_token]
+    ignore_changes = [
+      auth_token,
+      auth_token_update_strategy,
+      apply_immediately,
+      final_snapshot_identifier,
+      maintenance_window,
+      notification_topic_arn,
+      preferred_cache_cluster_azs,
+      snapshot_window,
+    ]
   }
 
   tags = var.tags

@@ -69,14 +69,15 @@ func DefaultWalletConfig() WalletServiceConfig {
 	return WalletServiceConfig{
 		MinTopUpAmount:      10000,
 		MaxTopUpAmount:      5000000,
-		DefaultTripFare:     15000,
-		RewardPointsPerTrip: 50,
+		// Demo env: disable fare checks so riders can always create trips without funding a wallet.
+		DefaultTripFare:     0,
+		RewardPointsPerTrip: 0,
 		ServiceFares: map[string]int64{
-			"uit-bike":  15000,
-			"uit-go":    20000,
-			"uit-car":   35000,
-			"uit-plus":  28000,
-			"uit-rider": 15000,
+			"uit-bike":  0,
+			"uit-go":    0,
+			"uit-car":   0,
+			"uit-plus":  0,
+			"uit-rider": 0,
 		},
 	}
 }

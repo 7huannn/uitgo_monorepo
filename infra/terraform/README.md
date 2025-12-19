@@ -17,8 +17,8 @@ Hạ tầng mẫu để chạy stack microservice trên AWS:
 
 ## Nhanh gọn (envs/dev)
 ```bash
-cd infra/terraform/envs/dev
 
+cd infra/terraform/envs/dev
 # Tạo terraform.tfvars hoặc truyền -var, tối thiểu cần:
 # db_password     = "..."
 # trip_service_ami = "ami-xxxx"   # AMI có docker + compose plugin được hỗ trợ (Amazon Linux 2/Ubuntu)

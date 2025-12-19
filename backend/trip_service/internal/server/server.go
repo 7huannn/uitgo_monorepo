@@ -38,7 +38,6 @@ func New(cfg *config.Config, db *gorm.DB, readDB *gorm.DB, driverLocations handl
 	router.Use(observability.GinMiddleware())
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID())
-	router.Use(middleware.CORS(cfg.AllowedOrigins))
 	router.Use(middleware.Auth(cfg.JWTSecret, cfg.InternalAPIKey))
 
 	metrics := middleware.NewHTTPMetrics(serviceName, cfg.PrometheusEnabled)
@@ -50,7 +49,8 @@ func New(cfg *config.Config, db *gorm.DB, readDB *gorm.DB, driverLocations handl
 	handlers.RegisterHealth(router)
 	routeProvider := routing.NewClient(cfg.RoutingBaseURL, 8*time.Second, 5*time.Minute)
 	handlers.RegisterRouteRoutes(router, routeProvider)
-	tripLimiter := middleware.NewTokenBucketRateLimiter(10, time.Minute)
+	// Increased from 10 to 1000 for load testing
+	tripLimiter := middleware.NewTokenBucketRateLimiter(1000, time.Minute)
 
 	tripRepo := dbrepo.NewTripRepositoryWithReplica(db, readDB)
 	notificationRepo := dbrepo.NewNotificationRepository(db)
@@ -118,6 +118,14 @@ func registerInternalRoutes(router gin.IRouter, cfg *config.Config, trips *domai
 				status = http.StatusNotFound
 			}
 			c.JSON(status, gin.H{"error": err.Error()})
+			return
+		}
+		c.Status(http.StatusNoContent)
+	})
+
+	group.DELETE("/trips", func(c *gin.Context) {
+		if err := trips.PurgeAll(c.Request.Context()); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		c.Status(http.StatusNoContent)

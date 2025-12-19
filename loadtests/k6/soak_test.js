@@ -23,9 +23,12 @@ const errorRate = new Rate('error_rate');
 const successfulTrips = new Counter('successful_trips');
 
 // Cấu hình có thể override qua biến môi trường
-const SOAK_DURATION = __ENV.SOAK_DURATION || '10m';
-const STEADY_VUS = Number(__ENV.STEADY_VUS) || 10;
-const RPS = Number(__ENV.RPS) || 20;
+// Default 90 phút cho production-like soak test
+const SOAK_DURATION = __ENV.SOAK_DURATION || '90m';
+const STEADY_VUS = Number(__ENV.STEADY_VUS) || 15;
+const MAX_VUS = Number(__ENV.MAX_VUS) || STEADY_VUS * 3;
+const PRE_ALLOCATED_VUS = Number(__ENV.PRE_ALLOCATED_VUS) || STEADY_VUS;
+const RPS = Number(__ENV.RPS) || 25;
 
 export const options = {
   scenarios: {
@@ -34,8 +37,8 @@ export const options = {
       rate: RPS,
       timeUnit: '1s',
       duration: SOAK_DURATION,
-      preAllocatedVUs: STEADY_VUS,
-      maxVUs: STEADY_VUS * 3,
+      preAllocatedVUs: PRE_ALLOCATED_VUS,
+      maxVUs: MAX_VUS,
     },
   },
   thresholds: {

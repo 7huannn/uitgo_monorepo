@@ -54,8 +54,19 @@ loadtest-summarize:
 loadtest-plot:
 	$(PYTHON) loadtests/plots/aimd_latency.py
 
+.PHONY: loadtest-compare
+loadtest-compare:
+	$(PYTHON) loadtests/plots/generate_comparison.py
+
 .PHONY: loadtest-all
-loadtest-all: loadtest-local loadtest-aws loadtest-summarize loadtest-plot
+loadtest-all: loadtest-local loadtest-aws loadtest-summarize loadtest-plot loadtest-compare
+
+.PHONY: loadtest-setup-aws
+loadtest-setup-aws:
+	@echo "Setting up AWS test users..."
+	./loadtests/scripts/aws_setup_test_users.sh
+	@echo ""
+	@echo "To use the token, run: source .env.aws.loadtest"
 
 # ============ Additional Load Tests for Module A ============
 

@@ -1,5 +1,6 @@
 // lib/features/auth/services/auth_service.dart
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -152,12 +153,16 @@ class AuthService implements AuthTokenProvider {
     await prefs.remove(_keyUserName);
     await prefs.remove(_keyUserPhone);
     await prefs.remove(_keyTokenExpiry);
-    await _secure.delete(key: _keyToken);
-    await _secure.delete(key: _keyRefreshToken);
+    if (kIsWeb) {
+      await prefs.remove(_keyRefreshToken);
+    } else {
+      await _secure.delete(key: _keyToken);
+      await _secure.delete(key: _keyRefreshToken);
+    }
   }
 
   Future<bool> isLoggedIn() async {
-    final token = await _secure.read(key: _keyToken);
+    final token = await _readToken(_keyToken);
     return token != null && token.isNotEmpty;
   }
 
@@ -172,7 +177,7 @@ class AuthService implements AuthTokenProvider {
   }
 
   Future<String?> getToken() async {
-    return _secure.read(key: _keyToken);
+    return _readToken(_keyToken);
   }
 
   Future<UserProfile?> me({bool forceRefresh = false}) async {
@@ -260,7 +265,7 @@ class AuthService implements AuthTokenProvider {
   }
 
   Future<bool> refreshSession() async {
-    final refreshToken = await _secure.read(key: _keyRefreshToken);
+    final refreshToken = await _readToken(_keyRefreshToken);
     if (refreshToken == null || refreshToken.isEmpty) {
       return false;
     }
@@ -277,8 +282,14 @@ class AuthService implements AuthTokenProvider {
     } on DioException {
       // fall through to false
     }
-    await _secure.delete(key: _keyToken);
-    await _secure.delete(key: _keyRefreshToken);
+    final prefs = await SharedPreferences.getInstance();
+    if (kIsWeb) {
+      await prefs.remove(_keyToken);
+      await prefs.remove(_keyRefreshToken);
+    } else {
+      await _secure.delete(key: _keyToken);
+      await _secure.delete(key: _keyRefreshToken);
+    }
     return false;
   }
 
@@ -287,13 +298,13 @@ class AuthService implements AuthTokenProvider {
         data['accessToken'] as String? ?? data['token'] as String? ?? '';
     final refreshToken = data['refreshToken'] as String? ?? '';
     final expiresIn = (data['expiresIn'] as num?)?.toInt();
+    final prefs = await SharedPreferences.getInstance();
     if (accessToken.isNotEmpty) {
-      await _secure.write(key: _keyToken, value: accessToken);
+      await _writeToken(_keyToken, accessToken, prefs);
     }
     if (refreshToken.isNotEmpty) {
-      await _secure.write(key: _keyRefreshToken, value: refreshToken);
+      await _writeToken(_keyRefreshToken, refreshToken, prefs);
     }
-    final prefs = await SharedPreferences.getInstance();
     if (expiresIn != null && expiresIn > 0) {
       final expiry = DateTime.now()
           .add(Duration(seconds: expiresIn))
@@ -316,13 +327,12 @@ class AuthService implements AuthTokenProvider {
   }) async {
     final prefs = await SharedPreferences.getInstance();
     final mockToken = 'mock-token-${DateTime.now().millisecondsSinceEpoch}';
-    await prefs.setString(_keyToken, mockToken);
+    await _writeToken(_keyToken, mockToken, prefs);
     await prefs.setString(_keyUserId, 'mock-user');
     await prefs.setString(_keyUserEmail, email);
     await prefs.setString(_keyUserName, name);
     await prefs.setString(_keyUserPhone, '0900000000');
-    await _secure.write(key: _keyToken, value: mockToken);
-    await _secure.write(key: _keyRefreshToken, value: '$mockToken-refresh');
+    await _writeToken(_keyRefreshToken, '$mockToken-refresh', prefs);
     await prefs.setInt(
       _keyTokenExpiry,
       DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
@@ -360,4 +370,24 @@ class AuthService implements AuthTokenProvider {
 
   @override
   Future<bool> refreshToken() => refreshSession();
+
+  Future<void> _writeToken(
+    String key,
+    String value,
+    SharedPreferences prefs,
+  ) async {
+    if (kIsWeb) {
+      await prefs.setString(key, value);
+    } else {
+      await _secure.write(key: key, value: value);
+    }
+  }
+
+  Future<String?> _readToken(String key) async {
+    if (kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(key);
+    }
+    return _secure.read(key: key);
+  }
 }

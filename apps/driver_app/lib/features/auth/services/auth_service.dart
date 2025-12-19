@@ -77,6 +77,22 @@ class AuthService implements AuthTokenProvider, AuthGateway {
   final _secure = const FlutterSecureStorage();
   final Dio _dio = DioClient().dio;
 
+  Future<void> _writeSecure(String key, String value) async {
+    try {
+      await _secure.write(key: key, value: value);
+    } catch (_) {
+      // ignore write failures on insecure contexts (HTTP web)
+    }
+  }
+
+  Future<String?> _readSecure(String key) async {
+    try {
+      return await _secure.read(key: key);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<bool> login({required String email, required String password}) async {
     try {
       if (useMock) {
@@ -108,17 +124,25 @@ class AuthService implements AuthTokenProvider, AuthGateway {
     await prefs.remove(_keyUserName);
     await prefs.remove(_keyUserPhone);
     await prefs.remove(_keyUserRole);
-    await _secure.delete(key: _keyToken);
-    await _secure.delete(key: _keyRefreshToken);
+    try {
+      await _secure.delete(key: _keyToken);
+      await _secure.delete(key: _keyRefreshToken);
+    } catch (_) {
+      // ignore
+    }
     await prefs.remove(_keyTokenExpiry);
   }
 
   Future<bool> isLoggedIn() async {
-    final token = await _secure.read(key: _keyToken);
+    final prefs = await SharedPreferences.getInstance();
+    final token = await _readSecure(_keyToken) ?? prefs.getString(_keyToken);
     return token != null && token.isNotEmpty;
   }
 
-  Future<String?> getToken() => _secure.read(key: _keyToken);
+  Future<String?> getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return await _readSecure(_keyToken) ?? prefs.getString(_keyToken);
+  }
 
   Future<Map<String, String?>> getUserInfo() async {
     final prefs = await SharedPreferences.getInstance();
@@ -132,7 +156,9 @@ class AuthService implements AuthTokenProvider, AuthGateway {
   }
 
   Future<bool> refreshSession() async {
-    final refreshToken = await _secure.read(key: _keyRefreshToken);
+    final prefs = await SharedPreferences.getInstance();
+    final refreshToken =
+        await _readSecure(_keyRefreshToken) ?? prefs.getString(_keyRefreshToken);
     if (refreshToken == null || refreshToken.isEmpty) {
       return false;
     }
@@ -149,8 +175,12 @@ class AuthService implements AuthTokenProvider, AuthGateway {
     } on DioException {
       // ignore
     }
-    await _secure.delete(key: _keyToken);
-    await _secure.delete(key: _keyRefreshToken);
+    try {
+      await _secure.delete(key: _keyToken);
+      await _secure.delete(key: _keyRefreshToken);
+    } catch (_) {
+      // ignore
+    }
     return false;
   }
 
@@ -179,10 +209,12 @@ class AuthService implements AuthTokenProvider, AuthGateway {
       await prefs.setInt(_keyTokenExpiry, expiry);
     }
     if (accessToken.isNotEmpty) {
-      await _secure.write(key: _keyToken, value: accessToken);
+      await prefs.setString(_keyToken, accessToken);
+      await _writeSecure(_keyToken, accessToken);
     }
     if (refreshToken.isNotEmpty) {
-      await _secure.write(key: _keyRefreshToken, value: refreshToken);
+      await prefs.setString(_keyRefreshToken, refreshToken);
+      await _writeSecure(_keyRefreshToken, refreshToken);
     }
   }
 
@@ -192,8 +224,10 @@ class AuthService implements AuthTokenProvider, AuthGateway {
     await prefs.setString(_keyUserEmail, email);
     await prefs.setString(_keyUserName, 'UIT-Go Driver');
     await prefs.setString(_keyUserRole, 'driver');
-    await _secure.write(key: _keyToken, value: 'mock-token');
-    await _secure.write(key: _keyRefreshToken, value: 'mock-refresh-token');
+    await prefs.setString(_keyToken, 'mock-token');
+    await prefs.setString(_keyRefreshToken, 'mock-refresh-token');
+    await _writeSecure(_keyToken, 'mock-token');
+    await _writeSecure(_keyRefreshToken, 'mock-refresh-token');
     await prefs.setInt(
       _keyTokenExpiry,
       DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch,
@@ -245,6 +279,11 @@ class AuthService implements AuthTokenProvider, AuthGateway {
       return false;
     } on DioException catch (e) {
       if (e.response?.statusCode == 409) {
+        final data = e.response?.data;
+        final msg = (data is Map && data['error'] is String) ? data['error'] as String : null;
+        if (msg != null && msg.toLowerCase().contains('vehicle')) {
+          throw const AuthException('Biển số đã tồn tại.');
+        }
         throw const AuthException('Email đã tồn tại.');
       }
       throw const AuthException('Đăng ký thất bại, vui lòng thử lại.');

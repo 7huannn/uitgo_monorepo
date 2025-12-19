@@ -97,6 +97,18 @@ func (c *DriverClient) Register(ctx context.Context, userID string, input domain
 
 	if resp.StatusCode >= 300 {
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		// Preserve domain-level conflicts so the caller can map to 409 instead of 500.
+		if resp.StatusCode == http.StatusConflict {
+			msg := strings.ToLower(strings.TrimSpace(string(data)))
+			switch {
+			case strings.Contains(msg, "driver already exists"):
+				return nil, domain.ErrDriverAlreadyExists
+			case strings.Contains(msg, "vehicle already exists"):
+				return nil, domain.ErrVehicleAlreadyExists
+			default:
+				return nil, domain.ErrDriverAlreadyExists
+			}
+		}
 		if len(data) == 0 {
 			return nil, fmt.Errorf("driver service error: %s", resp.Status)
 		}

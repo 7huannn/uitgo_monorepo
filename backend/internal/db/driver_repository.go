@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgconn"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -149,6 +150,21 @@ func (r *driverRepository) FindByUserID(ctx context.Context, userID string) (*do
 	return toDriverDomain(&model), nil
 }
 
+func (r *driverRepository) DeleteByID(ctx context.Context, driverID string) error {
+	uid, err := uuid.Parse(driverID)
+	if err != nil {
+		return domain.ErrDriverNotFound
+	}
+	res := r.db.WithContext(ctx).Delete(&driverModel{}, "id = ?", uid)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return domain.ErrDriverNotFound
+	}
+	return nil
+}
+
 func (r *driverRepository) FindAvailable(ctx context.Context) (*domain.Driver, error) {
 	type candidate struct {
 		ID uuid.UUID
@@ -225,11 +241,17 @@ func (r *driverRepository) SaveVehicle(ctx context.Context, vehicle *domain.Vehi
 			UpdatedAt:   now,
 		}
 		if err := r.db.WithContext(ctx).Create(&model).Error; err != nil {
+			if errors.Is(err, gorm.ErrDuplicatedKey) || isUniqueViolation(err) {
+				return nil, domain.ErrVehicleAlreadyExists
+			}
 			return nil, err
 		}
 		return toVehicleDomain(&model), nil
 	}
 	if err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) || isUniqueViolation(err) {
+			return nil, domain.ErrVehicleAlreadyExists
+		}
 		return nil, err
 	}
 	updates := map[string]any{
@@ -243,6 +265,9 @@ func (r *driverRepository) SaveVehicle(ctx context.Context, vehicle *domain.Vehi
 	if err := r.db.WithContext(ctx).Model(&vehicleModel{}).
 		Where("driver_id = ?", driverUID).
 		Updates(updates).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) || isUniqueViolation(err) {
+			return nil, domain.ErrVehicleAlreadyExists
+		}
 		return nil, err
 	}
 	if err := r.db.WithContext(ctx).Where("driver_id = ?", driverUID).First(&existing).Error; err != nil {
@@ -409,4 +434,12 @@ func toDriverLocationDomain(model *driverLocationModel) *domain.DriverLocation {
 		Speed:      model.Speed,
 		RecordedAt: model.RecordedAt,
 	}
+}
+
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == "23505"
+	}
+	return false
 }

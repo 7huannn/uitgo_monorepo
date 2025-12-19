@@ -198,8 +198,30 @@ make k8s-clean            # Cleanup all resources
 - Modules: network, rds, redis, sqs, asg
 - AWS triển khai dùng Auto Scaling Group chạy script `backend.sh.tpl` để khởi động toàn bộ stack Docker Compose.
 
+## Security
+
+### Aikido Security Integration (Active)
+UITGo được bảo vệ bởi **Aikido Security** qua GitHub App integration - tự động scan mọi PR!
+
+**Current Protection**:
+-  **Dependencies**: Go modules + Flutter packages
+-  **SAST**: Static code analysis
+-  **Secrets**: Hardcoded credentials detection
+-  **IaC**: Kubernetes & Terraform scanning
+-  **Code Quality**: Best practices enforcement
+
+**How It Works**:
+- Every PR → Automatic security scan
+- Findings posted as PR comments
+- High/Critical issues → PR blocked
+- Dashboard: https://app.aikido.dev/
+
+**Full Guide**: [`docs/AIKIDO_SECURITY.md`](./docs/AIKIDO_SECURITY.md)  
+**Current**: 1 critical, 4 high, 7 medium, 5 low issues
+
 ## Tài liệu thêm
 - `docs/DEVOPS_IMPLEMENTATION_SUMMARY.md` – tổng quan hạ tầng DevOps và hướng dẫn sử dụng
+- `docs/AIKIDO_SECURITY.md` – hướng dẫn sử dụng Aikido Security
 - `docs/architecture-stage1.md` – mô tả skeleton microservice và biến môi trường
 - `docs/moduleA_scalability.md` – báo cáo tối ưu hiệu năng và kết quả k6
 - `backend/README.md` – chi tiết API và hướng dẫn service Go

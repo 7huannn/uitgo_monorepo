@@ -49,6 +49,19 @@ variable "container_registry" {
   default     = "ghcr.io/uitgo"
 }
 
+variable "container_registry_username" {
+  description = "Optional registry username for pulling private images"
+  type        = string
+  default     = ""
+}
+
+variable "container_registry_password" {
+  description = "Optional registry password/token for pulling private images"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "backend_image_tag" {
   description = "Tag for backend service Docker images"
   type        = string
