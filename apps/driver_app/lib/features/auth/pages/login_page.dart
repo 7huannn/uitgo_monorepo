@@ -15,7 +15,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  static const _accentColor = Color(0xFF00BFA5);
+  static const _accentColor = Color(0xFF1A237E);
 
   Future<bool> _handleLogin(String email, String password) async {
     final auth = context.read<AuthController>();
@@ -43,18 +43,18 @@ class _LoginPageState extends State<LoginPage> {
 
     return UitGoLoginScreen(
       logo: Icon(
-        Icons.directions_car,
+        Icons.local_shipping,
         size: 56,
         color: Theme.of(context).colorScheme.primary,
         semanticLabel: 'UIT-Go Driver',
       ),
       appName: 'UIT-Go Driver',
-      tagline: 'Đăng nhập tài xế',
+      tagline: 'Efficiency in every ride',
       accentColor: _accentColor,
       onLogin: _handleLogin,
       onForgotPassword: _handleForgotPassword,
       onRegister: _handleRegister,
-      loginButtonLabel: 'Bắt đầu ca làm',
+      loginButtonLabel: 'Log In',
       registerLabel: 'Đăng ký',
       registerMessage: 'Chưa có tài khoản?',
       forgotPasswordLabel: 'Quên mật khẩu?',

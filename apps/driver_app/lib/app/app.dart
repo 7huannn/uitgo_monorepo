@@ -14,6 +14,7 @@ import '../features/trips/services/trip_service.dart';
 import '../features/trip_detail/pages/trip_detail_page.dart';
 import '../features/trips/pages/trip_history_page.dart';
 import '../features/wallet/controllers/wallet_controller.dart';
+import '../features/wallet/services/wallet_service.dart';
 import '../features/wallet/pages/wallet_overview_page.dart';
 import '../features/wallet/pages/wallet_route_args.dart';
 import '../features/wallet/pages/wallet_transaction_detail_page.dart';
@@ -41,6 +42,7 @@ class DriverApp extends StatelessWidget {
           create: (_) => DriverHomeController(
             DriverService(),
             TripService(),
+            WalletService(),
           ),
         ),
       ],

@@ -3,14 +3,13 @@ import 'package:provider/provider.dart';
 
 import '../../auth/controllers/auth_controller.dart';
 import '../../driver/models/driver_models.dart';
-import '../../trips/models/trip_models.dart';
-import '../../trip_detail/pages/trip_detail_page.dart';
-import '../../trips/pages/trip_history_page.dart';
 import '../../profile/pages/profile_page.dart';
 import '../../wallet/pages/wallet_overview_page.dart';
 import '../controllers/driver_home_controller.dart';
-import '../widgets/driver_status_card.dart';
-import '../widgets/trip_card.dart';
+import '../../trips/models/trip_models.dart';
+import '../../trip_detail/pages/trip_detail_page.dart';
+import '../../trips/pages/trip_history_page.dart';
+import 'package:intl/intl.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -22,8 +21,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _selectedIndex = 0;
-
   @override
   void initState() {
     super.initState();
@@ -32,331 +29,334 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  Future<void> _openTripDetail(String tripId) async {
-    await Navigator.pushNamed(
-      context,
-      TripDetailPage.routeName,
-      arguments: TripDetailPageArgs(tripId: tripId),
-    );
-    if (!mounted) return;
-    await context.read<DriverHomeController>().refreshTrips();
-  }
-
-  Future<void> _refreshHome() async {
-    final controller = context.read<DriverHomeController>();
-    await Future.wait([
-      controller.refreshProfile(),
-      controller.refreshTrips(),
-    ]);
-  }
-
-  Future<void> _refreshTripsOnly() {
-    return context.read<DriverHomeController>().refreshTrips();
-  }
-
-  void _onItemTapped(int index) {
-    if (_selectedIndex == index) return;
-    setState(() => _selectedIndex = index);
-    context.read<DriverHomeController>().refreshTrips();
-  }
-
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<DriverHomeController>();
     final auth = context.watch<AuthController>();
-    final body = controller.loading
-        ? const Center(child: CircularProgressIndicator())
-        : IndexedStack(
-            index: _selectedIndex,
-            children: [
-              _HomeTab(
-                controller: controller,
-                onRefresh: _refreshHome,
-                onTripTap: _openTripDetail,
-              ),
-              _MyTripsTab(
-                controller: controller,
-                onRefresh: _refreshTripsOnly,
-                onTripTap: _openTripDetail,
-              ),
-            ],
-          );
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('UIT-Go Driver'),
+        title: const Text('Bảng điều khiển tài xế'),
+        elevation: 0,
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        foregroundColor: Theme.of(context).colorScheme.onSurface,
         actions: [
           IconButton(
             tooltip: 'Hồ sơ',
-            onPressed: () {
-              Navigator.pushNamed(context, DriverProfilePage.routeName);
-            },
+            onPressed: () =>
+                Navigator.pushNamed(context, DriverProfilePage.routeName),
             icon: const Icon(Icons.account_circle_outlined),
           ),
           IconButton(
-            tooltip: 'Ví của tôi',
-            onPressed: () {
-              Navigator.pushNamed(context, WalletOverviewPage.routeName);
-            },
-            icon: const Icon(Icons.account_balance_wallet_outlined),
-          ),
-          IconButton(
             tooltip: 'Đăng xuất',
-            onPressed: auth.loggedIn
-                ? () async {
-                    await auth.logout();
-                  }
-                : null,
+            onPressed: () async => await auth.logout(),
             icon: const Icon(Icons.logout),
           ),
         ],
       ),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        child: body,
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard_customize),
-            label: 'Trang chủ',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.assignment_turned_in),
-            label: 'Chuyến của tôi',
-          ),
-        ],
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await controller.refreshProfile();
+          await controller.refreshTrips();
+          await controller.refreshWallet();
+        },
+        child: controller.loading
+            ? const Center(child: CircularProgressIndicator.adaptive())
+            : const SingleChildScrollView(
+                physics: AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _DriverStatusHeader(),
+                    SizedBox(height: 24),
+                    _EarningsSummary(),
+                    SizedBox(height: 24),
+                    _QuickActions(),
+                    SizedBox(height: 24),
+                    _CurrentTripSection(),
+                  ],
+                ),
+              ),
       ),
     );
   }
 }
 
-class _HomeTab extends StatelessWidget {
-  const _HomeTab({
-    required this.controller,
-    required this.onRefresh,
-    required this.onTripTap,
-  });
-
-  final DriverHomeController controller;
-  final Future<void> Function() onRefresh;
-  final ValueChanged<String> onTripTap;
+class _DriverStatusHeader extends StatelessWidget {
+  const _DriverStatusHeader();
 
   @override
   Widget build(BuildContext context) {
-    final pendingTrips = controller.assignments
-        .where((trip) => trip.status == TripStatus.requested)
-        .toList();
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          DriverStatusCard(
-            profile: controller.driver,
-            isLoading: controller.togglingStatus,
-            onToggle: (value) {
-              final next = value
-                  ? DriverAvailability.online
-                  : DriverAvailability.offline;
-              context.read<DriverHomeController>().toggleAvailability(next);
-            },
-          ),
-          if (controller.error != null) ...[
-            const SizedBox(height: 12),
-            Card(
-              color: Colors.red.withOpacity(0.08),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    const Icon(Icons.error_outline, color: Colors.red),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        controller.error!,
-                        style: const TextStyle(
-                            color: Colors.red, fontWeight: FontWeight.w600),
-                      ),
+    final theme = Theme.of(context);
+    final controller = context.watch<DriverHomeController>();
+    final driver = controller.driver;
+    final isOnline = driver?.availability == DriverAvailability.online;
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.colorScheme.outlineVariant.withOpacity(0.5)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: theme.colorScheme.primaryContainer,
+              child: const Icon(Icons.person_outline, size: 32),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    driver?.fullName ?? 'Loading...',
+                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    isOnline ? 'Online' : 'Offline',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: isOnline ? Colors.green.shade600 : theme.colorScheme.error,
+                      fontWeight: FontWeight.bold,
                     ),
-                  ],
+                  ),
+                ],
+              ),
+            ),
+            Transform.scale(
+              scale: 1.2,
+              child: Switch(
+                value: isOnline,
+                onChanged: controller.togglingStatus
+                    ? null
+                    : (value) {
+                        final availability =
+                            value ? DriverAvailability.online : DriverAvailability.offline;
+                        controller.toggleAvailability(availability);
+                      },
+                thumbIcon: MaterialStateProperty.resolveWith<Icon?>(
+                  (Set<MaterialState> states) {
+                    if (states.contains(MaterialState.selected)) {
+                      return const Icon(Icons.check);
+                    }
+                    return const Icon(Icons.close);
+                  },
                 ),
               ),
             ),
           ],
-          const SizedBox(height: 24),
-          _SectionHeader(
-            title: 'Chuyến được giao',
-            subtitle: 'Các chuyến đang chờ bạn xác nhận',
-          ),
-          const SizedBox(height: 12),
-          _TripsList(
-            trips: pendingTrips,
-            emptyLabel: 'Chưa có chuyến nào, chờ điều phối viên giao nhiệm vụ.',
-            loading: controller.loadingTrips,
-            onTap: onTripTap,
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _MyTripsTab extends StatelessWidget {
-  const _MyTripsTab({
-    required this.controller,
-    required this.onRefresh,
-    required this.onTripTap,
-  });
-
-  final DriverHomeController controller;
-  final Future<void> Function() onRefresh;
-  final ValueChanged<String> onTripTap;
+class _EarningsSummary extends StatelessWidget {
+  const _EarningsSummary();
 
   @override
   Widget build(BuildContext context) {
-    final activeTrips = controller.assignments
-        .where((trip) =>
-            trip.status == TripStatus.accepted ||
-            trip.status == TripStatus.arriving ||
-            trip.status == TripStatus.inRide)
-        .toList();
-    final completedTrips = controller.assignments
-        .where((trip) => trip.status == TripStatus.completed)
-        .toList();
-
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          _SectionHeader(
-            title: 'Đang thực hiện',
-            subtitle: 'Các chuyến bạn đã nhận',
-          ),
-          const SizedBox(height: 12),
-          _TripsList(
-            trips: activeTrips,
-            emptyLabel: 'Bạn chưa nhận chuyến nào.',
-            loading: controller.loadingTrips,
-            onTap: onTripTap,
-          ),
-          const SizedBox(height: 24),
-          _SectionHeader(
-            title: 'Đã hoàn thành',
-            subtitle: 'Hoàn tất trong ca trực này',
-          ),
-          const SizedBox(height: 12),
-          _TripsList(
-            trips: completedTrips,
-            emptyLabel: 'Chưa có chuyến hoàn thành.',
-            loading: controller.loadingTrips,
-            onTap: onTripTap,
-          ),
-          const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: () {
-                Navigator.pushNamed(context, TripHistoryPage.routeName);
-              },
-              icon: const Icon(Icons.history),
-              label: const Text('Xem lịch sử chuyến'),
-            ),
-          ),
-        ],
+    final theme = Theme.of(context);
+    final controller = context.watch<DriverHomeController>();
+    final summary = controller.walletSummary;
+    final today = summary?.recentEarnings.isNotEmpty == true
+        ? summary!.recentEarnings.first.amount
+        : null;
+    final week = summary?.weeklyRevenue;
+    return Card(
+       elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: theme.colorScheme.outlineVariant.withOpacity(0.5)),
       ),
-    );
-  }
-}
-
-class _TripsList extends StatelessWidget {
-  const _TripsList({
-    required this.trips,
-    required this.emptyLabel,
-    required this.loading,
-    required this.onTap,
-  });
-
-  final List<TripDetail> trips;
-  final String emptyLabel;
-  final bool loading;
-  final ValueChanged<String> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    if (loading && trips.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 32),
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (trips.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 32),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.layers_clear, size: 32, color: Colors.grey),
-            const SizedBox(height: 12),
-            Text(
-              emptyLabel,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
+            Text('Thu nhập', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildEarningItem(
+                  context,
+                  'Hôm nay',
+                  amount: today,
+                  loading: controller.loading,
+                ),
+                VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  color: theme.dividerColor,
+                ),
+                _buildEarningItem(
+                  context,
+                  'Tuần này',
+                  amount: week,
+                  loading: controller.loading,
+                ),
+              ],
             ),
           ],
         ),
-      );
-    }
-    return ListView.builder(
-      itemCount: trips.length,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemBuilder: (_, index) {
-        final trip = trips[index];
-        return TripCard(
-          trip: trip,
-          onTap: () => onTap(trip.id),
-        );
-      },
+      ),
+    );
+  }
+
+  Widget _buildEarningItem(BuildContext context,
+      String label, {
+        double? amount,
+        bool loading = false,
+      }) {
+    final theme = Theme.of(context);
+    final formattedAmount = amount == null
+        ? 'Đang cập nhật'
+        : NumberFormat.currency(locale: 'vi_VN', symbol: 'đ').format(amount);
+
+    return Column(
+      children: [
+        Text(label, style: theme.textTheme.titleMedium),
+        const SizedBox(height: 6),
+        Text(
+          formattedAmount,
+          style: (amount == null
+                  ? theme.textTheme.bodyLarge
+                  : theme.textTheme.headlineSmall)
+              ?.copyWith(
+            fontWeight: amount == null ? FontWeight.w600 : FontWeight.bold,
+            color: amount == null ? Colors.grey[700] : theme.colorScheme.primary,
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({
-    required this.title,
-    this.subtitle,
-  });
-
-  final String title;
-  final String? subtitle;
+class _QuickActions extends StatelessWidget {
+  const _QuickActions();
 
   @override
   Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: [
+        _buildActionItem(
+          context,
+          icon: Icons.account_balance_wallet_outlined,
+          label: 'Ví',
+          onTap: () =>
+              Navigator.pushNamed(context, WalletOverviewPage.routeName),
+        ),
+        _buildActionItem(
+          context,
+          icon: Icons.history_outlined,
+          label: 'Lịch sử',
+          onTap: () => Navigator.pushNamed(
+            context,
+            TripHistoryPage.routeName,
+          ),
+        ),
+        _buildActionItem(
+          context,
+          icon: Icons.notifications_outlined,
+          label: 'Thông báo',
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Tính năng thông báo sẽ sớm khả dụng.')),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionItem(BuildContext context,
+      {required IconData icon, required String label, VoidCallback? onTap}) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        FilledButton(
+          onPressed: onTap,
+          style: FilledButton.styleFrom(
+            shape: const CircleBorder(),
+            padding: const EdgeInsets.all(20),
+            backgroundColor: theme.colorScheme.primaryContainer,
+            foregroundColor: theme.colorScheme.onPrimaryContainer,
+          ),
+          child: Icon(icon, size: 32),
+        ),
+        const SizedBox(height: 12),
+        Text(label, style: theme.textTheme.labelLarge),
+      ],
+    );
+  }
+}
+
+class _CurrentTripSection extends StatelessWidget {
+  const _CurrentTripSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final controller = context.watch<DriverHomeController>();
+    TripDetail? currentTrip;
+    for (final trip in controller.assignments) {
+      if (trip.status != TripStatus.completed &&
+          trip.status != TripStatus.cancelled) {
+        currentTrip = trip;
+        break;
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          title,
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium
-              ?.copyWith(fontWeight: FontWeight.w700),
+          'Hoạt động hiện tại',
+          style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
         ),
-        if (subtitle != null) ...[
-          const SizedBox(height: 4),
-          Text(
-            subtitle!,
-            style: Theme.of(context)
-                .textTheme
-                .bodySmall
-                ?.copyWith(color: Colors.grey[600]),
+        const SizedBox(height: 12),
+        Card(
+           elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: theme.colorScheme.outlineVariant.withOpacity(0.5)),
           ),
-        ],
+          child: currentTrip != null
+              ? ListTile(
+                  contentPadding: const EdgeInsets.all(16),
+                  leading: const Icon(Icons.navigation_outlined, size: 40),
+                  title: Text(currentTrip.destText, style: theme.textTheme.titleMedium),
+                  subtitle: Text('Trip ID: ${currentTrip.id}'),
+                  trailing: const Icon(Icons.arrow_forward_ios_rounded),
+                  onTap: () async {
+                    final result = await Navigator.pushNamed(
+                      context,
+                      TripDetailPage.routeName,
+                      arguments: TripDetailPageArgs(tripId: currentTrip!.id),
+                    );
+                    if (result == true && context.mounted) {
+                      await controller.refreshTrips();
+                    }
+                  },
+                )
+              : const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 40.0, horizontal: 16),
+                  child: Center(
+                    child: Text(
+                      'Chưa có chuyến nào. Bật trạng thái sẵn sàng để nhận chuyến.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+        ),
       ],
     );
   }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:dio/dio.dart';
 
 import '../../trips/models/trip_models.dart';
 import '../../trips/services/trip_service.dart';
@@ -104,35 +105,61 @@ class _TripDetailPageState extends State<TripDetailPage> {
   Future<void> _decline() async {
     await _runAction(() async {
       await _tripService.declineTrip(widget.tripId);
-    });
-    if (mounted) Navigator.pop(context);
+    }, popOnSuccess: true);
   }
 
   Future<void> _updateStatus(TripStatus status) async {
     await _runAction(() async {
       await _tripService.updateTripStatus(widget.tripId, status);
       _socket.sendStatus(status);
-    });
+    }, popOnSuccess: status == TripStatus.completed || status == TripStatus.cancelled);
   }
 
-  Future<void> _runAction(Future<void> Function() action) async {
-    if (_trip == null) return;
+  Future<bool> _runAction(
+    Future<void> Function() action, {
+    bool popOnSuccess = false,
+  }) async {
+    if (_trip == null) return false;
     setState(() => _actionLoading = true);
+    var success = false;
     try {
       await action();
       final refreshed = await _tripService.fetchTrip(widget.tripId);
       setState(() => _trip = refreshed);
       _fitMapToTrip(refreshed);
       unawaited(_loadRoute(refreshed));
+      success = true;
+      if (popOnSuccess && mounted) {
+        Navigator.pop(context, true);
+      }
     } catch (e) {
       if (mounted) {
+        String message = 'Thao tác thất bại, thử lại.';
+        if (e is DioException) {
+          final data = e.response?.data;
+          final raw = data is Map<String, dynamic>
+              ? data['error']?.toString()
+              : e.message;
+          if (raw != null && raw.isNotEmpty) {
+            if (raw.toLowerCase().contains('invalid status')) {
+              message = 'Trạng thái không hợp lệ. Vui lòng làm mới và thử lại.';
+            } else if (raw.toLowerCase().contains('wallet')) {
+              message = 'Ví không hợp lệ/không đủ: $raw';
+            } else {
+              message = raw;
+            }
+          }
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Thao tác thất bại, thử lại.')),
+          SnackBar(content: Text(message)),
         );
+        // Đồng bộ lại trạng thái mới nhất sau lỗi
+        unawaited(_loadTrip());
       }
     } finally {
       if (mounted) setState(() => _actionLoading = false);
     }
+    return success;
   }
 
   Color _statusColor(BuildContext context, TripStatus status) {

@@ -1109,7 +1109,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         ),
       );
 
-      context.goNamed(
+      // Dùng push để giữ lịch sử điều hướng, giúp người dùng có nút back
+      // quay về màn hình trước.
+      context.pushNamed(
         AppRouteNames.tripTracking,
         pathParameters: {'id': trip.id},
         extra: trip,
@@ -2386,6 +2388,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   }
 
   Widget _buildQuickActions() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final cardSpacing = 14.0;
+    final horizontalPadding = 20.0;
+    // Two cards per row, balanced width.
+    final cardWidth = (screenWidth - (horizontalPadding * 2) - cardSpacing) / 2;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 28, 20, 12),
       child: Column(
@@ -2395,13 +2402,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
           Wrap(
-            spacing: 14,
-            runSpacing: 14,
+            alignment: WrapAlignment.spaceBetween,
+            spacing: cardSpacing,
+            runSpacing: cardSpacing,
             children: _quickActions.map((action) {
               return GestureDetector(
                 onTap: () => _handleQuickAction(action),
                 child: Container(
-                  width: 150,
+                  width: cardWidth.clamp(140.0, 220.0),
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   decoration: BoxDecoration(

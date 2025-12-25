@@ -1,303 +1,453 @@
 {
-  "dashboard": {
-    "id": null,
-    "uid": "uitgo-slo",
-    "title": "UITGo - SLO & Reliability",
-    "tags": ["uitgo", "slo", "reliability"],
-    "timezone": "browser",
-    "schemaVersion": 38,
-    "version": 1,
-    "refresh": "30s",
-    "time": { "from": "now-24h", "to": "now" },
-    "annotations": {
-      "list": [
-        {
-          "builtIn": 1,
-          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
-          "enable": true,
-          "hide": true,
-          "iconColor": "rgba(0, 211, 255, 1)",
-          "name": "Annotations & Alerts",
-          "type": "dashboard"
-        }
-      ]
-    },
-    "panels": [
+  "id": null,
+  "uid": "uitgo-slo",
+  "title": "UITGo - SLO & Reliability",
+  "tags": [
+    "uitgo",
+    "slo",
+    "reliability"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "annotations": {
+    "list": [
       {
-        "id": 1,
-        "title": " Overall Service Availability (SLI)",
-        "type": "gauge",
-        "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
-        "targets": [
-          {
-            "expr": "(sum(up{job=~\"uitgo.*\"}) / count(up{job=~\"uitgo.*\"})) * 100",
-            "legendFormat": "Availability %"
-          }
-        ],
-        "options": {
-          "orientation": "auto",
-          "reduceOptions": {
-            "calcs": ["lastNotNull"],
-            "values": false
-          },
-          "showThresholdLabels": false,
-          "showThresholdMarkers": true
+        "builtIn": 1,
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
         },
-        "fieldConfig": {
-          "defaults": {
-            "unit": "percent",
-            "min": 0,
-            "max": 100,
-            "decimals": 2,
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                { "color": "red", "value": null },
-                { "color": "orange", "value": 95 },
-                { "color": "yellow", "value": 99 },
-                { "color": "green", "value": 99.9 }
-              ]
-            }
-          }
-        }
-      },
-      {
-        "id": 2,
-        "title": " SLO Targets",
-        "type": "text",
-        "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
-        "pluginVersion": "10.2.2",
-        "options": {
-          "mode": "markdown",
-          "content": "## SLO Targets\n\n| Metric | Target | Status |\n|--------|--------|--------|\n| **Availability** | ≥ 99.9% | 🟢 |\n| **Latency P99** | ≤ 200ms | 🟡 |\n| **Error Rate** | ≤ 0.1% | 🟢 |\n| **Memory Usage** | ≤ 256MB | 🟢 |\n| **Goroutines** | ≤ 100 | 🟢 |\n\n### Error Budget\n- Monthly: **43.2 minutes** downtime allowed\n- Current: **Used ~0 minutes**"
-        }
-      },
-      {
-        "id": 3,
-        "title": " Service Uptime",
-        "type": "stat",
-        "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
-        "targets": [
-          {
-            "expr": "avg(time() - process_start_time_seconds{job=~\"uitgo.*\"})",
-            "legendFormat": "Average Uptime"
-          }
-        ],
-        "options": {
-          "colorMode": "value",
-          "graphMode": "area",
-          "reduceOptions": {
-            "calcs": ["lastNotNull"],
-            "values": false
-          },
-          "textMode": "auto"
-        },
-        "fieldConfig": {
-          "defaults": {
-            "unit": "s",
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                { "color": "yellow", "value": null },
-                { "color": "green", "value": 3600 },
-                { "color": "blue", "value": 86400 }
-              ]
-            }
-          }
-        }
-      },
-      {
-        "id": 4,
-        "title": " Availability Over Time",
-        "type": "timeseries",
-        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
-        "targets": [
-          {
-            "expr": "(sum(up{job=~\"uitgo.*\"}) / count(up{job=~\"uitgo.*\"})) * 100",
-            "legendFormat": "Availability %"
-          }
-        ],
-        "options": {
-          "legend": { "displayMode": "list", "placement": "bottom" },
-          "tooltip": { "mode": "multi" }
-        },
-        "fieldConfig": {
-          "defaults": {
-            "unit": "percent",
-            "min": 0,
-            "max": 100,
-            "custom": {
-              "lineWidth": 2,
-              "fillOpacity": 30,
-              "gradientMode": "scheme",
-              "lineInterpolation": "smooth",
-              "thresholdsStyle": { "mode": "area" }
-            },
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                { "color": "red", "value": null },
-                { "color": "yellow", "value": 99 },
-                { "color": "green", "value": 99.9 }
-              ]
-            }
-          }
-        }
-      },
-      {
-        "id": 5,
-        "title": " Service Restarts (Last 24h)",
-        "type": "timeseries",
-        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
-        "targets": [
-          {
-            "expr": "changes(process_start_time_seconds{job=~\"uitgo.*\"}[1h])",
-            "legendFormat": "{{job}}"
-          }
-        ],
-        "options": {
-          "legend": { "displayMode": "list", "placement": "bottom" }
-        },
-        "fieldConfig": {
-          "defaults": {
-            "custom": {
-              "drawStyle": "bars",
-              "fillOpacity": 50,
-              "barAlignment": 0
-            },
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                { "color": "green", "value": null },
-                { "color": "yellow", "value": 1 },
-                { "color": "red", "value": 3 }
-              ]
-            }
-          }
-        }
-      },
-      {
-        "id": 6,
-        "title": " Memory SLI (< 256MB target)",
-        "type": "timeseries",
-        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
-        "targets": [
-          {
-            "expr": "go_memstats_heap_alloc_bytes{job=~\"uitgo.*\"} / 1024 / 1024",
-            "legendFormat": "{{job}}"
-          }
-        ],
-        "options": {
-          "legend": { "displayMode": "list", "placement": "bottom" }
-        },
-        "fieldConfig": {
-          "defaults": {
-            "unit": "MB",
-            "custom": {
-              "lineWidth": 2,
-              "fillOpacity": 20,
-              "thresholdsStyle": { "mode": "line+area" }
-            },
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                { "color": "green", "value": null },
-                { "color": "yellow", "value": 128 },
-                { "color": "red", "value": 256 }
-              ]
-            }
-          }
-        }
-      },
-      {
-        "id": 7,
-        "title": " Goroutines SLI (< 100 target)",
-        "type": "timeseries",
-        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
-        "targets": [
-          {
-            "expr": "go_goroutines{job=~\"uitgo.*\"}",
-            "legendFormat": "{{job}}"
-          }
-        ],
-        "options": {
-          "legend": { "displayMode": "list", "placement": "bottom" }
-        },
-        "fieldConfig": {
-          "defaults": {
-            "custom": {
-              "lineWidth": 2,
-              "fillOpacity": 20,
-              "thresholdsStyle": { "mode": "line+area" }
-            },
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                { "color": "green", "value": null },
-                { "color": "yellow", "value": 50 },
-                { "color": "red", "value": 100 }
-              ]
-            }
-          }
-        }
-      },
-      {
-        "id": 8,
-        "title": " File Descriptors",
-        "type": "timeseries",
-        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
-        "targets": [
-          {
-            "expr": "process_open_fds{job=~\"uitgo.*\"}",
-            "legendFormat": "{{job}}"
-          }
-        ],
-        "options": {
-          "legend": { "displayMode": "list", "placement": "bottom" }
-        },
-        "fieldConfig": {
-          "defaults": {
-            "custom": {
-              "lineWidth": 2,
-              "fillOpacity": 10
-            }
-          }
-        }
-      },
-      {
-        "id": 9,
-        "title": " GC Duration P75",
-        "type": "timeseries",
-        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
-        "targets": [
-          {
-            "expr": "go_gc_duration_seconds{job=~\"uitgo.*\", quantile=\"0.75\"} * 1000",
-            "legendFormat": "{{job}}"
-          }
-        ],
-        "options": {
-          "legend": { "displayMode": "list", "placement": "bottom" }
-        },
-        "fieldConfig": {
-          "defaults": {
-            "unit": "ms",
-            "custom": {
-              "lineWidth": 2,
-              "fillOpacity": 20,
-              "thresholdsStyle": { "mode": "line" }
-            },
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                { "color": "green", "value": null },
-                { "color": "yellow", "value": 50 },
-                { "color": "red", "value": 100 }
-              ]
-            }
-          }
-        }
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
       }
     ]
   },
-  "overwrite": true
+  "panels": [
+    {
+      "id": 1,
+      "title": " Overall Service Availability (SLI)",
+      "type": "gauge",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "(sum(up{job=~\"uitgo.*\"}) / count(up{job=~\"uitgo.*\"})) * 100",
+          "legendFormat": "Availability %"
+        }
+      ],
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 95
+              },
+              {
+                "color": "yellow",
+                "value": 99
+              },
+              {
+                "color": "green",
+                "value": 99.9
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": " SLO Targets",
+      "type": "text",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "pluginVersion": "10.2.2",
+      "options": {
+        "mode": "markdown",
+        "content": "## SLO Targets\n\n| Metric | Target | Status |\n|--------|--------|--------|\n| **Availability** | ≥ 99.9% | 🟢 |\n| **Latency P99** | ≤ 200ms | 🟡 |\n| **Error Rate** | ≤ 0.1% | 🟢 |\n| **Memory Usage** | ≤ 256MB | 🟢 |\n| **Goroutines** | ≤ 100 | 🟢 |\n\n### Error Budget\n- Monthly: **43.2 minutes** downtime allowed\n- Current: **Used ~0 minutes**"
+      }
+    },
+    {
+      "id": 3,
+      "title": " Service Uptime",
+      "type": "stat",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "avg(time() - process_start_time_seconds{job=~\"uitgo.*\"})",
+          "legendFormat": "Average Uptime"
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "yellow",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 3600
+              },
+              {
+                "color": "blue",
+                "value": 86400
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": " Availability Over Time",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "(sum(up{job=~\"uitgo.*\"}) / count(up{job=~\"uitgo.*\"})) * 100",
+          "legendFormat": "Availability %"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 30,
+            "gradientMode": "scheme",
+            "lineInterpolation": "smooth",
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 99
+              },
+              {
+                "color": "green",
+                "value": 99.9
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": " Service Restarts (Last 24h)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "targets": [
+        {
+          "expr": "changes(process_start_time_seconds{job=~\"uitgo.*\"}[1h])",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 50,
+            "barAlignment": 0
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": " Memory SLI (< 256MB target)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "go_memstats_heap_alloc_bytes{job=~\"uitgo.*\"} / 1024 / 1024",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "MB",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "thresholdsStyle": {
+              "mode": "line+area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 128
+              },
+              {
+                "color": "red",
+                "value": 256
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": " Goroutines SLI (< 100 target)",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "targets": [
+        {
+          "expr": "go_goroutines{job=~\"uitgo.*\"}",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "thresholdsStyle": {
+              "mode": "line+area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": " File Descriptors",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "targets": [
+        {
+          "expr": "process_open_fds{job=~\"uitgo.*\"}",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": " GC Duration P75",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "targets": [
+        {
+          "expr": "go_gc_duration_seconds{job=~\"uitgo.*\", quantile=\"0.75\"} * 1000",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 50
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
 }

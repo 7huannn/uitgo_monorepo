@@ -44,8 +44,6 @@ class _UitPrimaryButtonState extends State<UitPrimaryButton> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final baseColor = widget.color ?? colorScheme.primary;
-    final pressedColor = Color.lerp(baseColor, Colors.black, 0.08)!;
-    final effectiveColor = _pressed ? pressedColor : baseColor;
     final foreground = widget.foregroundColor ?? colorScheme.onPrimary;
 
     final button = Listener(
@@ -58,50 +56,69 @@ class _UitPrimaryButtonState extends State<UitPrimaryButton> {
       onPointerCancel: widget.loading || widget.onPressed == null
           ? null
           : _handlePointerCancel,
-      child: FilledButton(
-        style: FilledButton.styleFrom(
-          backgroundColor: effectiveColor,
-          foregroundColor: foreground,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              baseColor,
+              Color.lerp(baseColor, Colors.black, 0.15)!,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
-          padding: widget.padding,
-          elevation: _pressed ? 1.0 : 4.0,
-          animationDuration: const Duration(milliseconds: 150),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: baseColor.withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
-        onPressed: widget.loading ? null : widget.onPressed,
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 200),
-          switchInCurve: Curves.easeInOut,
-          switchOutCurve: Curves.easeInOut,
-          child: widget.loading
-              ? SizedBox(
-                  key: const ValueKey('loading'),
-                  height: 22,
-                  width: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(foreground),
-                  ),
-                )
-              : Row(
-                  key: const ValueKey('label'),
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (widget.icon != null) ...[
-                      widget.icon!,
-                      const SizedBox(width: 8),
-                    ],
-                    Text(
-                      widget.label,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: foreground,
-                            fontWeight: FontWeight.w600,
-                          ),
+        child: FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            foregroundColor: foreground,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            padding: widget.padding,
+            elevation: 0,
+          ),
+          onPressed: widget.loading ? null : widget.onPressed,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            switchInCurve: Curves.easeInOut,
+            switchOutCurve: Curves.easeInOut,
+            child: widget.loading
+                ? SizedBox(
+                    key: const ValueKey('loading'),
+                    height: 22,
+                    width: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(foreground),
                     ),
-                  ],
-                ),
+                  )
+                : Row(
+                    key: const ValueKey('label'),
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (widget.icon != null) ...[
+                        widget.icon!,
+                        const SizedBox(width: 8),
+                      ],
+                      Text(
+                        widget.label,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: foreground,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ],
+                  ),
+          ),
         ),
       ),
     );

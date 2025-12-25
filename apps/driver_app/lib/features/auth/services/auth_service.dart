@@ -136,6 +136,18 @@ class AuthService implements AuthTokenProvider, AuthGateway {
   Future<bool> isLoggedIn() async {
     final prefs = await SharedPreferences.getInstance();
     final token = await _readSecure(_keyToken) ?? prefs.getString(_keyToken);
+    final looksLikeMock = token != null && token.startsWith('mock-token-');
+    final expiryMillis = prefs.getInt(_keyTokenExpiry);
+    final expired = expiryMillis != null &&
+        DateTime.now().millisecondsSinceEpoch >= expiryMillis;
+    if (!useMock && looksLikeMock) {
+      await logout();
+      return false;
+    }
+    if (expired) {
+      await logout();
+      return false;
+    }
     return token != null && token.isNotEmpty;
   }
 

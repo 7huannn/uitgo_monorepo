@@ -70,8 +70,7 @@ class UitGoLoginScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    _LoginHeader(
-                      logo: logo,
+                    _WelcomeHeader(
                       appName: appName,
                       tagline: tagline,
                       accentColor: accentColor,
@@ -90,6 +89,7 @@ class UitGoLoginScreen extends StatelessWidget {
                       failureMessage: failureMessage,
                       initialEmail: initialEmail,
                       initialPassword: initialPassword,
+                      logo: logo,
                     ),
                   ],
                 ),
@@ -102,15 +102,13 @@ class UitGoLoginScreen extends StatelessWidget {
   }
 }
 
-class _LoginHeader extends StatelessWidget {
-  const _LoginHeader({
-    required this.logo,
+class _WelcomeHeader extends StatelessWidget {
+  const _WelcomeHeader({
     required this.appName,
     required this.tagline,
     required this.accentColor,
   });
 
-  final Widget logo;
   final String appName;
   final String tagline;
   final Color accentColor;
@@ -120,23 +118,8 @@ class _LoginHeader extends StatelessWidget {
     final theme = Theme.of(context);
     return Column(
       children: [
-        Semantics(
-          label: '$appName logo',
-          child: Container(
-            height: 96,
-            width: 96,
-            decoration: BoxDecoration(
-              color: accentColor.withValues(
-                alpha: theme.brightness == Brightness.dark ? 0.18 : 0.12,
-              ),
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Center(child: logo),
-          ),
-        ),
-        const SizedBox(height: 24),
         Text(
-          appName,
+          'Welcome Back to $appName',
           textAlign: TextAlign.center,
           style: theme.textTheme.headlineMedium?.copyWith(
             fontWeight: FontWeight.w700,
@@ -170,6 +153,7 @@ class _LoginCard extends StatefulWidget {
     required this.failureMessage,
     this.initialEmail,
     this.initialPassword,
+    required this.logo,
   });
 
   final Color accentColor;
@@ -184,6 +168,7 @@ class _LoginCard extends StatefulWidget {
   final String failureMessage;
   final String? initialEmail;
   final String? initialPassword;
+  final Widget logo;
 
   @override
   State<_LoginCard> createState() => _LoginCardState();
@@ -252,19 +237,24 @@ class _LoginCardState extends State<_LoginCard> {
     final isDark = theme.brightness == Brightness.dark;
 
     final cardColor = Color.alphaBlend(
-      widget.accentColor.withValues(alpha: isDark ? 0.08 : 0.04),
+      widget.accentColor.withOpacity(isDark ? 0.08 : 0.04),
       colorScheme.surface,
     );
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
+    return Container(
       decoration: BoxDecoration(
-        color: cardColor,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            cardColor,
+            widget.accentColor.withOpacity(isDark ? 0.15 : 0.1),
+          ],
+        ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.12),
+            color: Colors.black.withOpacity(isDark ? 0.4 : 0.12),
             blurRadius: 32,
             offset: const Offset(0, 18),
             spreadRadius: -8,
@@ -283,14 +273,23 @@ class _LoginCardState extends State<_LoginCard> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  SizedBox(
+                    height: 96,
+                    width: 96,
+                    child: widget.logo,
+                  ),
+                  const SizedBox(height: 24),
                   TextFormField(
                     controller: _emailController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Email',
                       hintText: 'your.email@example.com',
-                      prefixIcon: Icon(
-                        Icons.email_outlined,
-                        semanticLabel: 'Email icon',
+                      prefixIcon: const Icon(Icons.email_outlined),
+                      filled: true,
+                      fillColor: colorScheme.surface.withOpacity(0.5),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
                       ),
                     ),
                     keyboardType: TextInputType.emailAddress,
@@ -312,10 +311,7 @@ class _LoginCardState extends State<_LoginCard> {
                     decoration: InputDecoration(
                       labelText: 'Mật khẩu',
                       hintText: '••••••••',
-                      prefixIcon: const Icon(
-                        Icons.lock_outline,
-                        semanticLabel: 'Password icon',
-                      ),
+                      prefixIcon: const Icon(Icons.lock_outline),
                       suffixIcon: IconButton(
                         tooltip:
                             _obscurePassword ? 'Hiện mật khẩu' : 'Ẩn mật khẩu',
@@ -326,10 +322,13 @@ class _LoginCardState extends State<_LoginCard> {
                           _obscurePassword
                               ? Icons.visibility_outlined
                               : Icons.visibility_off_outlined,
-                          semanticLabel: _obscurePassword
-                              ? 'Hiện mật khẩu'
-                              : 'Ẩn mật khẩu',
                         ),
+                      ),
+                      filled: true,
+                      fillColor: colorScheme.surface.withOpacity(0.5),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
                       ),
                     ),
                     obscureText: _obscurePassword,
@@ -446,7 +445,7 @@ class _ThemeToggleButton extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: accent.withValues(alpha: 0.08),
+        color: accent.withOpacity(0.08),
       ),
       child: IconButton(
         onPressed: onToggleTheme,

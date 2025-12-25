@@ -163,6 +163,21 @@ class AuthService implements AuthTokenProvider {
 
   Future<bool> isLoggedIn() async {
     final token = await _readToken(_keyToken);
+    // If we previously ran with USE_MOCK=true, clear that mock token when now
+    // pointing to the real backend to avoid endless 401s.
+    final looksLikeMock = token != null && token.startsWith('mock-token-');
+    final prefs = await SharedPreferences.getInstance();
+    final expiryMillis = prefs.getInt(_keyTokenExpiry);
+    final expired = expiryMillis != null &&
+        DateTime.now().millisecondsSinceEpoch >= expiryMillis;
+    if (!useMock && looksLikeMock) {
+      await logout();
+      return false;
+    }
+    if (expired) {
+      await logout();
+      return false;
+    }
     return token != null && token.isNotEmpty;
   }
 

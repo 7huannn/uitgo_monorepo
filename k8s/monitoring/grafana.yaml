@@ -80,6 +80,18 @@ spec:
               mountPath: /etc/grafana/provisioning/dashboards
             - name: storage
               mountPath: /var/lib/grafana
+            - name: dashboard-uitgo-services
+              mountPath: /var/lib/grafana/dashboards/uitgo-services.json
+              subPath: uitgo-services.json
+            - name: dashboard-uitgo-alerts
+              mountPath: /var/lib/grafana/dashboards/uitgo-alerts.json
+              subPath: uitgo-alerts.json
+            - name: dashboard-uitgo-slo
+              mountPath: /var/lib/grafana/dashboards/uitgo-slo.json
+              subPath: uitgo-slo.json
+            - name: dashboard-uitgo-overview
+              mountPath: /var/lib/grafana/dashboards/uitgo-overview.json
+              subPath: uitgo-overview.json
           resources:
             requests:
               memory: "128Mi"
@@ -108,6 +120,18 @@ spec:
             name: grafana-dashboards-provider
         - name: storage
           emptyDir: {}
+        - name: dashboard-uitgo-services
+          configMap:
+            name: grafana-dashboard-uitgo-services
+        - name: dashboard-uitgo-alerts
+          configMap:
+            name: grafana-dashboard-uitgo-alerts
+        - name: dashboard-uitgo-slo
+          configMap:
+            name: grafana-dashboard-uitgo-slo
+        - name: dashboard-uitgo-overview
+          configMap:
+            name: grafana-dashboard-uitgo-overview
 
 ---
 apiVersion: v1

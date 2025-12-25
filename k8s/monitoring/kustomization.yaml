@@ -11,5 +11,31 @@ resources:
   - loki.yaml
   - promtail.yaml
 
+configMapGenerator:
+  - name: grafana-dashboard-uitgo-services
+    files:
+      - dashboards/uitgo-services.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+  - name: grafana-dashboard-uitgo-alerts
+    files:
+      - dashboards/uitgo-alerts.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+  - name: grafana-dashboard-uitgo-slo
+    files:
+      - dashboards/uitgo-slo.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+  - name: grafana-dashboard-uitgo-overview
+    files:
+      - dashboards/uitgo-overview.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+
 commonLabels:
   app.kubernetes.io/part-of: uitgo-monitoring

@@ -4,15 +4,19 @@ import '../../driver/models/driver_models.dart';
 import '../../driver/services/driver_service.dart';
 import '../../trips/models/trip_models.dart';
 import '../../trips/services/trip_service.dart';
+import '../../wallet/models/wallet_models.dart';
+import '../../wallet/services/wallet_service.dart';
 
 class DriverHomeController extends ChangeNotifier {
-  DriverHomeController(this._driverService, this._tripService);
+  DriverHomeController(this._driverService, this._tripService, this._walletService);
 
   final DriverService _driverService;
   final TripService _tripService;
+  final WalletService _walletService;
 
   DriverProfile? driver;
   List<TripDetail> assignments = const [];
+  WalletSummary? walletSummary;
   bool loading = true;
   bool loadingTrips = true;
   bool togglingStatus = false;
@@ -24,6 +28,7 @@ class DriverHomeController extends ChangeNotifier {
     await Future.wait([
       _loadDriver(),
       _loadTrips(),
+      _loadWallet(),
     ]);
     loading = false;
     notifyListeners();
@@ -36,6 +41,11 @@ class DriverHomeController extends ChangeNotifier {
 
   Future<void> refreshProfile() async {
     await _loadDriver();
+    notifyListeners();
+  }
+
+  Future<void> refreshWallet() async {
+    await _loadWallet();
     notifyListeners();
   }
 
@@ -73,6 +83,14 @@ class DriverHomeController extends ChangeNotifier {
     } finally {
       loadingTrips = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> _loadWallet() async {
+    try {
+      walletSummary = await _walletService.getSummary();
+    } catch (_) {
+      // giữ nguyên giá trị cũ nếu lỗi
     }
   }
 }

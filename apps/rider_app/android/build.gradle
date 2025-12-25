@@ -16,3 +16,14 @@ subprojects {
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
+
+// Force all Kotlin compilation to use a modern language/api version so plugins
+// with older defaults (e.g. sentry_flutter) still compile on Kotlin 2.x.
+subprojects {
+    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+        kotlinOptions {
+            languageVersion = "2.0"
+            apiVersion = "2.0"
+        }
+    }
+}

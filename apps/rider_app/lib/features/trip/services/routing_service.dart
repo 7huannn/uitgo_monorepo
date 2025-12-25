@@ -88,7 +88,7 @@ class RoutingService {
         },
       );
       if (response.statusCode != 200) {
-        return _buildFallbackRoute(from, to);
+        return await _fetchDirectOsrm(from, to) ?? _buildFallbackRoute(from, to);
       }
       final data = response.data ?? <String, dynamic>{};
       final distance = (data['distance'] as num?)?.toDouble();
@@ -104,7 +104,7 @@ class RoutingService {
           .toList();
       final steps = _parseSteps(data['steps']);
       if (distance == null || duration == null || points.isEmpty) {
-        return _buildFallbackRoute(from, to);
+        return await _fetchDirectOsrm(from, to) ?? _buildFallbackRoute(from, to);
       }
       return RouteOverview(
         distanceMeters: distance,
@@ -113,8 +113,7 @@ class RoutingService {
         steps: steps,
       );
     } on DioException {
-      final direct = await _fetchDirectOsrm(from, to);
-      return direct ?? _buildFallbackRoute(from, to);
+      return await _fetchDirectOsrm(from, to) ?? _buildFallbackRoute(from, to);
     }
   }
 

@@ -44,14 +44,14 @@ class _LoginPageState extends State<LoginPage> {
     final themeController = context.watch<ThemeModeController?>();
     return UitGoLoginScreen(
       logo: Icon(
-        Icons.person,
+        Icons.directions_car_filled,
         size: 56,
         color: Theme.of(context).colorScheme.primary,
-        semanticLabel: 'UIT-Go Rider',
+        semanticLabel: 'UIT-Go',
       ),
-      appName: 'UIT-Go Rider',
-      tagline: 'Chào mừng trở lại',
-      accentColor: const Color(0xFF7C4DFF),
+      appName: 'UIT-Go',
+      tagline: 'Your ride, your way',
+      accentColor: const Color(0xFF42A5F5),
       onLogin: _handleLogin,
       onForgotPassword: _handleForgotPassword,
       onRegister: _handleRegister,
