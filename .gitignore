@@ -195,3 +195,25 @@ temp/
 *.orig
 tfplan
 *.tfplan
+
+#############################
+# LaTeX
+#############################
+main.tex
+docs/report/main.tex
+*.aux
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lol
+*.lot
+*.out
+*.pdf
+*.synctex.gz
+*.toc
+
+#############################
+# Generated assets
+#############################
+/assets/

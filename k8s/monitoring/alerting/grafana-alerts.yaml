@@ -133,6 +133,34 @@ data:
               severity: warning
               team: backend
 
+          # SLO breach: 5xx error rate > 1% over 5m
+          - uid: uitgo-error-rate
+            title: UITGo HTTP 5xx Error Rate High
+            condition: B
+            data:
+              - refId: B
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  expr: |
+                    sum(rate(uitgo_http_requests_total{status=~"5.."}[5m])) /
+                    sum(rate(uitgo_http_requests_total[5m]))
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: B
+            noDataState: NoData
+            execErrState: Alerting
+            for: 5m
+            annotations:
+              summary: "Error rate above SLO threshold"
+              description: "5xx ratio breached 1% over 5m (SLO target 99.9% availability)."
+              runbook_url: "docs/runbooks/observability.md#http-5xx-slo-breach"
+            labels:
+              severity: critical
+              team: backend
+
           # High Goroutines Alert
           - uid: uitgo-high-goroutines
             title: UITGo High Goroutine Count

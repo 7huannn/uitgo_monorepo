@@ -22,12 +22,16 @@ spec:
     namespace: uitgo
   
   syncPolicy:
-    # Manual sync for staging - require approval
+    automated:
+      prune: true      # Delete resources removed from Git
+      selfHeal: true   # Revert manual changes
+      allowEmpty: false
     syncOptions:
       - CreateNamespace=true
       - PrunePropagationPolicy=foreground
+      - PruneLast=true
     retry:
-      limit: 3
+      limit: 5
       backoff:
         duration: 10s
         factor: 2

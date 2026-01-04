@@ -27,6 +27,8 @@ func main() {
 	logging.Configure(cfg.LogFormat, "trip-service")
 	flushSentry := observability.InitSentry(cfg.SentryDSN, "trip-service")
 	defer flushSentry()
+	shutdownTracer := observability.InitTracing(context.Background(), "trip-service", cfg.TracingEndpoint)
+	defer shutdownTracer(context.Background())
 
 	pool, err := db.Connect(cfg.DatabaseURL)
 	if err != nil {

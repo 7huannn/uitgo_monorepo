@@ -20,6 +20,7 @@ import (
 	"uitgo/backend/internal/notification"
 	"uitgo/backend/internal/observability"
 	"uitgo/backend/internal/routing"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 // Server wraps the Gin engine and dependencies.
@@ -37,6 +38,7 @@ func NewServer(cfg *config.Config, db *gorm.DB) (*Server, error) {
 		log.Printf("warn: unable to set trusted proxies: %v", err)
 	}
 
+	router.Use(otelgin.Middleware(serviceName))
 	router.Use(middleware.JSONLogger(serviceName))
 	router.Use(observability.GinMiddleware())
 	router.Use(gin.Recovery())

@@ -31,6 +31,8 @@ data:
               names:
                 - uitgo
         relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
           - source_labels: [__meta_kubernetes_service_name]
             action: keep
             regex: user-service
@@ -45,6 +47,8 @@ data:
               names:
                 - uitgo
         relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
           - source_labels: [__meta_kubernetes_service_name]
             action: keep
             regex: trip-service
@@ -59,6 +63,8 @@ data:
               names:
                 - uitgo
         relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
           - source_labels: [__meta_kubernetes_service_name]
             action: keep
             regex: driver-service

@@ -1,0 +1,103 @@
+{
+  "title": "UITGo - SLOs & SLIs (HTTP)",
+  "schemaVersion": 38,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Availability (success rate)",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "1 - (sum(rate(uitgo_http_requests_total{status=~\"5..\"}[5m])) / sum(rate(uitgo_http_requests_total[5m])))",
+          "legendFormat": "success_rate"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "textMode": "value_and_name"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 0.995 },
+              { "color": "green", "value": 0.999 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Error Rate (5xx)",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        { "expr": "sum(rate(uitgo_http_requests_total{status=~\"5..\"}[5m]))", "legendFormat": "errors_5xx" }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Latency p95 (seconds)",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(uitgo_http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "values": false } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.6 },
+              { "color": "red", "value": 0.8 }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "graph",
+      "title": "Request Rate (req/s)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        { "expr": "sum(rate(uitgo_http_requests_total[5m])) by (service)", "legendFormat": "{{service}}" }
+      ],
+      "lines": true,
+      "fill": 2
+    },
+    {
+      "id": 5,
+      "type": "text",
+      "title": "SLO Targets",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "options": {
+        "mode": "markdown",
+        "content": "### SLO Targets (HTTP)\n- Availability: **99.9%** over 30d\n- Error budget: **0.1%** failures (~43.2 min/mo)\n- Latency: **p95 < 800ms**\n- Error rate alert: >1% 5xx for 5m\n\nPanels use `uitgo_http_requests_total` and `uitgo_http_request_duration_seconds_bucket` emitted by each service."
+      }
+    }
+  ],
+  "refresh": "30s"
+}

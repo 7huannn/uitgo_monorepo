@@ -10,6 +10,7 @@ resources:
   - grafana.yaml
   - loki.yaml
   - promtail.yaml
+  - jaeger.yaml
 
 configMapGenerator:
   - name: grafana-dashboard-uitgo-services
@@ -33,6 +34,12 @@ configMapGenerator:
   - name: grafana-dashboard-uitgo-overview
     files:
       - dashboards/uitgo-overview.json
+    options:
+      labels:
+        grafana_dashboard: "1"
+  - name: grafana-dashboard-uitgo-slo-sli
+    files:
+      - dashboards/uitgo-slo-sli.json
     options:
       labels:
         grafana_dashboard: "1"

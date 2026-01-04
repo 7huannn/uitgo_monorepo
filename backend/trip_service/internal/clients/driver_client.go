@@ -12,6 +12,7 @@ import (
 
 	"uitgo/backend/internal/domain"
 	"uitgo/backend/internal/http/handlers"
+	"uitgo/backend/internal/observability"
 )
 
 // LocationClient pushes driver location updates to the driver-service.
@@ -28,9 +29,7 @@ func NewLocationClient(baseURL, apiKey string) *LocationClient {
 	return &LocationClient{
 		baseURL: trimmed,
 		apiKey:  apiKey,
-		client: &http.Client{
-			Timeout: 5 * time.Second,
-		},
+		client: observability.NewInstrumentedClient(5 * time.Second),
 	}
 }
 

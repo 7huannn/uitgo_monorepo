@@ -23,5 +23,8 @@ data:
   # Observability
   PROMETHEUS_ENABLED: "true"
   
+  # Distributed Tracing (Jaeger via OTLP)
+  TRACING_ENDPOINT: "jaeger-collector.monitoring.svc:4318"
+  
   # Cache settings
   HOME_CACHE_TTL_SECONDS: "300"

@@ -232,6 +232,7 @@ k8s/
 
 | Tài liệu | Mô tả |
 |----------|-------|
+| `docs/architecture-detailed.md` | Kiến trúc chi tiết Dev→Prod, CI/CD, GitOps, AWS staging (theo sơ đồ tổng thể) |
 | `docs/DEVOPS_IMPLEMENTATION_SUMMARY.md` | Tổng quan DevOps và hướng dẫn sử dụng |
 | `docs/architecture-stage1.md` | Skeleton microservice và biến môi trường |
 | `docs/moduleA_scalability.md` | Báo cáo tối ưu hiệu năng và kết quả k6 |

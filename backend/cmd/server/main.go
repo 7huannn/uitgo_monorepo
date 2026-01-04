@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"path/filepath"
@@ -22,6 +23,8 @@ func main() {
 	logging.Configure(cfg.LogFormat, "api")
 	flushSentry := observability.InitSentry(cfg.SentryDSN, "api")
 	defer flushSentry()
+	shutdownTracer := observability.InitTracing(context.Background(), "api", cfg.TracingEndpoint)
+	defer shutdownTracer(context.Background())
 
 	pool, err := db.Connect(cfg.DatabaseURL)
 	if err != nil {

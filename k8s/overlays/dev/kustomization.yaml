@@ -6,6 +6,8 @@ namespace: uitgo
 
 resources:
   - ../../base
+  # SealedSecrets for GitOps secret management
+  - sealed-secrets.yaml
 
 # Override replica counts for dev (minimal resources)
 replicas:

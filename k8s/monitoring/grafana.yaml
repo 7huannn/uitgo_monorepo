@@ -21,6 +21,12 @@ data:
         url: http://loki:3100
         editable: false
 
+      - name: Jaeger
+        type: jaeger
+        access: proxy
+        url: http://jaeger-query.monitoring.svc:16686
+        editable: false
+
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -92,6 +98,9 @@ spec:
             - name: dashboard-uitgo-overview
               mountPath: /var/lib/grafana/dashboards/uitgo-overview.json
               subPath: uitgo-overview.json
+            - name: dashboard-uitgo-slo-sli
+              mountPath: /var/lib/grafana/dashboards/uitgo-slo-sli.json
+              subPath: uitgo-slo-sli.json
           resources:
             requests:
               memory: "128Mi"
@@ -132,6 +141,9 @@ spec:
         - name: dashboard-uitgo-overview
           configMap:
             name: grafana-dashboard-uitgo-overview
+        - name: dashboard-uitgo-slo-sli
+          configMap:
+            name: grafana-dashboard-uitgo-slo-sli
 
 ---
 apiVersion: v1

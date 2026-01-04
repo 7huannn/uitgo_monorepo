@@ -1,258 +1,437 @@
-# UITGo Monorepo
+<p align="center">
+  <img src="assets/image1.png" alt="UITGo Logo" width="120"/>
+</p>
 
-UITGo là nền tảng gọi xe mẫu, trong đó ứng dụng Flutter cho rider và driver giao tiếp qua API Gateway tới các microservice viết bằng Go (user, trip, driver). Dự án tích hợp sẵn hệ thống quan sát (Prometheus, Grafana, Loki), GitOps với ArgoCD, và hạ tầng Kubernetes/Terraform, phục vụ phát triển, demo và triển khai thử nghiệm.
+<h1 align="center">UITGo Monorepo</h1>
 
-## Toàn cảnh
-- **Backend**: `user-service`, `trip-service`, `driver-service` chạy sau gateway Nginx/Ingress; Redis dùng cho geospatial index và hàng đợi ghép chuyến.
-- **Ứng dụng**: Flutter rider/driver (`apps/rider_app`, `apps/driver_app`) và admin prototype (`apps/admin_app`).
-- **Quan sát**: Prometheus + Grafana + Loki (centralized logging), Sentry hook cho backend và Flutter.
-- **Hạ tầng**: 
-  - **Local/Dev**: Docker Compose hoặc k3s Kubernetes
-  - **Staging**: Kubernetes với Kustomize overlays
-  - **Cloud**: Terraform scaffold cho VPC, Postgres, Redis, SQS/ASG
-- **GitOps**: ArgoCD tự động đồng bộ từ Git repository vào Kubernetes cluster.
+<p align="center">
+  <strong>Cloud-Native Ride-Hailing Platform</strong><br>
+  <em>Microservices • GitOps • Full Observability</em>
+</p>
 
-## Kiến trúc dịch vụ
-| Service | Vai trò | Port | Lưu trữ |
-| --- | --- | --- | --- |
-| api-gateway | Định tuyến traffic từ ứng dụng | 8080 | — |
-| user-service | Auth, hồ sơ, ví, địa điểm lưu, thông báo | 8081 | Postgres `user_service` |
-| trip-service | Vòng đời chuyến, WebSocket trạng thái | 8082 | Postgres `trip_service` |
-| driver-service | Onboarding, trạng thái tài xế, ghép chuyến | 8083 | Postgres `driver_service` |
-| redis | GEO index + hàng đợi ghép chuyến | 6379 | In-memory |
-| prometheus | Thu thập `/metrics` | 9090 | — |
-| grafana | Dashboard quan sát | 3000 | — (admin/`uitgo`) |
+<p align="center">
+  <img src="https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go" alt="Go">
+  <img src="https://img.shields.io/badge/Flutter-3.x-02569B?style=flat&logo=flutter" alt="Flutter">
+  <img src="https://img.shields.io/badge/Kubernetes-Ready-326CE5?style=flat&logo=kubernetes" alt="Kubernetes">
+  <img src="https://img.shields.io/badge/Terraform-IaC-7B42BC?style=flat&logo=terraform" alt="Terraform">
+  <img src="https://img.shields.io/badge/ArgoCD-GitOps-EF7B4D?style=flat&logo=argo" alt="ArgoCD">
+</p>
 
-## Yêu cầu hệ thống
-- Docker + Docker Compose v2
-- `make`
-- Go 1.22+ (nếu chạy dịch vụ trực tiếp)
-- Flutter stable (nếu build rider/driver)
-- **Kubernetes local** (tùy chọn): k3s hoặc kind
-- **Helm** (tùy chọn): để cài đặt monitoring stack
+<p align="center">
+  <a href="https://sonarcloud.io/dashboard?id=7huannn_uitgo_monorepo"><img src="https://img.shields.io/badge/SonarCloud-Quality%20Gate-F3702A?style=flat&logo=sonarcloud" alt="SonarCloud"></a>
+  <a href="https://app.aikido.dev"><img src="https://img.shields.io/badge/Aikido-Security%20Scan-6366F1?style=flat&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyTDIgN2wxMCA1IDEwLTUtMTAtNXptMCAybDcuNTMgMy43N0wxMiAxMS41MyA0LjQ3IDcuNzcgMTIgNHoiLz48L3N2Zz4=" alt="Aikido Security"></a>
+</p>
 
-## Khởi chạy nhanh
+---
 
-### Option 1: Docker Compose (đơn giản nhất)
-```bash
-# từ thư mục gốc
-docker compose up --build
+## Overview
+
+**UITGo** is a sample ride-hailing platform built with microservices architecture, where Flutter mobile apps communicate via API Gateway to Go services. The project includes:
+
+- **CI/CD Pipeline** with GitHub Actions, Trivy security scanning, K6 load testing
+- **GitOps** with ArgoCD auto-sync
+- **Full Observability** with Prometheus, Grafana, Loki, Jaeger
+- **Security Scanning** with SonarCloud + Aikido Security (GitHub integration)
+- **Infrastructure as Code** with Terraform (AWS) and Kubernetes manifests
+
+---
+
+## System Architecture
+
+<p align="center">
+  <img src="architecture.png" alt="UITGo System Architecture" width="100%"/>
+</p>
+
+### Architecture Highlights
+
+| Layer | Components | Description |
+|-------|------------|-------------|
+| **Client** | Flutter (iOS/Android/Web) | Rider & Driver mobile applications |
+| **CI/CD** | GitHub Actions → GHCR → ArgoCD | Automated build, test, scan, deploy pipeline |
+| **Gateway** | Traefik / Nginx Ingress | API routing, rate limiting, SSL termination |
+| **Services** | user-service, trip-service, driver-service | Go microservices with dedicated databases |
+| **Data** | PostgreSQL × 3, Redis (GEO + Queue) | Isolated databases per service |
+| **Observability** | Prometheus, Grafana, Loki, Jaeger, Sentry | Metrics, logs, traces, error tracking |
+| **Security** | SonarCloud, Aikido, Trivy | Code quality, SAST, dependency & container scanning |
+
+---
+
+## Service Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        Flutter Mobile Apps                               │
+│                    (Rider App • Driver App • Admin)                      │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │ REST / WebSocket
+                                 ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     API Gateway (Traefik/Nginx)                          │
+│              /auth/* │ /v1/trips/* │ /v1/drivers/* │ /ws/*              │
+└────────┬───────────────────┬───────────────────┬────────────────────────┘
+         │                   │                   │
+         ▼                   ▼                   ▼
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│  user-service   │ │  trip-service   │ │ driver-service  │
+│     :8081       │ │     :8082       │ │     :8083       │
+│                 │ │                 │ │                 │
+│ • Auth/JWT      │ │ • Trip CRUD     │ │ • Driver mgmt   │
+│ • User profile  │ │ • WebSocket     │ │ • GEO search    │
+│ • Wallet        │ │ • Fare calc     │ │ • Trip matching │
+│ • Notifications │ │ • Trip history  │ │ • Queue worker  │
+└────────┬────────┘ └────────┬────────┘ └────────┬────────┘
+         │                   │                   │
+         ▼                   ▼                   ▼
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│   PostgreSQL    │ │   PostgreSQL    │ │   PostgreSQL    │
+│   user_db       │ │   trip_db       │ │   driver_db     │
+└─────────────────┘ └─────────────────┘ └─────────────────┘
+                                 │
+                    ┌────────────┴────────────┐
+                    ▼                         ▼
+            ┌─────────────┐           ┌─────────────┐
+            │    Redis    │           │    Redis    │
+            │  GEO Index  │           │ Match Queue │
+            └─────────────┘           └─────────────┘
 ```
 
-### Option 2: Kubernetes với k3s (production-like)
+### Service Endpoints
+
+| Service | Port | Storage | Responsibilities |
+|---------|------|---------|------------------|
+| **api-gateway** | 8080 | — | Traffic routing, rate limiting |
+| **user-service** | 8081 | PostgreSQL | Auth, profiles, wallet, notifications |
+| **trip-service** | 8082 | PostgreSQL | Trip lifecycle, WebSocket, fare calculation |
+| **driver-service** | 8083 | PostgreSQL | Driver onboarding, GEO search, trip matching |
+| **redis** | 6379 | In-memory | GEO index + async match queue |
+
+---
+
+## Quick Start
+
+### Prerequisites
+
+- Docker + Docker Compose v2
+- Make
+- Go 1.22+ (optional, for local development)
+- Flutter 3.x (optional, for mobile development)
+- kubectl + k3s/kind (optional, for Kubernetes)
+
+### Option 1: Docker Compose (Simplest)
+
 ```bash
-# Chạy script setup tự động
+# Start all services
+docker compose up --build
+
+# Access points
+# API Gateway: http://localhost:8080
+# Prometheus:  http://localhost:9090
+# Grafana:     http://localhost:3000 (admin/uitgo)
+```
+
+### Option 2: Kubernetes with K3s (Production-like)
+
+```bash
+# Full automated setup
 ./scripts/setup-local-devops.sh full
 
-# Hoặc từng bước:
-make k8s-build       # Build và push images
-make k8s-deploy      # Deploy lên Kubernetes
-make k8s-monitoring  # Deploy Prometheus + Grafana + Loki
-make k8s-status      # Kiểm tra trạng thái
+# Or step by step
+make k8s-build        # Build images
+make k8s-deploy       # Deploy services
+make k8s-monitoring   # Deploy observability stack
+make k8s-status       # Check status
+
+# Access via Ingress: http://uitgo.local
 ```
 
-### Endpoints
-| Service | Docker Compose | Kubernetes |
-|---------|---------------|------------|
-| API Gateway | http://localhost:8080 | http://uitgo.local |
-| Prometheus | http://localhost:9090 | `make k8s-port-forward` |
-| Grafana | http://localhost:3000 | `make k8s-port-forward` |
-| ArgoCD | — | https://localhost:&lt;nodeport&gt; |
+### Option 3: Backend Only (Development)
 
-## Cấu hình chính
-### Backend (biến dùng chung cho các service)
-| Biến | Mô tả |
-| --- | --- |
-| `POSTGRES_DSN` | Chuỗi kết nối Postgres cho từng service. |
-| `JWT_SECRET` | HMAC secret, access token mặc định 15 phút. |
-| `REFRESH_TOKEN_ENCRYPTION_KEY` | Chuỗi dùng derive khoá AES-GCM lưu refresh token. |
-| `ACCESS_TOKEN_TTL_MINUTES` | Tuỳ chọn override thời gian sống access token. |
-| `REFRESH_TOKEN_TTL_DAYS` | Tuỳ chọn override refresh token (mặc định 30 ngày). |
-| `CORS_ALLOWED_ORIGINS` | Danh sách origin cho phép, không dùng wildcard. |
-| `INTERNAL_API_KEY` | Bắt buộc cho `/internal/*` và debug endpoint. |
-| `SENTRY_DSN` | Bật Sentry cho backend. |
-| `PROMETHEUS_ENABLED` | Bật/tắt middleware metrics. |
-| `DRIVER_SERVICE_URL` / `TRIP_SERVICE_URL` | Service-to-service call. |
-| `MATCH_QUEUE_REDIS_ADDR` / `MATCH_QUEUE_NAME` | Queue ghép chuyến async. |
-| `REDIS_ADDR` | GEO index cho tìm kiếm tài xế. |
-| `HOME_CACHE_TTL_SECONDS` | TTL cho Redis cache của `/promotions` & `/news` (mặc định 300s, đặt 0 để tắt). |
-| `TRIP_DB_REPLICA_DSN` | (Tuỳ chọn) DSN read replica cho trip-service; nếu set các request đọc sẽ hit replica. |
-
-### Flutter
-- `API_BASE` (mặc định `http://localhost:8080`)
-- `USE_MOCK` (bật mock data nếu cần)
-- `SENTRY_DSN`
-
-## Phát triển backend
 ```bash
 cd backend
-make migrate   # chạy migration theo POSTGRES_DSN
-make run       # khởi động server (PORT mặc định 8080)
-make test      # unit test
-make seed      # nạp rider, driver, ví, và chuyến mẫu
-```
-Các service khi chạy trong Docker tự apply migration. Seed in ra thông tin tài khoản demo để thử nhanh.
-
-## Smoke test API (curl)
-```bash
-# đăng ký tài khoản mẫu
-curl -s http://localhost:8080/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"UIT Rider","email":"rider@example.com","password":"passw0rd"}'
-
-# đăng nhập
-LOGIN=$(curl -s http://localhost:8080/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"rider@example.com","password":"passw0rd"}')
-ACCESS=$(echo "$LOGIN" | jq -r .accessToken)
-REFRESH=$(echo "$LOGIN" | jq -r .refreshToken)
-
-# lấy thông tin hiện tại
-curl http://localhost:8080/auth/me -H "Authorization: Bearer $ACCESS"
-
-# refresh token
-curl -s http://localhost:8080/auth/refresh \
-  -H "Content-Type: application/json" \
-  -d "{\"refreshToken\":\"$REFRESH\"}"
+make migrate          # Run migrations
+make seed             # Seed demo data
+make run              # Start server on :8080
 ```
 
-## Bảo mật & quan sát
-- JWT 15 phút, refresh token 30 ngày (mã hoá, rotate mỗi lần refresh).
-- Rate limit 10 request/phút cho login, register, refresh, tạo trip; CORS chỉ cho phép origin khai báo.
-- Bắt buộc JWT cho tất cả route bảo vệ; WebSocket nhận `Authorization: Bearer` hoặc query `accessToken`.
-- Request log vào bảng `audit_logs` (user, path, status, error, latency, request ID).
-- Prometheus scrape `/metrics`; Grafana dashboard sẵn; log JSON sẵn sàng ship sang Loki/ELK.
-- Sentry cho Go và Flutter; test panic: `curl -H "X-Internal-Token: $INTERNAL_API_KEY" http://localhost:8080/internal/debug/panic`.
+---
 
-## Kiểm thử & CI/CD
-- Backend: `cd backend && make test` (`go test ./... -covermode=atomic` enforced trong CI).
-- Flutter: `flutter analyze` và `flutter test` trong từng thư mục app.
-- Load test: `make loadtest-trip-matching ACCESS_TOKEN=<jwt>` (sử dụng kịch bản rider/driver search, đặt `API_BASE` nếu không phải localhost; kết quả JSON nằm trong `loadtests/results/`).
-- CI: `.github/workflows/be_ci.yml` (Go), `.github/workflows/fe_ci.yml` (Flutter), `.github/workflows/deploy.yml` build/push image `ghcr.io/.../uitgo-backend:<sha>`, build APK/IPA/Web, validate stack `infra/staging`.
+## CI/CD Pipeline
 
-### CI/CD Pipeline Stages
 ```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│    TEST     │───▶│    BUILD    │───▶│  SECURITY   │───▶│   GITOPS    │
-│ • go test   │    │ • docker    │    │ • Trivy     │    │ • kustomize │
-│ • lint      │    │   build     │    │   scan      │    │ • ArgoCD    │
-│ • coverage  │    │ • push GHCR │    │ • SBOM      │    │   sync      │
-└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+│     TEST     │──▶│    BUILD     │──▶│   SECURITY   │──▶│  LOAD TEST   │──▶│    GITOPS    │
+│              │   │              │   │              │   │              │   │              │
+│ • go test    │   │ • Docker     │   │ • Trivy      │   │ • K6 smoke   │   │ • Kustomize  │
+│ • go vet     │   │   multi-     │   │ • SonarCloud │   │ • search     │   │   update     │
+│ • golangci   │   │   stage      │   │ • Aikido     │   │ • home_meta  │   │ • ArgoCD     │
+│ • coverage   │   │ • GHCR       │   │ • SBOM       │   │              │   │   auto-sync  │
+│   (≥80%)     │   │   push       │   │              │   │              │   │              │
+└──────────────┘   └──────────────┘   └──────────────┘   └──────────────┘   └──────────────┘
 ```
 
-### Chạy CI locally
-```bash
-make ci-local   # Sử dụng Act để chạy GitHub Actions trên máy local
-```
+### Workflows
 
-## GitOps với ArgoCD
-Dự án sử dụng GitOps pattern: thay đổi trong `k8s/overlays/` được ArgoCD tự động sync vào cluster.
+| Workflow | Trigger | Description |
+|----------|---------|-------------|
+| `backend-cicd.yml` | Push to dev/main | Full pipeline: test → build → scan → load test → GitOps |
+| `be_ci.yml` | PR to backend/** | Go vet, tests, golangci-lint |
+| `fe_ci.yml` | PR to apps/** | Flutter analyze, test, build web |
+| `terraform.yml` | PR to infra/** | Terraform plan, validate |
+| `seal-secrets.yml` | Manual | Seal secrets for GitOps |
 
-```bash
-# Xem trạng thái ArgoCD
-make argocd-status
-
-# Sync thủ công
-make argocd-sync
-
-# Workflow:
-# 1. Push code → GitHub Actions chạy
-# 2. CI build image mới → push GHCR
-# 3. CI update image tag trong k8s/overlays/*/kustomization.yaml
-# 4. ArgoCD phát hiện thay đổi → auto-sync vào K8s
-```
-
-## Triển khai & hạ tầng
-
-### Kubernetes (Local/Staging)
-```bash
-# Cấu trúc Kubernetes manifests
-k8s/
-├── base/                 # Base configurations (Kustomize)
-│   ├── namespace.yaml
-│   ├── configmap.yaml
-│   ├── secrets.yaml
-│   ├── databases.yaml    # 3× PostgreSQL StatefulSets
-│   ├── redis.yaml
-│   ├── *-service.yaml    # user/trip/driver deployments
-│   └── ingress.yaml
-├── overlays/
-│   ├── dev/              # Development overrides
-│   └── staging/          # Staging overrides (more replicas)
-├── monitoring/           # Prometheus + Grafana + Loki
-└── argocd/               # GitOps application definitions
-
-# Deploy commands
-make k8s-deploy           # Deploy dev overlay
-make k8s-deploy-staging   # Deploy staging overlay
-make k8s-monitoring       # Deploy observability stack
-make k8s-clean            # Cleanup all resources
-```
-
-### Docker Compose
-- **Development**: `docker compose up --build` (root)
-- **Staging**: `infra/staging` (copy `.env.staging.example` → `.env.staging`, rồi `docker compose up -d`)
-
-### Terraform (Cloud)
-- Scaffold & hướng dẫn: `infra/terraform/README.md`
-- Modules: network, rds, redis, sqs, asg
-- AWS triển khai dùng Auto Scaling Group chạy script `backend.sh.tpl` để khởi động toàn bộ stack Docker Compose.
+---
 
 ## Security
 
-### Aikido Security Integration (Active)
-UITGo được bảo vệ bởi **Aikido Security** qua GitHub App integration - tự động scan mọi PR!
+### Security Scanning Tools
 
-**Current Protection**:
--  **Dependencies**: Go modules + Flutter packages
--  **SAST**: Static code analysis
--  **Secrets**: Hardcoded credentials detection
--  **IaC**: Kubernetes & Terraform scanning
--  **Code Quality**: Best practices enforcement
+UITGo uses **multi-layer security scanning** via GitHub integration:
 
-**How It Works**:
-- Every PR → Automatic security scan
-- Findings posted as PR comments
-- High/Critical issues → PR blocked
-- Dashboard: https://app.aikido.dev/
+| Tool | Integration | Scope | Dashboard |
+|------|-------------|-------|-----------|
+| **SonarCloud** | GitHub App | Code quality, bugs, code smells, coverage | [sonarcloud.io](https://sonarcloud.io/dashboard?id=7huannn_uitgo_monorepo) |
+| **Aikido Security** | GitHub App | SAST, dependencies, secrets, IaC, containers | [app.aikido.dev](https://app.aikido.dev) |
+| **Trivy** | GitHub Actions | Container image vulnerabilities, SBOM | PR comments + SARIF |
 
-**Full Guide**: [`docs/AIKIDO_SECURITY.md`](./docs/AIKIDO_SECURITY.md)  
-**Current**: 1 critical, 4 high, 7 medium, 5 low issues
+### How Security Scanning Works
 
-## Tài liệu thêm
-- `docs/DEVOPS_IMPLEMENTATION_SUMMARY.md` – tổng quan hạ tầng DevOps và hướng dẫn sử dụng
-- `docs/AIKIDO_SECURITY.md` – hướng dẫn sử dụng Aikido Security
-- `docs/architecture-stage1.md` – mô tả skeleton microservice và biến môi trường
-- `docs/moduleA_scalability.md` – báo cáo tối ưu hiệu năng và kết quả k6
-- `backend/README.md` – chi tiết API và hướng dẫn service Go
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Push / Pull Request                              │
+└────────────────────────────────┬────────────────────────────────────────┘
+                                 │
+         ┌───────────────────────┼───────────────────────┐
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   SonarCloud    │    │     Aikido      │    │     Trivy       │
+│   (GitHub App)  │    │  (GitHub App)   │    │ (GitHub Action) │
+│                 │    │                 │    │                 │
+│ • Code Quality  │    │ • SAST Analysis │    │ • Image Scan    │
+│ • Test Coverage │    │ • Dependency    │    │ • CVE Detection │
+│ • Code Smells   │    │   Vulnerabilities│   │ • SBOM Generate │
+│ • Duplications  │    │ • Secret Leaks  │    │ • SARIF Report  │
+│ • Security      │    │ • IaC Misconfig │    │                 │
+│   Hotspots      │    │ • License Risk  │    │                 │
+└────────┬────────┘    └────────┬────────┘    └────────┬────────┘
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      PR Status Checks & Comments                         │
+│         Pass / Block based on Quality Gate & Security Policy             │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### SonarCloud Integration
+
+- **Automatic Analysis**: Every PR is analyzed for code quality
+- **Quality Gate**: Block merge if quality gate fails
+- **Coverage Tracking**: Track test coverage over time
+- **Dashboard**: https://sonarcloud.io/dashboard?id=7huannn_uitgo_monorepo
+
+### Aikido Security Integration
+
+- **Automatic Scan**: Every PR is scanned for security vulnerabilities
+- **Multi-Scanner**: Dependencies, SAST, secrets, IaC, containers
+- **PR Comments**: Findings are posted directly to PR
+- **Block on Critical**: High/Critical issues block PR merge
+- **Dashboard**: https://app.aikido.dev
+
+### Authentication Security
+
+- JWT access tokens (15 min TTL)
+- Encrypted refresh tokens (30 days, rotate on use)
+- Rate limiting: 10 req/min for auth endpoints
+
+### Secrets Management
+
+- **SealedSecrets**: GitOps-friendly encrypted secrets
+- See `docs/END_TO_END_DEVOPS_SETUP.md` for setup guide
+
+---
+
+## Observability
+
+### Metrics & Dashboards (Prometheus + Grafana)
+
+- **Grafana**: http://localhost:3000 (admin/uitgo)
+- Pre-configured dashboards:
+  - `uitgo-overview` - System health
+  - `uitgo-services` - Per-service metrics
+  - `uitgo-slo` - SLO/SLI tracking
+
+### Logging (Loki + Promtail)
+
+- Centralized JSON logs from all services
+- Query via Grafana Explore
+
+### Tracing (Jaeger)
+
+- Distributed tracing with OpenTelemetry
+- Jaeger UI: http://localhost:16686
+
+### Error Tracking (Sentry)
+
+- Backend and Flutter error reporting
+- Test: `curl -H "X-Internal-Token: $KEY" http://localhost:8080/internal/debug/panic`
+
+---
+
+## Testing
+
+### Unit Tests
+
+```bash
+# Backend
+cd backend && make test
+
+# Flutter
+cd apps/rider_app && flutter test
+cd apps/driver_app && flutter test
+```
+
+### Load Tests (K6)
+
+```bash
+# Quick smoke test
+make loadtest-local ACCESS_TOKEN=<jwt>
+
+# Full suite
+make loadtest-full-suite
+
+# Available scenarios:
+# - search_only.js     (driver GEO search)
+# - home_meta.js       (home feed)
+# - trip_matching.js   (full trip flow)
+# - stress_test.js     (high load)
+# - soak_test.js       (long duration)
+```
+
+---
+
+## Project Structure
+
+```
+uitgo_monorepo/
+├── apps/
+│   ├── rider_app/        # Flutter rider application
+│   ├── driver_app/       # Flutter driver application
+│   └── admin_app/        # Admin dashboard prototype
+├── backend/
+│   ├── cmd/server/       # Monolith entrypoint
+│   ├── user_service/     # User microservice
+│   ├── trip_service/     # Trip microservice
+│   ├── driver_service/   # Driver microservice
+│   └── internal/         # Shared packages
+├── k8s/                  # Kubernetes manifests
+├── infra/                # Terraform + staging compose
+├── loadtests/            # K6 load test scenarios
+├── observability/        # Prometheus/Grafana configs
+├── scripts/              # Automation scripts
+├── docs/                 # Documentation
+└── ADR/                  # Architecture Decision Records
+```
+
+---
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [`docs/DEVOPS_IMPLEMENTATION_SUMMARY.md`](docs/DEVOPS_IMPLEMENTATION_SUMMARY.md) | DevOps infrastructure overview |
+| [`docs/END_TO_END_DEVOPS_SETUP.md`](docs/END_TO_END_DEVOPS_SETUP.md) | Complete CI/CD setup guide |
+| [`docs/architecture-stage1.md`](docs/architecture-stage1.md) | Microservice skeleton & environment |
+| [`docs/moduleA_scalability.md`](docs/moduleA_scalability.md) | Performance optimization & K6 results |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Detailed system architecture |
+| [`backend/README.md`](backend/README.md) | Backend API documentation |
+
+---
 
 ## Makefile Commands
 
-### Development
-```bash
-make dev          # Docker Compose up --build
-make down         # Docker Compose down
-```
+<details>
+<summary><strong>Development</strong></summary>
 
-### Kubernetes
 ```bash
-make k8s-setup    # Setup full local K8s environment
-make k8s-build    # Build & push images to local registry
-make k8s-deploy   # Deploy to K8s (dev overlay)
-make k8s-status   # Check cluster status
-make k8s-logs-*   # View service logs (user/trip/driver)
-make k8s-clean    # Cleanup all K8s resources
+make dev              # Docker Compose up --build
+make down             # Docker Compose down
+make logs             # View logs
 ```
+</details>
 
-### CI/CD
-```bash
-make ci-local         # Run CI locally with Act
-make argocd-sync      # Sync ArgoCD applications
-make validate-manifests  # Validate K8s manifests
-```
+<details>
+<summary><strong>Kubernetes</strong></summary>
 
-### Load Testing
 ```bash
-make loadtest-local       # Run load tests locally
-make loadtest-full-suite  # Complete load test suite
+make k8s-setup        # Full local K8s setup
+make k8s-build        # Build & push images
+make k8s-deploy       # Deploy to K8s (dev)
+make k8s-deploy-staging  # Deploy staging overlay
+make k8s-monitoring   # Deploy observability
+make k8s-status       # Check cluster status
+make k8s-clean        # Cleanup resources
 ```
+</details>
+
+<details>
+<summary><strong>CI/CD</strong></summary>
+
+```bash
+make ci-local         # Run CI locally (Act)
+make argocd-sync      # Sync ArgoCD apps
+make validate-manifests  # Validate K8s YAML
+```
+</details>
+
+<details>
+<summary><strong>Load Testing</strong></summary>
+
+```bash
+make loadtest-local        # Local load test
+make loadtest-full-suite   # Complete test suite
+make loadtest-stress       # Stress test
+```
+</details>
+
+---
+
+## Contributing
+
+We welcome contributions! Please see our development workflow:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+> **Note**: All PRs are automatically checked by SonarCloud (code quality) and Aikido Security (vulnerability scanning).
+
+---
+
+## License
+
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## Acknowledgments
+
+- [University of Information Technology (UIT)](https://www.uit.edu.vn/) - Academic support
+- [Gin Web Framework](https://gin-gonic.com/) - Go HTTP framework
+- [Flutter](https://flutter.dev/) - Cross-platform UI toolkit
+- [ArgoCD](https://argoproj.github.io/cd/) - GitOps continuous delivery
+- [Kubernetes](https://kubernetes.io/) - Container orchestration
+
+---
+
+<p align="center">
+  <strong>Built with ❤️ by UITGo Team</strong><br>
+  <sub>University of Information Technology, Vietnam National University - Ho Chi Minh City</sub>
+</p>
+
+<p align="center">
+  <a href="https://github.com/7huannn/uitgo_monorepo/issues">Report Bug</a> •
+  <a href="https://github.com/7huannn/uitgo_monorepo/issues">Request Feature</a> •
+  <a href="https://github.com/7huannn/uitgo_monorepo/discussions">Discussions</a>
+</p>

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
@@ -33,6 +34,7 @@ func New(cfg *config.Config, db *gorm.DB, driverProvisioner handlers.DriverProvi
 	const serviceName = "user-service"
 	router := gin.New()
 	gin.DisableConsoleColor()
+	router.Use(otelgin.Middleware(serviceName))
 	router.Use(middleware.JSONLogger(serviceName))
 	router.Use(observability.GinMiddleware())
 	router.Use(gin.Recovery())

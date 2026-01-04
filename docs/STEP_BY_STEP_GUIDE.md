@@ -7,8 +7,8 @@
 | `k8s-dev.sh` | **Script chính** - quản lý cluster | Dùng hàng ngày |
 | `demo-presentation.sh` | Demo cho báo cáo (có slides) | Khi báo cáo |
 | `setup-local-devops.sh` | Cài đặt ban đầu (k3s, tools) | Chỉ chạy 1 lần |
-| `be_bootstrap.sh` | Setup backend development | Chỉ chạy 1 lần |
-| `fe_bootstrap.sh` | Setup frontend development | Chỉ chạy 1 lần |
+| `be_bootstrap.sh` (archive) | Legacy bootstrap backend (đã chuyển `scripts/_archive/`) | Không dùng |
+| `fe_bootstrap.sh` (archive) | Legacy bootstrap frontend (đã chuyển `scripts/_archive/`) | Không dùng |
 | `RUN_GUIDE.sh` | Hướng dẫn chi tiết từng bước | Tham khảo |
 
 ---

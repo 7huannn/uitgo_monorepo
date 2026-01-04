@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"uitgo/backend/internal/domain"
+	"uitgo/backend/internal/observability"
 )
 
 // DriverClient calls the driver-service over HTTP to provision driver profiles.
@@ -28,9 +29,7 @@ func NewDriverClient(baseURL, internalKey string) *DriverClient {
 	return &DriverClient{
 		baseURL:     trimmed,
 		internalKey: internalKey,
-		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
-		},
+		httpClient:  observability.NewInstrumentedClient(5 * time.Second),
 	}
 }
 

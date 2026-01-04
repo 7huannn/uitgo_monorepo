@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Push Docker images to GHCR and force ASG refresh
+# Push Docker images to GHCR and force ASG refresh (archived)
 set -e
 
 TAG=${1:-v0.1.0}

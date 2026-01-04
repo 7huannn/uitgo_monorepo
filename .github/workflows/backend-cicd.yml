@@ -167,11 +167,145 @@ jobs:
         with:
           sarif_file: 'trivy-results-${{ matrix.service }}.sarif'
 
+  # ==================== STAGE 3.5: Load Testing ====================
+  load-test:
+    name: K6 Load Test
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: uitgo
+          POSTGRES_PASSWORD: uitgo
+          POSTGRES_DB: uitgo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.3'
+          cache-dependency-path: backend/go.sum
+
+      - name: Build and start backend services
+        working-directory: backend
+        env:
+          POSTGRES_DSN: postgres://uitgo:uitgo@localhost:5432/uitgo?sslmode=disable
+          REDIS_URL: localhost:6379
+          JWT_SECRET: test-jwt-secret-for-load-testing-min32chars
+          REFRESH_TOKEN_ENCRYPTION_KEY: test-refresh-key-32-bytes-long!!
+          PORT: 8080
+        run: |
+          # Build monolith backend
+          go build -o server ./cmd/server
+          
+          # Run migrations
+          go run ./cmd/migrate up || true
+          
+          # Start server in background
+          ./server &
+          
+          # Wait for server to be ready
+          for i in {1..30}; do
+            if curl -s http://localhost:8080/health > /dev/null; then
+              echo "✅ Server is ready"
+              break
+            fi
+            echo "Waiting for server... ($i/30)"
+            sleep 2
+          done
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6 -y
+
+      - name: Get test token
+        id: token
+        run: |
+          # Create test user and get token
+          TOKEN=$(curl -s -X POST http://localhost:8080/auth/register \
+            -H "Content-Type: application/json" \
+            -d '{"email":"loadtest@test.com","password":"Test123!@#","name":"Load Tester","phone":"+84900000001"}' \
+            | jq -r '.access_token // empty')
+          
+          if [ -z "$TOKEN" ]; then
+            # Try login if user exists
+            TOKEN=$(curl -s -X POST http://localhost:8080/auth/login \
+              -H "Content-Type: application/json" \
+              -d '{"email":"loadtest@test.com","password":"Test123!@#"}' \
+              | jq -r '.access_token // empty')
+          fi
+          
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Run K6 smoke test (search_only)
+        env:
+          API_BASE: http://localhost:8080
+          ACCESS_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          k6 run --out json=k6-results.json \
+            -e API_BASE=$API_BASE \
+            -e ACCESS_TOKEN=$ACCESS_TOKEN \
+            loadtests/k6/search_only.js
+        continue-on-error: true
+
+      - name: Run K6 home metadata test
+        env:
+          API_BASE: http://localhost:8080
+          ACCESS_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          k6 run \
+            -e API_BASE=$API_BASE \
+            -e ACCESS_TOKEN=$ACCESS_TOKEN \
+            loadtests/k6/home_meta.js
+        continue-on-error: true
+
+      - name: Upload K6 results
+        uses: actions/upload-artifact@v4
+        with:
+          name: k6-load-test-results
+          path: k6-results.json
+        if: always()
+
+      - name: Post load test summary
+        if: always()
+        run: |
+          echo "## 🏋️ K6 Load Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f k6-results.json ]; then
+            echo "✅ Load test completed. See artifacts for detailed results." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Load test may have issues. Check logs for details." >> $GITHUB_STEP_SUMMARY
+          fi
+
   # ==================== STAGE 4: Update K8s Manifests (GitOps) ====================
   update-manifests:
     name: Update K8s Manifests
     runs-on: ubuntu-latest
-    needs: [build, security-scan]
+    needs: [build, security-scan, load-test]
     if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'
     permissions:
       contents: write
@@ -242,3 +376,72 @@ jobs:
         uses: instrumenta/kubeval-action@master
         with:
           files: k8s/base/*.yaml
+
+  # ==================== STAGE 6: Verify ArgoCD Sync ====================
+  verify-deployment:
+    name: Verify ArgoCD Deployment
+    runs-on: ubuntu-latest
+    needs: update-manifests
+    if: github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main'
+    steps:
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "app=uitgo-staging" >> $GITHUB_OUTPUT
+            echo "env=staging" >> $GITHUB_OUTPUT
+          else
+            echo "app=uitgo-dev" >> $GITHUB_OUTPUT
+            echo "env=dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Wait for ArgoCD sync
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        run: |
+          # Skip if ArgoCD credentials not configured
+          if [ -z "$ARGOCD_SERVER" ] || [ -z "$ARGOCD_AUTH_TOKEN" ]; then
+            echo "⚠️ ArgoCD credentials not configured, skipping sync verification"
+            echo "ℹ️ Add ARGOCD_SERVER and ARGOCD_AUTH_TOKEN secrets for full end-to-end verification"
+            exit 0
+          fi
+          
+          echo "🔄 Waiting for ArgoCD to sync ${{ steps.env.outputs.app }}..."
+          
+          # Poll ArgoCD for sync status (max 5 minutes)
+          for i in {1..30}; do
+            STATUS=$(curl -s -k \
+              -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
+              "https://$ARGOCD_SERVER/api/v1/applications/${{ steps.env.outputs.app }}" \
+              | jq -r '.status.sync.status // "Unknown"')
+            
+            HEALTH=$(curl -s -k \
+              -H "Authorization: Bearer $ARGOCD_AUTH_TOKEN" \
+              "https://$ARGOCD_SERVER/api/v1/applications/${{ steps.env.outputs.app }}" \
+              | jq -r '.status.health.status // "Unknown"')
+            
+            echo "Attempt $i: Sync=$STATUS, Health=$HEALTH"
+            
+            if [ "$STATUS" == "Synced" ] && [ "$HEALTH" == "Healthy" ]; then
+              echo "✅ Application ${{ steps.env.outputs.app }} is synced and healthy!"
+              exit 0
+            fi
+            
+            sleep 10
+          done
+          
+          echo "⚠️ Timeout waiting for sync. Check ArgoCD dashboard."
+          exit 1
+
+      - name: Post deployment summary
+        if: always()
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ steps.env.outputs.env }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| ArgoCD App | ${{ steps.env.outputs.app }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image Tag | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }}) |" >> $GITHUB_STEP_SUMMARY

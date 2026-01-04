@@ -17,6 +17,7 @@ type Config struct {
 	DatabaseURL             string
 	TripReplicaDatabaseURL  string
 	AllowedOrigins          []string
+	TracingEndpoint         string
 	JWTSecret               string
 	AccessTokenTTL          time.Duration
 	RefreshTokenTTL         time.Duration
@@ -76,6 +77,10 @@ func Load() (*Config, error) {
 	matchQueueBackend := strings.TrimSpace(strings.ToLower(os.Getenv("QUEUE_BACKEND")))
 	if matchQueueBackend == "" {
 		matchQueueBackend = "redis"
+	}
+	tracingEndpoint := strings.TrimSpace(os.Getenv("TRACING_ENDPOINT"))
+	if tracingEndpoint == "" {
+		tracingEndpoint = "jaeger-collector.monitoring.svc:4318"
 	}
 	matchQueueAddr := strings.TrimSpace(os.Getenv("MATCH_QUEUE_REDIS_ADDR"))
 	if matchQueueAddr == "" {
@@ -169,6 +174,7 @@ func Load() (*Config, error) {
 		DatabaseURL:             dbURL,
 		TripReplicaDatabaseURL:  replicaURL,
 		AllowedOrigins:          origins,
+		TracingEndpoint:         tracingEndpoint,
 		JWTSecret:               jwtSecret,
 		AccessTokenTTL:          accessTTL,
 		RefreshTokenTTL:         refreshTTL,

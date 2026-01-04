@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"uitgo/backend/internal/domain"
+	"uitgo/backend/internal/observability"
 )
 
 // TripClient talks to the trip-service to coordinate assignments and statuses.
@@ -27,7 +28,7 @@ func NewTripClient(baseURL, apiKey string) *TripClient {
 	return &TripClient{
 		baseURL: trimmed,
 		apiKey:  apiKey,
-		client:  &http.Client{Timeout: 5 * time.Second},
+		client:  observability.NewInstrumentedClient(5 * time.Second),
 	}
 }
 

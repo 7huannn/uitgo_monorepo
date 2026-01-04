@@ -10,7 +10,9 @@ namespace: uitgo
 resources:
   - namespace.yaml
   - configmap.yaml
-  # - secrets.yaml  # Managed manually in cluster for security
+  # SealedSecrets controller for GitOps-friendly secret management
+  - sealed-secrets-controller.yaml
+  # Note: sealed-secrets.yaml is added in overlays (dev/staging have their own)
   - databases.yaml
   - redis.yaml
   - user-service.yaml

@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 
 	"uitgo/backend/internal/config"
 	dbrepo "uitgo/backend/internal/db"
@@ -35,6 +36,7 @@ func New(cfg *config.Config, db *gorm.DB, tripSync domain.TripSyncRepository) (*
 	const serviceName = "driver-service"
 	router := gin.New()
 	gin.DisableConsoleColor()
+	router.Use(otelgin.Middleware(serviceName))
 	router.Use(middleware.JSONLogger(serviceName))
 	router.Use(observability.GinMiddleware())
 	router.Use(gin.Recovery())

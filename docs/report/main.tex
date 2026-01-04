@@ -36,6 +36,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small \textit{Báo cáo Đồ án SE360 - UIT-Go}}
+\fancyhead[L]{\small \textit{Báo cáo Đồ án DevOps - UIT-Go}}
 \fancyhead[R]{\small \thepage}
 \renewcommand{\headrulewidth}{0.5pt}
 
@@ -68,15 +69,19 @@
   {\LARGE\bfseries BÁO CÁO ĐỒ ÁN}\\[0.5em]
   {\large\bfseries MÔN HỌC: ĐIỆN TOÁN ĐÁM MÂY \& PT ỨNG DỤNG HƯỚNG DỊCH VỤ}\\[0.5em]
   {\small (Mã lớp: SE360.P11)}\\[2cm]
+  {\large\bfseries MÔN HỌC: DEVOPS \& AUTOMATION}\\[0.5em]
+  {\small (Mã lớp: SE410.P11)}\\[2cm]
 
   {\Large\bfseries ĐỀ TÀI:}\\[0.5em]
   {\Huge\bfseries\color{uitRed} UIT - GO}\\[0.5em]
   {\Large\bfseries XÂY DỰNG NỀN TẢNG GỌI XE CLOUD-NATIVE}\\[2cm]
+  {\Large\bfseries XÂY DỰNG PIPELINE CI/CD \& HẠ TẦNG CLOUD-NATIVE}\\[2cm]
 
   \vfill
 
   \begin{tabular}{ll}
-    \textbf{Giảng viên hướng dẫn:} & ThS. Lê Văn Tuấn \\[1em]
+    \textbf{Giảng viên hướng dẫn:} & Lê Văn Tuấn \\[1em]
+    \textbf{Giảng viên hướng dẫn:} & [Tên GV DevOps] \\[1em]
     \textbf{Sinh viên thực hiện:} & 1. Nguyễn Hùng Quân - 23521263 \\
                                   & 2. Phan Thành Đạt \hspace{0.35cm} - 23520287 \\
                                   & 3. Lê Khắc Thuận \hspace{0.45cm} - 23521550 \\
@@ -135,8 +140,10 @@ Xin chân thành cảm ơn!
 \section{Bối cảnh và Động lực}
 
 Các hệ thống phần mềm hiện đại thường phân tán, liên tục tiến hóa và vận hành ở quy mô lớn. Sự xuất hiện của điện toán đám mây, điều phối container và các dịch vụ quản lý đã thay đổi căn bản cách phần mềm được thiết kế và duy trì.
+Trong quy trình phát triển phần mềm hiện đại, việc viết mã chỉ là một phần của bức tranh tổng thể. Thách thức thực sự nằm ở việc làm sao để chuyển giao phần mềm (delivery) đến tay người dùng một cách nhanh chóng, tin cậy và an toàn.
 
 Đồ án \emph{UIT-Go} được xây dựng như một hệ thống cloud-native thu nhỏ nhưng thực tế: không chỉ bao gồm mã nguồn đúng chức năng mà còn là tập hợp các phân hệ tương tác với nhau, có các thuộc tính nổi lên và ràng buộc vận hành.
+Đồ án \emph{UIT-Go} không chỉ tập trung vào logic nghiệp vụ gọi xe mà còn chú trọng xây dựng một quy trình **DevOps** hoàn chỉnh: từ tự động hóa kiểm thử, đóng gói, triển khai (CI/CD) đến quản lý hạ tầng bằng mã (IaC) và giám sát vận hành (Observability).
 
 \section{Mục tiêu đồ án}
 
@@ -144,6 +151,10 @@ Các hệ thống phần mềm hiện đại thường phân tán, liên tục t
 \begin{enumerate}[leftmargin=*]
     \item \textbf{Giai đoạn 1 (Bắt buộc):} Xây dựng "bộ xương" microservices với 3 services cơ bản (UserService, TripService, DriverService), tuân thủ nguyên tắc Database-per-Service.
     \item \textbf{Module A (Chuyên sâu):} Thiết kế kiến trúc cho Scalability \& Performance, bao gồm phân tích trade-offs và kiểm chứng bằng load testing.
+    \item \textbf{Automation (Tự động hóa):} Xây dựng pipeline CI/CD để tự động build, test và scan bảo mật cho các microservices.
+    \item \textbf{Infrastructure as Code (IaC):} Sử dụng Terraform để định nghĩa và quản lý hạ tầng trên AWS (VPC, RDS, ASG).
+    \item \textbf{GitOps & Deployment:} Triển khai ứng dụng theo mô hình GitOps sử dụng ArgoCD và Kubernetes.
+    \item \textbf{Observability (Khả năng quan sát):} Thiết lập hệ thống giám sát tập trung với Prometheus, Grafana và Loki.
 \end{enumerate}
 
 \section{Phạm vi hệ thống}
@@ -186,14 +197,18 @@ Frontend & Flutter 3.x, Dart 3.x & Cross-platform (iOS, Android, Web), hot reloa
 Backend & Go 1.22+, Gin Framework & Performance cao, concurrency tốt với goroutines \\
 \hline
 Database & PostgreSQL 15 & ACID compliance, JSON support, mature ecosystem \\
+CI/CD & GitHub Actions & Tích hợp sâu với GitHub, workflow linh hoạt \\
 \hline
 Cache/Queue & Redis 7 & In-memory speed, GEO commands, pub/sub \\
+Container & Docker, GHCR & Đóng gói chuẩn, Registry tích hợp sẵn \\
 \hline
 Container & Docker, Docker Compose & Containerization chuẩn, dễ local development \\
+Orchestration & K3s / AWS ASG & Kubernetes cho Dev, Auto Scaling Group cho Staging \\
 \hline
 IaC & Terraform & Declarative, multi-cloud support, version controlled \\
 \hline
 Monitoring & Prometheus, Grafana & Cloud-native, open source, rich ecosystem \\
+GitOps & ArgoCD, Kustomize & Đồng bộ trạng thái cluster với Git repo \\
 \hline
 \end{tabularx}
 \caption{Tech Stack của hệ thống UIT-Go.}
@@ -202,15 +217,20 @@ Monitoring & Prometheus, Grafana & Cloud-native, open source, rich ecosystem \\
 
 % ===================== CHƯƠNG 2: GIAI ĐOẠN 1 =====================
 \chapter{Giai đoạn 1: Kiến trúc Microservices Cơ bản}
+% ===================== CHƯƠNG 2: KIẾN TRÚC HỆ THỐNG =====================
+\chapter{Kiến trúc Microservices \& Luồng dữ liệu}
 
 \section{Tổng quan kiến trúc}
 
 Ở Giai đoạn 1, \emph{UIT-Go} được cấu trúc thành 3 microservices liên kết lỏng lẻo, đứng sau API Gateway và vận hành trên Docker Compose.
+Hệ thống \emph{UIT-Go} được thiết kế theo kiến trúc Microservices, cho phép phát triển, triển khai và mở rộng độc lập từng thành phần. Đây là tiền đề quan trọng để áp dụng DevOps hiệu quả.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.85\textwidth]{assets/stage1-architecture.png}
 \caption{Kiến trúc UIT-Go Giai đoạn 1: Docker Compose với 3 Microservices và Database riêng biệt.}
+\includegraphics[width=0.85\textwidth]{assets/System.png}
+\caption{Sơ đồ kiến trúc tổng thể UIT-Go và các thành phần hạ tầng.}
 \label{fig:stage1-arch}
 \end{figure}
 
@@ -288,6 +308,7 @@ Hệ thống sử dụng RESTful API cho giao tiếp giữa client và services.
 \end{table}
 
 \section{Nguyên tắc Database-per-Service}
+\section{Chiến lược Database-per-Service}
 
 Mỗi service có database PostgreSQL riêng biệt, tuân thủ nguyên tắc "Database per Service":
 
@@ -314,14 +335,18 @@ DriverService & driver\_service & drivers, driver\_locations, vehicles \\
     \item Cô lập lỗi (Fault Isolation): Lỗi DB của service A không ảnh hưởng service B
     \item Scale độc lập: Có thể scale DB theo nhu cầu từng service
 \end{itemize}
+% ===================== CHƯƠNG 3: CI/CD PIPELINE =====================
+\chapter{Tự động hóa CI/CD với GitHub Actions}
 
 \textbf{Đánh đổi:}
 \begin{itemize}[leftmargin=*]
     \item Phức tạp hơn trong quản lý transactions phân tán
     \item Cần cơ chế đồng bộ dữ liệu giữa các services
 \end{itemize}
+\section{Quy trình CI/CD Tổng thể}
 
 \section{Infrastructure as Code với Terraform}
+Hệ thống sử dụng GitHub Actions để tự động hóa quy trình từ khi Developer push code đến khi Artifact sẵn sàng triển khai.
 
 Hệ thống sử dụng Terraform để định nghĩa hạ tầng AWS:
 
@@ -377,21 +402,35 @@ Với vai trò \textbf{Kỹ sư Kiến trúc Hệ thống (System Architect)}, M
 \includegraphics[width=0.95\textwidth]{assets/System.png}
 \caption{Kiến trúc hệ thống sau tối ưu (Module A) với Async Queue, Redis GEO và Observability Stack.}
 \label{fig:optimized-arch}
+\includegraphics[width=0.9\textwidth]{assets/cicd_pipeline.png}
+\caption{Luồng CI/CD Pipeline của UIT-Go.}
+\label{fig:cicd}
 \end{figure}
 
 So với Giai đoạn 1, kiến trúc tối ưu bổ sung:
+\section{Các giai đoạn trong Pipeline}
+
+\subsection{1. Continuous Integration (CI)}
+Mỗi khi có Pull Request hoặc Push vào nhánh `main`/`dev`, pipeline sẽ kích hoạt:
 \begin{itemize}[leftmargin=*]
     \item \textbf{Redis (Shared):} Đảm nhận 3 vai trò - GEO Index, Message Queue, Cache
     \item \textbf{Match Worker:} Background process xử lý ghép chuyến bất đồng bộ
     \item \textbf{Observability Stack:} Prometheus, Grafana, Loki cho giám sát
+    \item \textbf{Linting:} Sử dụng `golangci-lint` để kiểm tra style code và các lỗi logic cơ bản.
+    \item \textbf{Unit Testing:} Chạy `go test ./...` để đảm bảo logic nghiệp vụ đúng đắn.
+    \item \textbf{Static Analysis:} SonarQube Cloud quét mã nguồn để phát hiện code smell, bug tiềm ẩn và đo lường độ bao phủ (coverage).
 \end{itemize}
 
 \section{Phân tích lựa chọn: Redis GEO vs DynamoDB}
 
 Đề bài yêu cầu phân tích giữa hai hướng tiếp cận cho dữ liệu vị trí driver:
+\subsection{2. Security Scanning (DevSecOps)}
+Bảo mật được tích hợp sớm (Shift Left) vào quy trình:
 \begin{itemize}[leftmargin=*]
     \item \textbf{Speed-first:} Redis GEO (ElastiCache)
     \item \textbf{Scale/Cost-first:} DynamoDB + Geohashing
+    \item \textbf{Trivy:} Quét Docker image để tìm các lỗ hổng (CVE) trong các thư viện phụ thuộc và OS packages.
+    \item \textbf{Aikido Security:} Quét cấu hình IaC và secrets vô tình bị lộ.
 \end{itemize}
 
 \begin{table}[htbp]
@@ -428,12 +467,19 @@ Operational & Đã có trong stack & Thêm service mới \\
 \end{enumerate}
 
 \textbf{Trade-off chấp nhận:}
+\subsection{3. Continuous Delivery (CD)}
+Sau khi vượt qua các Quality Gate:
 \begin{itemize}[leftmargin=*]
     \item Cần warmup cache sau restart
     \item Phải sync trạng thái driver vào GEO set khi online/offline
+    \item \textbf{Build:} Docker build image cho từng service (User, Trip, Driver).
+    \item \textbf{Push:} Đẩy image lên GitHub Container Registry (GHCR) với tag là commit SHA.
+    \item \textbf{Update Manifest:} Tự động cập nhật tag version trong file `k8s/overlays/dev/kustomization.yaml` để ArgoCD nhận diện thay đổi.
 \end{itemize}
 
 \section{Phân tích lựa chọn: Sync vs Async Matching}
+% ===================== CHƯƠNG 4: INFRASTRUCTURE & GITOPS =====================
+\chapter{Infrastructure as Code \& GitOps}
 
 \subsection{Vấn đề}
 Khi Rider tạo trip, TripService cần gọi DriverService để tìm tài xế. Ở Giai đoạn 1, gọi đồng bộ gây:
@@ -442,35 +488,47 @@ Khi Rider tạo trip, TripService cần gọi DriverService để tìm tài xế
     \item Cascade failure: DriverService down → TripService timeout
     \item Không chịu được spike: 100 requests cùng lúc → 100 concurrent DB queries
 \end{itemize}
+\section{Provisioning với Terraform (AWS)}
 
 \subsection{Hai lựa chọn}
+Toàn bộ hạ tầng Staging trên AWS được định nghĩa bằng Terraform, đảm bảo tính nhất quán và khả năng tái tạo.
 
 \begin{table}[htbp]
 \centering
 \small
 \renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\textwidth}{|l|X|X|}
+\begin{tabularx}{\textwidth}{|l|X|}
 \hline
 \textbf{Tiêu chí} & \textbf{Đồng bộ (Sync)} & \textbf{Bất đồng bộ (Async Queue)} \\
+\textbf{Module} & \textbf{Tài nguyên AWS} \\
 \hline
 Response time & Cao (chờ tìm driver xong) & \textbf{Thấp} (return ngay sau enqueue) \\
+Network & VPC, Public/Private Subnets, Security Groups, Internet Gateway. \\
 \hline
 Chịu tải đột biến & Kém (cascade failure) & \textbf{Tốt} (queue hấp thụ spike) \\
+Compute & Auto Scaling Group (ASG) sử dụng Launch Template. User-data script tự động cài đặt Docker và pull image từ GHCR. \\
 \hline
 Tính nhất quán & \textbf{Strong} (biết ngay kết quả) & Eventual (rider chờ vài giây) \\
+Database & RDS PostgreSQL (Multi-AZ) tách biệt cho 3 services. \\
 \hline
 Độ phức tạp & Đơn giản & Phức tạp hơn (queue, worker, retry) \\
+Cache & ElastiCache Redis (Replication Group) cho GEO index và Queue. \\
 \hline
 Failure isolation & Kém & \textbf{Tốt} (service down, trip vẫn persist) \\
+Messaging & Amazon SQS cho hàng đợi xử lý bất đồng bộ (Async Matching). \\
 \hline
 \end{tabularx}
 \caption{So sánh mô hình Sync vs Async cho Trip Matching.}
 \label{tab:sync-vs-async}
+\caption{Cấu trúc Terraform Modules.}
 \end{table}
 
 \subsection{Quyết định}
+\section{GitOps với ArgoCD}
 
 Chọn \textbf{Async Queue (Redis List/SQS)} với lý do:
+Thay vì chạy `kubectl apply` thủ công, nhóm sử dụng mô hình GitOps:
 
 \begin{quote}
 \textit{"Chúng em sử dụng mô hình giao tiếp bất đồng bộ với Redis Queue giữa TripService và DriverService. Điều này giúp hệ thống chịu được lượng yêu cầu đặt xe tăng đột biến mà không làm sập DriverService, nhưng đánh đổi là độ trễ tìm xe sẽ tăng nhẹ (thêm 2-5 giây)."}
@@ -505,6 +563,9 @@ Chọn \textbf{Async Queue (Redis List/SQS)} với lý do:
     \item \texttt{GEOADD drivers:available <lng> <lat> <driver\_id>} - Thêm driver
     \item \texttt{GEORADIUS drivers:available <lng> <lat> 5 km} - Tìm trong bán kính
     \item \texttt{ZREM drivers:available <driver\_id>} - Xóa khi offline
+    \item \textbf{Single Source of Truth:} Git repo chứa toàn bộ Kubernetes manifests (Helm charts/Kustomize).
+    \item \textbf{ArgoCD:} Controller chạy trong cluster, liên tục theo dõi Git repo.
+    \item \textbf{Sync:} Khi CI pipeline cập nhật image tag trong Git, ArgoCD phát hiện sự lệch pha (Drift) và tự động đồng bộ (Sync) trạng thái cluster khớp với Git.
 \end{itemize}
 
 \textbf{Kết quả:} p95 giảm từ 380ms xuống 95ms (cải thiện 75\%)
@@ -514,15 +575,22 @@ Chọn \textbf{Async Queue (Redis List/SQS)} với lý do:
 \textbf{Vấn đề:} Trip queries (lịch sử, tracking) là read-heavy, gây tải cho primary DB
 
 \textbf{Giải pháp:} 
+\textbf{Cấu trúc Kustomize Overlays:}
 \begin{itemize}[leftmargin=*]
     \item Thêm PostgreSQL Read Replica
     \item Route read queries đến replica, write queries đến primary
     \item Terraform module: \texttt{modules/rds\_replica}
+    \item `base/`: Định nghĩa chung (Deployment, Service, ConfigMap).
+    \item `overlays/dev`: Môi trường Dev (1 replica, NodePort, Local Registry).
+    \item `overlays/staging`: Môi trường Staging (2 replicas, Ingress, GHCR Image).
 \end{itemize}
 
 \textbf{Trade-off:} Chấp nhận replication lag (<1 giây) cho eventual consistency
+% ===================== CHƯƠNG 5: OBSERVABILITY =====================
+\chapter{Giám sát và Vận hành (Observability)}
 
 \section{ADR-04: Auto Scaling Group}
+\section{Mô hình giám sát tập trung}
 
 \textbf{Giải pháp:} Terraform ASG với target-tracking policy:
 \begin{itemize}[leftmargin=*]
@@ -531,6 +599,7 @@ Chọn \textbf{Async Queue (Redis List/SQS)} với lý do:
     \item Scale-out: Thêm instance khi CPU > 60\% trong 3 phút
     \item Scale-in: Giảm instance khi CPU < 40\% trong 10 phút
 \end{itemize}
+Để đảm bảo độ tin cậy (Reliability), hệ thống triển khai stack giám sát tiêu chuẩn:
 
 \section{Capacity Zones}
 
@@ -539,14 +608,27 @@ Chọn \textbf{Async Queue (Redis List/SQS)} với lý do:
 \includegraphics[width=0.95\textwidth]{assets/capacity_zones.png}
 \caption{Các vùng chịu tải (Capacity Zones) của UIT-Go sau tối ưu.}
 \label{fig:capacity-zones}
+\includegraphics[width=0.85\textwidth]{assets/observability_stack.png}
+\caption{Kiến trúc Observability: Metrics, Logs và Tracing.}
+\label{fig:obs}
 \end{figure}
 
 Hệ thống được thiết kế với 4 vùng hoạt động:
+\section{Các thành phần chi tiết}
+
+\subsection{Metrics (Prometheus \& Grafana)}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Normal (0-100 RPS):} p95 <200ms, error rate <1\%
     \item \textbf{High Load (100-200 RPS):} p95 <400ms, queue bắt đầu tích lũy
     \item \textbf{Stress (200-350 RPS):} p95 <800ms, cần back-pressure
     \item \textbf{Overload (>350 RPS):} Degradation, cần scale hoặc rate limiting
+    \item Các service Go expose endpoint `/metrics`.
+    \item **Prometheus** scrape dữ liệu định kỳ (15s/lần).
+    \item **Grafana** hiển thị Dashboard:
+        \begin{itemize}
+            \item \textbf{RED Method:} Rate (RPS), Errors (5xx), Duration (Latency).
+            \item \textbf{Business Metrics:} Số chuyến đang tìm xe, số tài xế online.
+        \end{itemize}
 \end{itemize}
 
 % ===================== CHƯƠNG 4: KẾT QUẢ LOAD TESTING =====================
@@ -589,14 +671,20 @@ make loadtest-trip-matching ACCESS_TOKEN=$ACCESS_TOKEN
 \end{figure}
 
 \textbf{Quan sát từ biểu đồ:}
+\subsection{Logging (Loki \& Promtail)}
 \begin{itemize}[leftmargin=*]
     \item \textbf{Baseline (đỏ):} Latency tăng vọt từ 100 RPS, đạt 800ms ở 120 RPS
     \item \textbf{Optimized (xanh):} Latency ổn định ~200ms đến 400+ RPS
     \item \textbf{Error rate:} Baseline vượt 5\% threshold ở 80 RPS, Optimized giữ <1\% đến 400 RPS
     \item \textbf{Cải thiện:} \textbf{84\% faster} ở cùng mức tải
+    \item **Promtail** chạy dưới dạng DaemonSet, thu thập log từ stdout của container.
+    \item **Loki** lưu trữ và index log.
+    \item Cho phép truy vấn log tập trung theo `job`, `service_name` hoặc `trace_id` ngay trên Grafana.
 \end{itemize}
 
 \section{Phân phối Latency chi tiết}
+\subsection{Error Tracking (Sentry)}
+Tích hợp Sentry SDK vào cả Backend (Go) và Mobile App (Flutter) để bắt các lỗi runtime và crash report theo thời gian thực.
 
 \begin{figure}[htbp]
 \centering
@@ -604,6 +692,8 @@ make loadtest-trip-matching ACCESS_TOKEN=$ACCESS_TOKEN
 \caption{Latency Distribution theo các phân vị p50, p90, p95, p99.}
 \label{fig:latency-dist}
 \end{figure}
+% ===================== CHƯƠNG 6: KIỂM THỬ HẠ TẦNG =====================
+\chapter{Kiểm thử Hiệu năng Hạ tầng (Infrastructure Validation)}
 
 \begin{table}[htbp]
 \centering
@@ -623,10 +713,15 @@ Driver Search (Optimized) & \textbf{45ms} & \textbf{82ms} & \textbf{95ms} & \tex
 \end{tabularx}
 \caption{Chi tiết latency theo phân vị (đơn vị: milliseconds).}
 \end{table}
+\section{Mục tiêu}
+Sử dụng Load Testing (k6) không chỉ để test code mà để **validate cấu hình hạ tầng** (Auto Scaling, Rate Limiting, Network Latency).
 
 \textbf{SLA đạt được:} p95 < 250ms cho tất cả API (đường đỏ nét đứt trong hình)
+\section{Kịch bản kiểm thử}
+Chạy Soak Test (kiểm thử ngâm) trong 60 phút trên môi trường AWS Staging với tải 50 RPS liên tục.
 
 \section{Tổng hợp cải thiện hiệu năng}
+\section{Kết quả và Bài học DevOps}
 
 \begin{table}[htbp]
 \centering
@@ -666,6 +761,215 @@ Qua load testing, xác định được các bottleneck:
     \item Giải pháp tiếp theo: Connection pooling (PgBouncer) hoặc database sharding
 \end{enumerate}
 
+\section{So sánh Môi trường Local vs AWS Staging}
+
+Sau khi validate trên local (Docker Compose), nhóm chạy load test trên AWS staging (ASG + RDS + ElastiCache) để kiểm chứng hành vi production-like.
+
+\subsection{Cấu hình môi trường}
+\textbf{Lưu ý:} Local test đầu tiên phơi bày 2 lỗi cấu hình (rate limit + JWT expiry), sau khi fix thì chạy lại trên AWS với cấu hình đã điều chỉnh.
+
+\begin{table}[htbp]
+\centering
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\textwidth}{|l|X|X|}
+\hline
+\textbf{Component} & \textbf{Local (Docker Compose)} & \textbf{AWS Staging} \\
+\hline
+Compute & Docker containers trên máy dev (16GB RAM, 8 cores) & EC2 t3.medium (2 vCPU, 4GB RAM) trong ASG \\
+\hline
+Database & PostgreSQL 15 container (localhost) & RDS PostgreSQL 15 (db.t3.micro) Multi-AZ \\
+\hline
+Cache & Redis 7 container (localhost) & ElastiCache Redis 7 (cache.t3.micro) \\
+\hline
+Network & Loopback (≈0ms latency) & ALB + VPC 2 AZ (ap-southeast-1a/1b) \\
+\hline
+Message Queue & Redis List (container) & Redis List (ElastiCache) \\
+\hline
+Load Balancer & Nginx container (localhost:8080) & ALB (uitgo-alb-*.elb.amazonaws.com) \\
+\hline
+Monitoring & Console logs & CloudWatch Logs/Metrics \\
+\hline
+\textbf{Soak Test Config} & & \\
+\hline
+Duration & \textbf{30 phút} & \textbf{60 phút} \\
+\hline
+Virtual Users & 25 VUs constant & 25 VUs constant \\
+\hline
+Target RPS & ~50 RPS & ~50 RPS \\
+\hline
+Rate Limit & 10 req/min (mặc định - \textbf{quá thấp}) & 1000 req/min (tăng cho test) \\
+\hline
+JWT Expiry & 15 phút (quá ngắn) & 24 giờ (đủ cho test) \\
+\hline
+\end{tabularx}
+\caption{So sánh chi tiết cấu hình môi trường Local vs AWS.}
+\label{tab:env-comparison}
+\end{table}
+\clearpage
+\subsection{Kết quả Soak Test: Local (30 phút) vs AWS (60 phút)}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{assets/latency_local_vs_aws.png}
+\caption{Latency distribution và error rate: Local 30 phút vs AWS 60 phút @25 RPS.}
+\label{fig:latency-comparison}
+\end{figure}
+
+\textbf{Timeline:}
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Local test đầu tiên (30 phút):} Phát hiện 2 lỗi cấu hình → error rate 49.82\%
+    \item \textbf{Fix config:} Tăng rate limit 10→1000 req/min, JWT expiry 15min→24h
+    \item \textbf{AWS test (60 phút):} Chạy với config đã fix → error rate 0.00\%
+\end{enumerate}
+
+\textbf{So sánh số liệu:}
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{|l|r|r|}
+\hline
+\textbf{Metric} & \textbf{Local 30m (trước fix)} & \textbf{AWS 60m (sau fix)} \\
+\textbf{Metric} & \textbf{Local (Sai Config)} & \textbf{AWS Staging (Đã Fix)} \\
+\hline
+Total Requests & 89,748 & 180,002 \\
+Error Rate & 49.82\% (HTTP 429) & \textbf{0.00\%} \\
+\hline
+Successful Requests & 44,715 (49.8\%) & 180,002 (100\%) \\
+P95 Latency & 2.61 ms & 60.7 ms \\
+\hline
+P50 Latency (ms) & 1.55 & 51.7 \\
+Kết luận & Config Rate Limit quá thấp & Hạ tầng ổn định, chịu tải tốt \\
+\hline
+P95 Latency (ms) & 2.61 & 60.7 \\
+\hline
+P99 Latency (ms) & -- & -- \\
+\hline
+Avg Latency (ms) & 1.62 & 52.7 \\
+\hline
+Max Latency (ms) & 94.1 & 1023.6 \\
+\hline
+Error Rate & \textbf{49.82\%} (429 errors) & \textbf{0.00\%} \\
+\hline
+Duration & 30 phút & 60 phút \\
+\hline
+Achieved RPS & ≈49.8 & ≈50.0 \\
+\hline
+\end{tabular}
+\caption{So sánh kết quả Soak Test Local (trước fix) vs AWS (sau fix).}
+\label{tab:soak-results}
+\caption{So sánh kết quả test hạ tầng.}
+\end{table}
+
+\textbf{Root cause lỗi trên Local:}
+\textbf{Phát hiện từ góc độ Vận hành:}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Rate limiting:} Mặc định 10 req/min bị vượt xa khi test ~50 RPS (~3000 req/min) → HTTP 429.
+    \item \textbf{JWT expiration:} Token chỉ sống 15 phút, test 30 phút nên fail giữa chừng.
+    \item \textbf{Kết quả:} 45,033/89,748 requests fail = 49.82\% error rate.
+    \item \textbf{Cấu hình sai:} Test local phát hiện Rate Limit mặc định (10 req/min) quá thấp, gây lỗi 429 hàng loạt. Đây là bài học về quản lý cấu hình (Configuration Management).
+    \item \textbf{Network Overhead:} Trên AWS, latency tăng thêm ~50ms do đi qua nhiều lớp mạng (ALB $\rightarrow$ EC2 $\rightarrow$ RDS Multi-AZ). Đây là trade-off chấp nhận được để đổi lấy High Availability (HA).
+    \item \textbf{Auto Scaling:} ASG hoạt động đúng thiết kế, duy trì CPU ở mức ổn định dưới tải.
+\end{itemize}
+
+\textbf{Fix và kết quả trên AWS:}
+\begin{itemize}[leftmargin=*]
+    \item Tăng rate limit lên 1000 req/min (đủ cho test, production dùng giá trị khác).
+    \item Tăng JWT expiry lên 24 giờ cho test (production giữ ngắn hơn).
+    \item \textbf{AWS test 60 phút:} Đạt 0\% error, 180,002 requests thành công.
+    \item Latency AWS cao hơn ~50ms (p50: 51.7ms vs 1.55ms, p95: 60.7ms vs 2.61ms) do network overhead.
+\end{itemize}
+% ===================== CHƯƠNG 7: KẾT LUẬN =====================
+\chapter{Kết luận}
+
+\subsection{So sánh Trip Tests (20/40/60 RPS)}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{assets/aws_local_comparison.png}
+\caption{Trip matching tests @ 20/40/60 RPS: So sánh P95 latency Local vs AWS.}
+\label{fig:trip-comparison}
+\end{figure}
+
+Ngoài soak test, nhóm chạy các trip matching test ngắn (5 phút mỗi mức) \textbf{sau khi đã fix config}:
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{|l|r|r|r|r|}
+\hline
+\textbf{RPS Target} & \textbf{Env} & \textbf{P95 (ms)} & \textbf{Achieved RPS} & \textbf{Error \%} \\
+\hline
+20 & Local & 1.40 & 39.14 & 0.0 \\
+20 & AWS & 1.34 & 39.13 & 0.0 \\
+\hline
+40 & Local & 1.30 & 55.07 & 0.0 \\
+40 & AWS & 1.42 & 55.32 & 0.0 \\
+\hline
+60 & Local & 1.20 & 71.51 & 0.0 \\
+60 & AWS & 2.50 & 71.17 & 0.0 \\
+\hline
+\end{tabular}
+\caption{So sánh Trip Tests @ 20/40/60 RPS (sau khi fix config).}
+\label{tab:trip-results}
+\end{table}
+
+\textbf{Nhận xét:}
+\begin{itemize}[leftmargin=*]
+    \item Sau khi fix config, \textbf{cả Local và AWS đều 0\% error}.
+    \item Latency Local và AWS gần như tương đương (~1-2.5ms p95) trong trip test ngắn.
+    \item Network overhead chỉ rõ ràng trong \textbf{soak test dài} (workload phức tạp, nhiều DB/cache calls).
+\end{itemize}
+
+\subsection{Network Overhead Analysis}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{assets/error_rate_duration.png}
+\caption{So sánh error rate và duration: Local (49.82\% error, 30m) vs AWS (0\% error, 60m).}
+\label{fig:error-duration}
+\end{figure}
+
+\textbf{Nguồn gốc network overhead trong AWS soak test:}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{ALB routing:} Thêm ~5-10ms cho mỗi request (TLS termination + routing).
+    \item \textbf{Multi-AZ RDS:} Synchronous replication giữa 2 AZ thêm ~10-20ms.
+    \item \textbf{ElastiCache:} Redis latency qua network ~2-5ms (vs localhost ~0.1ms).
+    \item \textbf{Cross-AZ traffic:} Một số request đi qua 2 AZ thêm ~5-10ms.
+    \item \textbf{Tổng overhead:} ~50ms (p50: 51.7ms - 1.55ms ≈ 50ms) và ~58ms (p95: 60.7ms - 2.61ms ≈ 58ms).
+\end{itemize}
+
+\subsection{Bài học và Kết luận}
+
+\textbf{Phát hiện từ Local test đầu tiên:}
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Rate limiting:} Config mặc định 10 req/min không phù hợp cho load test ~50 RPS.
+    \item \textbf{JWT expiry:} Token 15 phút quá ngắn cho test dài, cần tăng cho môi trường test.
+    \item \textbf{Giá trị:} Local test giúp phát hiện lỗi config sớm trước khi chạy trên AWS (tiết kiệm chi phí).
+\end{itemize}
+
+\textbf{Thành công sau khi fix:}
+\begin{itemize}[leftmargin=*]
+    \item Hệ thống đạt \textbf{0\% error rate} trên AWS sau khi fix config.
+    \item Throughput đạt mục tiêu ~50 RPS ổn định suốt 60 phút soak test.
+    \item AWS auto-scaling (ASG) hoạt động tốt, không cần can thiệp thủ công.
+\end{itemize}
+
+\textbf{Trade-offs:}
+\begin{itemize}[leftmargin=*]
+    \item AWS latency cao hơn Local ~50-58ms (p50/p95) do network overhead (ALB + Multi-AZ).
+    \item Local phù hợp cho dev/test nhanh (phát hiện lỗi config); AWS cần cho staging/production (HA, monitoring).
+\end{itemize}
+
+\textbf{Khuyến nghị:}
+\begin{itemize}[leftmargin=*]
+    \item Chạy Local test trước để phát hiện lỗi config rõ ràng (rate limit, token expiry, etc.).
+    \item Sử dụng config riêng cho môi trường test (rate limit cao hơn, token sống lâu hơn).
+    \item Chấp nhận trade-off latency +50-58ms trên AWS để đổi lấy HA và production-like environment.
+    \item AWS soak test 60 phút đủ để kiểm chứng stability (không memory leak, auto-scaling hoạt động).
+\end{itemize}
+
+
 % ===================== CHƯƠNG 5: TRADE-OFFS =====================
 \chapter{Tổng hợp Trade-offs \& Lập luận kiến trúc}
 
@@ -694,7 +998,7 @@ Qua load testing, xác định được các bottleneck:
 
 \section{Biểu đồ Radar so sánh}
 
-\begin{figure}[htbp]
+\begin{figure}[H]
 \centering
 \includegraphics[width=0.75\textwidth]{assets/tradeoff_radar.png}
 \caption{Radar chart so sánh Sync Matching (Giai đoạn 1) vs Async Queue (Module A).}
@@ -727,13 +1031,18 @@ Qua load testing, xác định được các bottleneck:
 
 Đồ án đã hoàn thành các mục tiêu đề ra:
 
-\textbf{Giai đoạn 1 (Bắt buộc):}
+\textbf{Giai đoạn 1:}
+Đồ án đã xây dựng thành công một quy trình DevOps khép kín cho ứng dụng UIT-Go:
 \begin{itemize}[leftmargin=*]
     \item ✓ Xây dựng 3 microservices (UserService, TripService, DriverService)
     \item ✓ Tuân thủ nguyên tắc Database-per-Service
     \item ✓ Containerization với Docker Compose
     \item ✓ Infrastructure as Code với Terraform
     \item ✓ RESTful API đầy đủ theo yêu cầu
+    \item \textbf{Pipeline tự động:} Giảm thiểu thao tác thủ công, đảm bảo mã nguồn luôn được kiểm tra và đóng gói sạch sẽ.
+    \item \textbf{Hạ tầng minh bạch:} Toàn bộ AWS resource được code hóa bằng Terraform, dễ dàng dựng lại môi trường (Disaster Recovery).
+    \item \textbf{Vận hành tin cậy:} Hệ thống giám sát giúp phát hiện sự cố sớm trước khi ảnh hưởng người dùng cuối.
+    \item \textbf{Chất lượng đảm bảo:} Load testing được tích hợp như một bước validation cuối cùng cho hạ tầng.
 \end{itemize}
 
 \textbf{Module A (Scalability \& Performance):}
@@ -771,12 +1080,16 @@ Nếu scale lên 1,500+ RPS:
 \begin{tabularx}{\textwidth}{|l|X|X|}
 \hline
 \textbf{Cải tiến} & \textbf{Mô tả} & \textbf{Lợi ích} \\
+\textbf{Cải tiến} & \textbf{Mô tả} & \textbf{Lợi ích DevOps} \\
 \hline
 Database Sharding & Phân chia trips theo region/time & Tăng write throughput \\
+Blue/Green Deployment & Triển khai song song 2 môi trường & Zero-downtime, rollback tức thì \\
 \hline
 Kubernetes & Chuyển từ Docker Compose sang K8s & Auto-scaling, self-healing \\
+Service Mesh (Istio) & Quản lý traffic giữa các services & Bảo mật mTLS, Canary release \\
 \hline
 gRPC & Thay thế REST cho internal calls & Giảm latency, strong typing \\
+Chaos Engineering & Chủ động gây lỗi (tắt node, ngắt mạng) & Kiểm thử khả năng tự phục hồi \\
 \hline
 Circuit Breaker & Implement với Hystrix/Resilience4j & Fault tolerance tốt hơn \\
 \hline

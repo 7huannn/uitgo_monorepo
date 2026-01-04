@@ -141,8 +141,28 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare env file
+        env:
+          POSTGRES_USER: ${{ secrets.STAGING_POSTGRES_USER || 'uitgo' }}
+          POSTGRES_PASSWORD: ${{ secrets.STAGING_POSTGRES_PASSWORD || 'uitgo' }}
+          JWT_SECRET: ${{ secrets.STAGING_JWT_SECRET || 'uitgo-staging-secret' }}
+          REFRESH_TOKEN_KEY: ${{ secrets.STAGING_REFRESH_TOKEN_ENCRYPTION_KEY || 'uitgo-staging-refresh-key-32bytes!!!' }}
+          INTERNAL_API_KEY: ${{ secrets.STAGING_INTERNAL_API_KEY || 'uitgo-staging-internal' }}
         run: |
-          cp infra/staging/.env.staging.example infra/staging/.env.staging
+          # Generate .env.staging from GitHub Secrets with fallback to example values
+          cat > infra/staging/.env.staging << EOF
+          POSTGRES_DB=uitgo
+          POSTGRES_USER=${POSTGRES_USER}
+          POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+          POSTGRES_DSN=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/uitgo?sslmode=disable
+          PORT=8080
+          JWT_SECRET=${JWT_SECRET}
+          REFRESH_TOKEN_ENCRYPTION_KEY=${REFRESH_TOKEN_KEY}
+          INTERNAL_API_KEY=${INTERNAL_API_KEY}
+          CORS_ALLOWED_ORIGINS=https://staging.uitgo.app,http://localhost:8080
+          APP_ENV=staging
+          LOG_FORMAT=json
+          PROMETHEUS_ENABLED=true
+          EOF
 
       - name: Validate staging compose stack
         working-directory: infra/staging
