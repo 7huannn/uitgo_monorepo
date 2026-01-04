@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/image1.png" alt="UITGo Logo" width="120"/>
+  <img src="image1.png" alt="UITGo Logo" width="120"/>
 </p>
 
 <h1 align="center">UITGo Monorepo</h1>
