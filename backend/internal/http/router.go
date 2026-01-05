@@ -124,17 +124,32 @@ func seedAdminUser(ctx context.Context, cfg *config.Config, repo domain.UserRepo
 	if repo == nil {
 		return
 	}
+	
+	// SECURITY: Only seed admin in development mode with explicit config
+	// In production, create admin users through secure provisioning
+	if cfg.Environment != "development" && cfg.Environment != "dev" && cfg.Environment != "local" {
+		log.Printf("admin seed: skipping - only allowed in development environment")
+		return
+	}
+	
 	email := strings.ToLower(strings.TrimSpace(cfg.AdminEmail))
 	password := strings.TrimSpace(cfg.AdminPassword)
 	name := strings.TrimSpace(cfg.AdminName)
 	if name == "" {
 		name = "UITGo Admin"
 	}
+	
+	// SECURITY: Require explicit admin credentials from environment
+	// DO NOT use default/fallback credentials
 	if email == "" || password == "" {
-		// fallback dev admin
-		email = "admin@example.com"
-		password = "admin123"
-		log.Printf("admin seed: using default dev admin credentials (%s)", email)
+		log.Printf("admin seed: skipping - ADMIN_EMAIL and ADMIN_PASSWORD must be set explicitly")
+		return
+	}
+	
+	// SECURITY: Enforce minimum password requirements
+	if len(password) < 12 {
+		log.Printf("admin seed: skipping - admin password must be at least 12 characters")
+		return
 	}
 
 	existing, err := repo.FindByEmail(ctx, email)

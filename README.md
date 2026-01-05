@@ -183,6 +183,30 @@ make run              # Start server on :8080
 
 ## Security
 
+> ⚠️ **Important**: Review [SECURITY.md](./SECURITY.md) before deploying to production.
+
+### Security Features
+
+| Category | Implementation |
+|----------|----------------|
+| **Authentication** | JWT with refresh token rotation |
+| **Authorization** | RBAC - Trip owner/driver/admin checks |
+| **Secrets** | Sealed Secrets, no hardcoded credentials |
+| **Transport** | TLS required for all ingress |
+| **Network** | K8s NetworkPolicies isolate services |
+| **Database** | Encryption at rest, IAM auth option |
+| **CI/CD** | OIDC auth, no static AWS keys |
+
+### Security Checklist for Production
+
+- [ ] Generate all secrets with `openssl rand -base64 32`
+- [ ] Configure Sealed Secrets or External Secrets Operator
+- [ ] Set up TLS certificates (cert-manager recommended)
+- [ ] Configure explicit CORS origins (no wildcards)
+- [ ] Enable Multi-AZ for databases
+- [ ] Set up AWS OIDC provider for GitHub Actions
+- [ ] Review and enable all network policies
+
 ### Security Scanning Tools
 
 UITGo uses **multi-layer security scanning** via GitHub integration:

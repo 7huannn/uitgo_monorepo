@@ -58,3 +58,59 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+# SECURITY: New variables for enhanced security
+
+variable "kms_key_id" {
+  description = "KMS key ID for encryption at rest"
+  type        = string
+  default     = null
+}
+
+variable "backup_retention_period" {
+  description = "Days to retain backups (0 to disable)"
+  type        = number
+  default     = 7
+}
+
+variable "multi_az" {
+  description = "Enable Multi-AZ deployment"
+  type        = bool
+  default     = false
+}
+
+variable "deletion_protection" {
+  description = "Enable deletion protection"
+  type        = bool
+  default     = false
+}
+
+variable "skip_final_snapshot" {
+  description = "Skip final snapshot on deletion"
+  type        = bool
+  default     = false
+}
+
+variable "monitoring_interval" {
+  description = "Enhanced monitoring interval in seconds (0 to disable)"
+  type        = number
+  default     = 0
+}
+
+variable "monitoring_role_arn" {
+  description = "IAM role ARN for enhanced monitoring"
+  type        = string
+  default     = null
+}
+
+variable "performance_insights_enabled" {
+  description = "Enable Performance Insights"
+  type        = bool
+  default     = false
+}
+
+variable "iam_database_authentication_enabled" {
+  description = "Enable IAM database authentication"
+  type        = bool
+  default     = false
+}

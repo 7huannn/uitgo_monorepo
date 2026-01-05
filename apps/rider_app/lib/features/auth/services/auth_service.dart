@@ -392,9 +392,24 @@ class AuthService implements AuthTokenProvider {
     SharedPreferences prefs,
   ) async {
     if (kIsWeb) {
+      // SECURITY WARNING: Web storage (localStorage/sessionStorage) is not secure
+      // against XSS attacks. In production, consider:
+      // 1. Using httpOnly cookies for token storage
+      // 2. Implementing a BFF (Backend-for-Frontend) pattern
+      // 3. Using short-lived access tokens with refresh rotation
       await prefs.setString(key, value);
     } else {
-      await _secure.write(key: key, value: value);
+      // Native apps use secure storage (Keychain on iOS, EncryptedSharedPreferences on Android)
+      await _secure.write(
+        key: key,
+        value: value,
+        aOptions: const AndroidOptions(
+          encryptedSharedPreferences: true,
+        ),
+        iOptions: const IOSOptions(
+          accessibility: KeychainAccessibility.first_unlock_this_device,
+        ),
+      );
     }
   }
 
@@ -403,6 +418,14 @@ class AuthService implements AuthTokenProvider {
       final prefs = await SharedPreferences.getInstance();
       return prefs.getString(key);
     }
-    return _secure.read(key: key);
+    return _secure.read(
+      key: key,
+      aOptions: const AndroidOptions(
+        encryptedSharedPreferences: true,
+      ),
+      iOptions: const IOSOptions(
+        accessibility: KeychainAccessibility.first_unlock_this_device,
+      ),
+    );
   }
 }

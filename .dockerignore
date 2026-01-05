@@ -1,0 +1,42 @@
+# Security: Prevent secrets from leaking into Docker builds
+
+# Root level secrets
+.env
+.env.*
+*.env
+secrets/
+*.key
+*.pem
+*.crt
+
+# Terraform (entire infra directory)
+infra/
+
+# Kubernetes secrets
+k8s/
+
+# Git
+.git/
+.gitignore
+.github/
+
+# IDE
+.idea/
+.vscode/
+
+# Documentation
+*.md
+docs/
+README*
+LICENSE
+ARCHITECTURE.md
+REPORT.md
+
+# Other services (when building one service)
+apps/
+loadtests/
+observability/
+scripts/
+_archive/
+ADR/
+assets/

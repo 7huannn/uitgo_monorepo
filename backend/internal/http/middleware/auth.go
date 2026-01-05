@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"crypto/subtle"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -78,30 +79,44 @@ func RequestID() gin.HandlerFunc {
 }
 
 // CORS enables configurable CORS.
+// SECURITY: Do not allow wildcard (*) with credentials - this is a security vulnerability
 func CORS(allowedOrigins []string) gin.HandlerFunc {
 	var patterns []string
-	allowAll := false
 	for _, origin := range allowedOrigins {
 		origin = strings.TrimSpace(origin)
 		if origin == "" {
 			continue
 		}
+		// SECURITY: Reject wildcard origin when credentials are enabled
+		// Browsers will reject this anyway, but we should be explicit
 		if origin == "*" {
-			allowAll = true
-			break
+			log.Printf("CORS warning: wildcard origin '*' is not secure with credentials, ignoring")
+			continue
 		}
 		patterns = append(patterns, origin)
+	}
+	
+	// SECURITY: If no valid origins configured, default to localhost only for development
+	if len(patterns) == 0 {
+		patterns = []string{"http://localhost", "http://127.0.0.1"}
+		log.Printf("CORS warning: no origins configured, defaulting to localhost only")
 	}
 
 	return func(c *gin.Context) {
 		originHeader := c.GetHeader("Origin")
-		originAllowed := allowAll || originHeader == ""
-		if !originAllowed {
-			for _, candidate := range patterns {
-				if matchOrigin(candidate, originHeader) {
-					originAllowed = true
-					break
-				}
+		
+		// If no origin header, it's likely a same-origin or non-browser request
+		if originHeader == "" {
+			c.Next()
+			return
+		}
+		
+		// Check if origin is allowed
+		originAllowed := false
+		for _, candidate := range patterns {
+			if matchOrigin(candidate, originHeader) {
+				originAllowed = true
+				break
 			}
 		}
 
@@ -114,16 +129,13 @@ func CORS(allowedOrigins []string) gin.HandlerFunc {
 			return
 		}
 
-		allowOrigin := originHeader
-		if allowAll || allowOrigin == "" {
-			allowOrigin = "*"
-		}
-
-		c.Writer.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+		// SECURITY: Echo back the specific origin, never use '*' with credentials
+		c.Writer.Header().Set("Access-Control-Allow-Origin", originHeader)
 		c.Writer.Header().Set("Vary", "Origin")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,X-User-Id,X-Role,X-Request-Id")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,X-Request-Id")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
 
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
@@ -175,18 +187,30 @@ func matchOrigin(candidate, actual string) bool {
 }
 
 // InternalOnly restricts a route to internal callers by validating a static token.
+// SECURITY: Always require a valid secret - do not allow bypass when empty
 func InternalOnly(secret string) gin.HandlerFunc {
 	secret = strings.TrimSpace(secret)
 	return func(c *gin.Context) {
+		// SECURITY: If no internal secret is configured, deny all internal requests
+		// This prevents accidental exposure of internal endpoints
 		if secret == "" {
-			c.Next()
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "internal endpoints not configured"})
 			return
 		}
-		if token := c.GetHeader(internalTokenHeader); token != "" && token == secret {
-			c.Next()
+		
+		token := strings.TrimSpace(c.GetHeader(internalTokenHeader))
+		if token == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "internal access only"})
 			return
 		}
-		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "internal access only"})
+		
+		// Use constant-time comparison to prevent timing attacks
+		if subtle.ConstantTimeCompare([]byte(token), []byte(secret)) != 1 {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid internal token"})
+			return
+		}
+		
+		c.Next()
 	}
 }
 

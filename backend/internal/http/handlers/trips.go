@@ -214,6 +214,14 @@ func (h *TripHandler) createTrip(c *gin.Context) {
 
 func (h *TripHandler) getTrip(c *gin.Context) {
 	tripID := c.Param("id")
+	userID := userIDFromContext(c)
+	role := roleFromContext(c)
+
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
 	trip, err := h.service.Fetch(c.Request.Context(), tripID)
 	if err != nil {
 		if errors.Is(err, domain.ErrTripNotFound) {
@@ -221,6 +229,12 @@ func (h *TripHandler) getTrip(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Authorization: only trip owner, assigned driver, or admin can view
+	if !h.canAccessTrip(trip, userID, role) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
 		return
 	}
 
@@ -235,6 +249,14 @@ func (h *TripHandler) getTrip(c *gin.Context) {
 
 func (h *TripHandler) updateTripStatus(c *gin.Context) {
 	tripID := c.Param("id")
+	userID := userIDFromContext(c)
+	role := roleFromContext(c)
+
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
 	var req updateStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -244,6 +266,23 @@ func (h *TripHandler) updateTripStatus(c *gin.Context) {
 	status := domain.TripStatus(req.Status)
 	if status == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "status required"})
+		return
+	}
+
+	// Fetch trip first to check authorization
+	trip, err := h.service.Fetch(c.Request.Context(), tripID)
+	if err != nil {
+		if errors.Is(err, domain.ErrTripNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "trip not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Authorization: only trip owner, assigned driver, or admin can update status
+	if !h.canAccessTrip(trip, userID, role) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
 		return
 	}
 
@@ -266,7 +305,8 @@ func (h *TripHandler) updateTripStatus(c *gin.Context) {
 
 	h.hubs.BroadcastStatus(tripID, status)
 
-	trip, err := h.service.Fetch(c.Request.Context(), tripID)
+	// Refetch trip after update
+	trip, err = h.service.Fetch(c.Request.Context(), tripID)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"id":        tripID,
@@ -285,6 +325,21 @@ func (h *TripHandler) assignDriver(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "driver dispatch unavailable"})
 		return
 	}
+
+	userID := userIDFromContext(c)
+	role := roleFromContext(c)
+
+	if userID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+
+	// Only admin can manually assign drivers
+	if role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "admin access required"})
+		return
+	}
+
 	tripID := c.Param("id")
 	if tripID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "trip id required"})
@@ -419,4 +474,41 @@ func driverErrorStatus(err error) int {
 	default:
 		return http.StatusInternalServerError
 	}
+}
+
+// roleFromContext extracts the user role from gin context
+func roleFromContext(c *gin.Context) string {
+	if role, exists := c.Get("role"); exists {
+		if r, ok := role.(string); ok {
+			return strings.ToLower(r)
+		}
+	}
+	return ""
+}
+
+// canAccessTrip checks if the user has permission to access the trip
+// Returns true if user is: trip rider, assigned driver, or admin
+func (h *TripHandler) canAccessTrip(trip *domain.Trip, userID, role string) bool {
+	// Admins can access all trips
+	if role == "admin" {
+		return true
+	}
+	
+	// Trip rider can access their own trip
+	if trip.RiderID == userID {
+		return true
+	}
+	
+	// Assigned driver can access the trip
+	if trip.DriverID != nil && *trip.DriverID != "" {
+		// Check if user is the assigned driver
+		if h.driverService != nil {
+			driver, err := h.driverService.Me(nil, userID)
+			if err == nil && driver != nil && driver.ID == *trip.DriverID {
+				return true
+			}
+		}
+	}
+	
+	return false
 }

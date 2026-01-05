@@ -19,6 +19,8 @@ resources:
   - trip-service.yaml
   - driver-service.yaml
   - ingress.yaml
+  # SECURITY: Network policies to restrict pod-to-pod communication
+  - network-policies.yaml
 
 # Common labels applied to all resources
 commonLabels:

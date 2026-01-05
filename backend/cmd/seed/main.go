@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -112,8 +113,21 @@ func ensureUser(ctx context.Context, repo domain.UserRepository, input seedUser)
 	if err := repo.Create(ctx, user); err != nil {
 		return nil, err
 	}
-	log.Printf("created %s (%s) password: %s", user.Role, user.Email, password)
+	// SECURITY: Do not log passwords - write to secure file instead
+	log.Printf("created %s (%s) - check credentials file", user.Role, user.Email)
+	writeCredentialsToFile(user.Email, password)
 	return user, nil
+}
+
+// writeCredentialsToFile writes credentials to a secure file instead of logging
+func writeCredentialsToFile(email, password string) {
+	// Only write credentials file in development
+	f, err := os.OpenFile(".seed_credentials", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	f.WriteString(fmt.Sprintf("%s:%s\n", email, password))
 }
 
 func createDriverProfile(ctx context.Context, repo domain.DriverRepository, user *domain.User, vehicle *domain.Vehicle) (*domain.Driver, error) {

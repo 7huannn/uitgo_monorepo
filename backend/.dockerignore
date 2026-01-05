@@ -1,0 +1,68 @@
+# Security: Prevent secrets from leaking into Docker builds
+
+# Environment and secret files
+.env
+.env.*
+*.env
+secrets/
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+
+# Terraform state and secrets
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+
+# Kubernetes secrets
+**/secrets.yaml
+!**/secrets.example.yaml
+kubeconfig
+*.kubeconfig
+
+# Git
+.git/
+.gitignore
+.github/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Test files
+*_test.go
+**/*_test.go
+coverage/
+coverage.*
+*.test
+
+# Documentation
+*.md
+docs/
+README*
+LICENSE
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile
+.circleci/
+
+# Build artifacts we don't need in image
+bin/
+*.exe
+*.out
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Load test data
+loadtests/

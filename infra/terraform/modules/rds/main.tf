@@ -22,11 +22,13 @@ resource "aws_security_group" "this" {
     }
   }
 
+  # SECURITY: Restrict egress to only necessary destinations
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = var.allowed_cidrs
+    description = "Allow HTTPS for AWS services"
   }
 
   tags = merge(var.tags, {
@@ -45,9 +47,41 @@ resource "aws_db_instance" "this" {
   password                = var.password
   db_subnet_group_name    = aws_db_subnet_group.this.name
   vpc_security_group_ids  = [aws_security_group.this.id]
-  skip_final_snapshot     = true
   publicly_accessible     = false
-  backup_retention_period = 1
+  
+  # SECURITY: Enable encryption at rest
+  storage_encrypted       = true
+  kms_key_id              = var.kms_key_id
+  
+  # SECURITY: Enable automated backups
+  backup_retention_period = var.backup_retention_period
+  backup_window           = "03:00-04:00"
+  maintenance_window      = "Mon:04:00-Mon:05:00"
+  
+  # SECURITY: Enable Multi-AZ for high availability (production)
+  multi_az                = var.multi_az
+  
+  # SECURITY: Enable deletion protection for production
+  deletion_protection     = var.deletion_protection
+  skip_final_snapshot     = var.skip_final_snapshot
+  final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.identifier}-final-snapshot"
+  
+  # SECURITY: Enable enhanced monitoring
+  monitoring_interval     = var.monitoring_interval
+  monitoring_role_arn     = var.monitoring_role_arn
+  
+  # SECURITY: Enable performance insights
+  performance_insights_enabled          = var.performance_insights_enabled
+  performance_insights_retention_period = var.performance_insights_enabled ? 7 : null
+  
+  # SECURITY: Enable IAM authentication
+  iam_database_authentication_enabled = var.iam_database_authentication_enabled
+  
+  # SECURITY: Enable auto minor version upgrade
+  auto_minor_version_upgrade = true
+  
+  # SECURITY: Copy tags to snapshots
+  copy_tags_to_snapshot = true
 
   tags = var.tags
 }

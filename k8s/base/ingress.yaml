@@ -1,5 +1,6 @@
 # Ingress for API Gateway (replaces Nginx container)
 # Uses k3s built-in Traefik ingress controller
+# SECURITY: TLS enabled, HTTP redirects to HTTPS
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -9,8 +10,23 @@ metadata:
     app: uitgo-gateway
   annotations:
     # Traefik annotations for k3s
-    traefik.ingress.kubernetes.io/router.entrypoints: web
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    # Force HTTPS redirect
+    traefik.ingress.kubernetes.io/router.middlewares: uitgo-redirect-https@kubernetescrd
+    # Security headers
+    traefik.ingress.kubernetes.io/headers.stsSeconds: "31536000"
+    traefik.ingress.kubernetes.io/headers.stsIncludeSubdomains: "true"
+    traefik.ingress.kubernetes.io/headers.stsPreload: "true"
+    traefik.ingress.kubernetes.io/headers.contentTypeNosniff: "true"
+    traefik.ingress.kubernetes.io/headers.frameDeny: "true"
 spec:
+  # TLS configuration - use cert-manager or manual secret
+  tls:
+    - hosts:
+        - uitgo.local
+        - api.uitgo.com
+      secretName: uitgo-tls-secret
   rules:
     - host: uitgo.local  # Add to /etc/hosts: 127.0.0.1 uitgo.local
       http:
