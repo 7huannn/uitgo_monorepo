@@ -60,13 +60,13 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                        Flutter Mobile Apps                               │
-│                    (Rider App • Driver App • Admin)                      │
+│                        Flutter Mobile Apps                              │
+│                    (Rider App • Driver App • Admin)                     │
 └────────────────────────────────┬────────────────────────────────────────┘
                                  │ REST / WebSocket
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                     API Gateway (Traefik/Nginx)                          │
+│                     API Gateway (Traefik/Nginx)                         │
 │              /auth/* │ /v1/trips/* │ /v1/drivers/* │ /ws/*              │
 └────────┬───────────────────┬───────────────────┬────────────────────────┘
          │                   │                   │
@@ -221,7 +221,7 @@ UITGo uses **multi-layer security scanning** via GitHub integration:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         Push / Pull Request                              │
+│                         Push / Pull Request                             │
 └────────────────────────────────┬────────────────────────────────────────┘
                                  │
          ┌───────────────────────┼───────────────────────┐
@@ -241,8 +241,8 @@ UITGo uses **multi-layer security scanning** via GitHub integration:
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                      PR Status Checks & Comments                         │
-│         Pass / Block based on Quality Gate & Security Policy             │
+│                      PR Status Checks & Comments                        │
+│         Pass / Block based on Quality Gate & Security Policy            │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 

@@ -259,14 +259,27 @@ resource "aws_lb_target_group" "api" {
   tags = merge(local.tags, { Component = "alb" })
 }
 
+# SECURITY: HTTP listener redirects to HTTPS when certificate is available
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.api.arn
   port              = 80
   protocol          = "HTTP"
 
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.api.arn
+    type = var.alb_certificate_arn != "" ? "redirect" : "forward"
+
+    # Redirect to HTTPS when certificate is configured
+    dynamic "redirect" {
+      for_each = var.alb_certificate_arn != "" ? [1] : []
+      content {
+        port        = "443"
+        protocol    = "HTTPS"
+        status_code = "HTTP_301"
+      }
+    }
+
+    # Only forward to target group if no certificate (dev only)
+    target_group_arn = var.alb_certificate_arn == "" ? aws_lb_target_group.api.arn : null
   }
 }
 
@@ -276,7 +289,8 @@ resource "aws_lb_listener" "https" {
   port              = 443
   protocol          = "HTTPS"
   certificate_arn   = var.alb_certificate_arn
-  ssl_policy        = "ELBSecurityPolicy-2016-08"
+  # SECURITY: Use TLS 1.2+ only
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
 
   default_action {
     type             = "forward"

@@ -22,10 +22,23 @@ spec:
         prometheus.io/port: "8083"
         prometheus.io/path: "/metrics"
     spec:
+      # SECURITY: Pod security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: driver-service
           image: uitgo/driver-service:latest
           imagePullPolicy: IfNotPresent
+          # SECURITY: Container security context
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 8083
               name: http

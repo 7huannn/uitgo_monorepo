@@ -2,12 +2,15 @@
 # UITGo backend bootstrap script for Amazon Linux 2023
 set -euo pipefail
 
+# SECURITY: Log to file only, avoid exposing secrets in console/IMDS
 LOG_FILE=/var/log/uitgo-user-data.log
 mkdir -p "$(dirname "$LOG_FILE")"
-exec > >(tee -a "$LOG_FILE" | logger -t user-data -s 2>/dev/console) 2>&1
+chmod 600 "$LOG_FILE"
+exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "=== UITGo bootstrap started at $(date -Is) ==="
 
+# SECURITY: These values come from Terraform, avoid echoing them
 BACKEND_PORT=${backend_port}
 CONTAINER_REGISTRY=${container_registry}
 REGISTRY_USERNAME=${registry_username}
@@ -21,7 +24,7 @@ trap 'echo "[ERROR] User data failed at line $LINENO"' ERR
 
 echo "[1/6] Installing Docker and dependencies..."
 dnf update -y
-dnf install -y docker jq socat
+dnf install -y docker jq socat ca-certificates
 mkdir -p /usr/libexec/docker/cli-plugins
 curl -fSL "https://github.com/docker/compose/releases/download/v2.30.3/docker-compose-linux-x86_64" \
   -o /usr/libexec/docker/cli-plugins/docker-compose
@@ -42,6 +45,8 @@ fi
 mkdir -p /opt/uitgo
 
 echo "[3/6] Configuring Redis TLS tunnel on port $REDIS_PROXY_PORT -> $REMOTE_REDIS_ADDR..."
+# SECURITY: Use proper TLS verification with ElastiCache
+# ElastiCache uses Amazon-trusted certificates, verify=1 is safe
 cat >/etc/systemd/system/redis-tunnel.service <<EOF
 [Unit]
 Description=TLS tunnel to ElastiCache Redis
@@ -49,7 +54,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/usr/bin/socat TCP-LISTEN:${redis_proxy_port},reuseaddr,fork OPENSSL:${redis_host}:${redis_port},verify=0
+ExecStart=/usr/bin/socat TCP-LISTEN:${redis_proxy_port},reuseaddr,fork OPENSSL:${redis_host}:${redis_port},verify=1,cafile=/etc/ssl/certs/ca-certificates.crt
 Restart=always
 RestartSec=2
 
@@ -61,6 +66,7 @@ systemctl enable --now redis-tunnel.service
 sleep 2
 
 echo "[4/6] Writing configuration files..."
+# SECURITY: Configuration written to file, not logged to console
 cat >/opt/uitgo/docker-compose.yml <<'EOF'
 version: "3.9"
 

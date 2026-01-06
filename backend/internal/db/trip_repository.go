@@ -267,8 +267,10 @@ func (r *tripRepository) ListTrips(userID string, role string, limit, offset int
 	query := readDB.Model(&tripModel{})
 	switch role {
 	case "driver":
-		// Show all available requested trips plus trips already assigned to this driver.
-		query = query.Where("(status = ?) OR (driver_id = ?)", string(domain.TripStatusRequested), userID)
+		// SECURITY FIX: Only show trips assigned to this specific driver
+		// Do NOT expose all "requested" trips to any authenticated driver
+		// Trip assignment should go through the matching service, not listing
+		query = query.Where("driver_id = ?", userID)
 	default:
 		query = query.Where("rider_id = ?", userID)
 	}

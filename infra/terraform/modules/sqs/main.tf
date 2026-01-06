@@ -5,8 +5,10 @@ resource "aws_sqs_queue" "this" {
   max_message_size                  = var.max_message_size
   fifo_queue                        = var.fifo
   content_based_deduplication       = var.fifo
-  kms_master_key_id                 = var.kms_key_id
-  kms_data_key_reuse_period_seconds = var.kms_data_key_reuse_seconds
+  # SECURITY: Use AWS managed key if no custom KMS key provided (SSE-SQS)
+  sqs_managed_sse_enabled           = var.kms_key_id == "" ? true : null
+  kms_master_key_id                 = var.kms_key_id != "" ? var.kms_key_id : null
+  kms_data_key_reuse_period_seconds = var.kms_key_id != "" ? var.kms_data_key_reuse_seconds : null
   receive_wait_time_seconds         = var.receive_wait_time
   redrive_policy = var.dead_letter_queue_arn == "" ? null : jsonencode({
     deadLetterTargetArn = var.dead_letter_queue_arn

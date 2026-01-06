@@ -51,13 +51,13 @@ func checkWebSocketOrigin(r *http.Request) bool {
 	if origin == "" {
 		return true // Allow connections without Origin (non-browser clients)
 	}
-	
+
 	for _, allowed := range allowedWebSocketOrigins {
 		if strings.HasPrefix(origin, allowed) {
 			return true
 		}
 	}
-	
+
 	log.Printf("ws: rejected connection from origin %s", origin)
 	return false
 }
@@ -320,33 +320,33 @@ func (m *HubManager) BroadcastStatus(tripID string, status domain.TripStatus) {
 func (m *HubManager) HandleWebsocket(service *domain.TripService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tripID := c.Param("id")
-		
+
 		// SECURITY: Get authentication ONLY from middleware-set context values (JWT auth)
 		// DO NOT accept userId/role from query parameters - that allows spoofing
 		roleVal, _ := c.Get("role")
 		roleStr, _ := roleVal.(string)
 		userVal, _ := c.Get("userID")
 		userStr, _ := userVal.(string)
-		
+
 		// Require valid JWT authentication
 		if userStr == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 			return
 		}
-		
+
 		// SECURITY: Verify user has access to this trip before upgrading connection
 		trip, err := service.Fetch(c.Request.Context(), tripID)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "trip not found"})
 			return
 		}
-		
+
 		// Authorization: only trip owner, assigned driver, or admin can connect
 		if !canAccessTripWS(trip, userStr, roleStr, m.driverLocations) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
 			return
 		}
-		
+
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
 			log.Printf("upgrade websocket: %v", err)
@@ -406,12 +406,12 @@ func canAccessTripWS(trip *domain.Trip, userID, role string, driverRepo DriverLo
 	if strings.ToLower(role) == "admin" {
 		return true
 	}
-	
+
 	// Trip rider can access their own trip
 	if trip.RiderID == userID {
 		return true
 	}
-	
+
 	// Assigned driver can access the trip
 	if trip.DriverID != nil && *trip.DriverID != "" {
 		// For drivers, the userID should match the driver's user ID
@@ -420,6 +420,6 @@ func canAccessTripWS(trip *domain.Trip, userID, role string, driverRepo DriverLo
 			return true // Driver's access will be further validated by driver service
 		}
 	}
-	
+
 	return false
 }

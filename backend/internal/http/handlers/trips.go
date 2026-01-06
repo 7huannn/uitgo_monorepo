@@ -493,12 +493,12 @@ func (h *TripHandler) canAccessTrip(trip *domain.Trip, userID, role string) bool
 	if role == "admin" {
 		return true
 	}
-	
+
 	// Trip rider can access their own trip
 	if trip.RiderID == userID {
 		return true
 	}
-	
+
 	// Assigned driver can access the trip
 	if trip.DriverID != nil && *trip.DriverID != "" {
 		// Check if user is the assigned driver
@@ -509,6 +509,6 @@ func (h *TripHandler) canAccessTrip(trip *domain.Trip, userID, role string) bool
 			}
 		}
 	}
-	
+
 	return false
 }

@@ -121,10 +121,16 @@ func seedAdminUser(ctx context.Context, cfg *config.Config, repo domain.UserRepo
 	if name == "" {
 		name = "UITGo Admin"
 	}
+	// SECURITY: Do not use hardcoded fallback credentials
+	// Admin credentials MUST be provided via ADMIN_EMAIL and ADMIN_PASSWORD env vars
 	if email == "" || password == "" {
-		email = "admin@example.com"
-		password = "admin123"
-		log.Printf("admin seed: using default dev admin credentials (%s)", email)
+		log.Printf("admin seed: skipping - ADMIN_EMAIL and ADMIN_PASSWORD must be set via environment variables")
+		return
+	}
+	// SECURITY: Enforce minimum password length
+	if len(password) < 12 {
+		log.Printf("admin seed: skipping - ADMIN_PASSWORD must be at least 12 characters")
+		return
 	}
 
 	existing, err := repo.FindByEmail(ctx, email)

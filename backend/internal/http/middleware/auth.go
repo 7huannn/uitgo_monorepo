@@ -31,20 +31,10 @@ func Auth(jwtSecret, internalSecret string) gin.HandlerFunc {
 				userID = sub
 				role = r
 			}
-			if userID == "" {
-				tokenParam := strings.TrimSpace(c.Query("accessToken"))
-				if tokenParam == "" {
-					tokenParam = strings.TrimSpace(c.Query("token"))
-				}
-				if tokenParam != "" {
-					if sub, r := parseBearer("Bearer "+tokenParam, jwtSecret); sub != "" {
-						userID = sub
-						if role == "" {
-							role = r
-						}
-					}
-				}
-			}
+			// SECURITY: Token via query params is deprecated and disabled
+			// Query param tokens can leak via browser history, referrer headers, and server logs
+			// Use Authorization header with Bearer token instead
+			// Legacy code removed for security - see ADR for migration guide
 		}
 
 		if userID == "" && internalSecret != "" {
@@ -95,7 +85,7 @@ func CORS(allowedOrigins []string) gin.HandlerFunc {
 		}
 		patterns = append(patterns, origin)
 	}
-	
+
 	// SECURITY: If no valid origins configured, default to localhost only for development
 	if len(patterns) == 0 {
 		patterns = []string{"http://localhost", "http://127.0.0.1"}
@@ -104,13 +94,13 @@ func CORS(allowedOrigins []string) gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 		originHeader := c.GetHeader("Origin")
-		
+
 		// If no origin header, it's likely a same-origin or non-browser request
 		if originHeader == "" {
 			c.Next()
 			return
 		}
-		
+
 		// Check if origin is allowed
 		originAllowed := false
 		for _, candidate := range patterns {
@@ -197,19 +187,19 @@ func InternalOnly(secret string) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "internal endpoints not configured"})
 			return
 		}
-		
+
 		token := strings.TrimSpace(c.GetHeader(internalTokenHeader))
 		if token == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "internal access only"})
 			return
 		}
-		
+
 		// Use constant-time comparison to prevent timing attacks
 		if subtle.ConstantTimeCompare([]byte(token), []byte(secret)) != 1 {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid internal token"})
 			return
 		}
-		
+
 		c.Next()
 	}
 }

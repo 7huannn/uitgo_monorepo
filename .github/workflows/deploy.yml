@@ -140,15 +140,32 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # SECURITY: Require all secrets to be set, fail if missing
+      - name: Validate required secrets
+        run: |
+          missing_secrets=()
+          if [ -z "${{ secrets.STAGING_POSTGRES_USER }}" ]; then missing_secrets+=("STAGING_POSTGRES_USER"); fi
+          if [ -z "${{ secrets.STAGING_POSTGRES_PASSWORD }}" ]; then missing_secrets+=("STAGING_POSTGRES_PASSWORD"); fi
+          if [ -z "${{ secrets.STAGING_JWT_SECRET }}" ]; then missing_secrets+=("STAGING_JWT_SECRET"); fi
+          if [ -z "${{ secrets.STAGING_REFRESH_TOKEN_ENCRYPTION_KEY }}" ]; then missing_secrets+=("STAGING_REFRESH_TOKEN_ENCRYPTION_KEY"); fi
+          if [ -z "${{ secrets.STAGING_INTERNAL_API_KEY }}" ]; then missing_secrets+=("STAGING_INTERNAL_API_KEY"); fi
+          
+          if [ ${#missing_secrets[@]} -gt 0 ]; then
+            echo "::error::Missing required secrets: ${missing_secrets[*]}"
+            echo "Please configure these secrets in repository settings before deploying."
+            exit 1
+          fi
+          echo "All required secrets are configured."
+
       - name: Prepare env file
         env:
-          POSTGRES_USER: ${{ secrets.STAGING_POSTGRES_USER || 'uitgo' }}
-          POSTGRES_PASSWORD: ${{ secrets.STAGING_POSTGRES_PASSWORD || 'uitgo' }}
-          JWT_SECRET: ${{ secrets.STAGING_JWT_SECRET || 'uitgo-staging-secret' }}
-          REFRESH_TOKEN_KEY: ${{ secrets.STAGING_REFRESH_TOKEN_ENCRYPTION_KEY || 'uitgo-staging-refresh-key-32bytes!!!' }}
-          INTERNAL_API_KEY: ${{ secrets.STAGING_INTERNAL_API_KEY || 'uitgo-staging-internal' }}
+          POSTGRES_USER: ${{ secrets.STAGING_POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.STAGING_POSTGRES_PASSWORD }}
+          JWT_SECRET: ${{ secrets.STAGING_JWT_SECRET }}
+          REFRESH_TOKEN_KEY: ${{ secrets.STAGING_REFRESH_TOKEN_ENCRYPTION_KEY }}
+          INTERNAL_API_KEY: ${{ secrets.STAGING_INTERNAL_API_KEY }}
         run: |
-          # Generate .env.staging from GitHub Secrets with fallback to example values
+          # SECURITY: Generate .env.staging from GitHub Secrets only (no fallbacks)
           cat > infra/staging/.env.staging << EOF
           POSTGRES_DB=uitgo
           POSTGRES_USER=${POSTGRES_USER}
@@ -158,7 +175,7 @@ jobs:
           JWT_SECRET=${JWT_SECRET}
           REFRESH_TOKEN_ENCRYPTION_KEY=${REFRESH_TOKEN_KEY}
           INTERNAL_API_KEY=${INTERNAL_API_KEY}
-          CORS_ALLOWED_ORIGINS=https://staging.uitgo.app,http://localhost:8080
+          CORS_ALLOWED_ORIGINS=https://staging.uitgo.app
           APP_ENV=staging
           LOG_FORMAT=json
           PROMETHEUS_ENABLED=true

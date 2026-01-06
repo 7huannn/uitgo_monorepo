@@ -154,8 +154,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # SECURITY: Pin to specific version for supply-chain security
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: '${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:${{ github.sha }}'
           format: 'sarif'
@@ -372,10 +373,11 @@ jobs:
           kustomize build k8s/overlays/staging > /dev/null
           echo "✅ Staging overlay is valid"
 
-      - name: Lint with kubeval
-        uses: instrumenta/kubeval-action@master
-        with:
-          files: k8s/base/*.yaml
+      # SECURITY: Use kubeconform instead of deprecated kubeval
+      - name: Lint Kubernetes manifests
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.4/kubeconform-linux-amd64.tar.gz | tar xz
+          ./kubeconform -summary -strict k8s/base/*.yaml
 
   # ==================== STAGE 6: Verify ArgoCD Sync ====================
   verify-deployment:

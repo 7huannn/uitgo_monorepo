@@ -75,30 +75,42 @@ variable "trip_service_ami" {
 }
 
 variable "alb_certificate_arn" {
-  description = "Optional ACM certificate ARN for HTTPS listener"
+  description = "ACM certificate ARN for HTTPS listener (REQUIRED for production)"
   type        = string
   default     = ""
 }
 
 variable "jwt_secret" {
-  description = "JWT signing secret for backend services"
+  description = "JWT signing secret for backend services (REQUIRED - no default for security)"
   type        = string
-  default     = "uitgo-prod-secret-change-me"
   sensitive   = true
+  # SECURITY: No default value - must be provided via tfvars or environment
+  validation {
+    condition     = length(var.jwt_secret) >= 32
+    error_message = "jwt_secret must be at least 32 characters for security."
+  }
 }
 
 variable "refresh_token_encryption_key" {
-  description = "32-byte key for refresh token encryption"
+  description = "32-byte key for refresh token encryption (REQUIRED - no default for security)"
   type        = string
-  default     = "uitgo-dev-refresh-key-32bytes!!!"
   sensitive   = true
+  # SECURITY: No default value - must be provided via tfvars or environment
+  validation {
+    condition     = length(var.refresh_token_encryption_key) == 32
+    error_message = "refresh_token_encryption_key must be exactly 32 characters."
+  }
 }
 
 variable "internal_api_key" {
-  description = "Internal API key used between services"
+  description = "Internal API key used between services (REQUIRED - no default for security)"
   type        = string
-  default     = "uitgo-internal-secret"
   sensitive   = true
+  # SECURITY: No default value - must be provided via tfvars or environment
+  validation {
+    condition     = length(var.internal_api_key) >= 24
+    error_message = "internal_api_key must be at least 24 characters for security."
+  }
 }
 
 variable "cors_allowed_origins" {
