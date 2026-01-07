@@ -4,13 +4,16 @@
 
 set -e
 
+# Constants
+readonly SEPARATOR="═══════════════════════════════════════════════════════════"
+
 echo "🎬 Preparing 5-minute DevOps demo..."
 echo ""
 
 # 1. Check AWS resources (if deploying cloud infrastructure)
-echo "═══════════════════════════════════════════════════════════"
+echo "$SEPARATOR"
 echo "STEP 1: Verify AWS Resources"
-echo "═══════════════════════════════════════════════════════════"
+echo "$SEPARATOR"
 if command -v aws &> /dev/null; then
   echo "▶️  Checking AWS resources..."
   ./scripts/verify-aws-resources.sh
@@ -20,9 +23,9 @@ else
 fi
 
 echo ""
-echo "═══════════════════════════════════════════════════════════"
+echo "$SEPARATOR"
 echo "STEP 2: Verify Local Kubernetes"
-echo "═══════════════════════════════════════════════════════════"
+echo "$SEPARATOR"
 echo "▶️  Checking K8s cluster..."
 kubectl get nodes > /dev/null 2>&1 || { echo "❌ K8s not running!"; exit 1; }
 echo "✅ K8s cluster running"
@@ -35,9 +38,9 @@ kubectl wait --for=condition=ready pod -l app=driver-service -n uitgo --timeout=
 echo "✅ All services healthy"
 
 echo ""
-echo "═══════════════════════════════════════════════════════════"
+echo "$SEPARATOR"
 echo "STEP 3: Setup Port Forwarding"
-echo "═══════════════════════════════════════════════════════════"
+echo "$SEPARATOR"
 echo "🔌 Setting up port forwarding..."
 pkill -f "port-forward.*prometheus" || true
 pkill -f "port-forward.*grafana" || true
@@ -49,9 +52,9 @@ sleep 2
 echo "✅ Port forwarding ready"
 
 echo ""
-echo "═══════════════════════════════════════════════════════════"
+echo "$SEPARATOR"
 echo "STEP 4: Get Auth Token"
-echo "═══════════════════════════════════════════════════════════"
+echo "$SEPARATOR"
 echo "🔑 Getting auth token..."
 TOKEN=$(curl -s http://uitgo.local/auth/login \
   -H "Content-Type: application/json" \
@@ -66,9 +69,9 @@ else
 fi
 
 echo ""
-echo "═══════════════════════════════════════════════════════════"
+echo "$SEPARATOR"
 echo "STEP 5: Open Browser Tabs"
-echo "═══════════════════════════════════════════════════════════"
+echo "$SEPARATOR"
 read -p "Open AWS Console tabs? (y/n): " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -89,9 +92,9 @@ sleep 2
 history -c
 
 echo ""
-echo "═══════════════════════════════════════════════════════════"
+echo "$SEPARATOR"
 echo "✅ DEMO PREPARATION COMPLETE!"
-echo "═══════════════════════════════════════════════════════════"
+echo "$SEPARATOR"
 echo ""
 echo "📋 Checklist:"
 echo "  1. ✅ K8s cluster running"
