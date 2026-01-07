@@ -233,13 +233,13 @@ UITGo uses **multi-layer security scanning** via GitHub integration:
 │                 │    │                 │    │                 │
 │ • Code Quality  │    │ • SAST Analysis │    │ • Image Scan    │
 │ • Test Coverage │    │ • Dependency    │    │ • CVE Detection │
-│ • Code Smells   │    │   Vulnerabilities│   │ • SBOM Generate │
+│ • Code Smells   │    │  Vulnerabilities│    │ • SBOM Generate │
 │ • Duplications  │    │ • Secret Leaks  │    │ • SARIF Report  │
 │ • Security      │    │ • IaC Misconfig │    │                 │
 │   Hotspots      │    │ • License Risk  │    │                 │
 └────────┬────────┘    └────────┬────────┘    └────────┬────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
+         │                      │                      │
+         ▼                      ▼                      ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                      PR Status Checks & Comments                        │
 │         Pass / Block based on Quality Gate & Security Policy            │
