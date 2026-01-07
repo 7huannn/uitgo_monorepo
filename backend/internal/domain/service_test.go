@@ -75,6 +75,13 @@ func (s *stubRepo) ListTrips(userID string, role string, limit, offset int) ([]*
 	return items, int64(len(items)), nil
 }
 
+func (s *stubRepo) PurgeAll() error {
+	s.trips = make(map[string]*domain.Trip)
+	s.statuses = make(map[string]domain.TripStatus)
+	s.lastLocation = nil
+	return nil
+}
+
 func TestTripServiceCreate(t *testing.T) {
 	repo := newStubRepo()
 	service := domain.NewTripService(repo, nil, nil)

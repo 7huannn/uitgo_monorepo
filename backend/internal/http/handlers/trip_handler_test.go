@@ -301,6 +301,10 @@ func cloneTrip(src *domain.Trip) *domain.Trip {
 	return &copyTrip
 }
 
+func (f *fakeTripRepo) PurgeAll() error {
+	return nil
+}
+
 func uuidLike() string {
 	return time.Now().Format("20060102150405.000000")
 }

@@ -17,17 +17,23 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 print_step() {
+    local message="$1"
     echo -e "\n${BLUE}════════════════════════════════════════════════════════════${NC}"
-    echo -e "${BLUE}$1${NC}"
+    echo -e "${BLUE}${message}${NC}"
     echo -e "${BLUE}════════════════════════════════════════════════════════════${NC}\n"
+    return 0
 }
 
 print_cmd() {
-    echo -e "${GREEN}▶ $1${NC}"
+    local message="$1"
+    echo -e "${GREEN}▶ ${message}${NC}"
+    return 0
 }
 
 print_info() {
-    echo -e "${YELLOW}ℹ $1${NC}"
+    local message="$1"
+    echo -e "${YELLOW}ℹ ${message}${NC}"
+    return 0
 }
 
 # =============================================================================
@@ -39,11 +45,13 @@ echo "Kiểm tra các tools đã cài đặt:"
 echo ""
 
 check_tool() {
-    if command -v $1 &> /dev/null; then
-        echo -e "   $1: $(which $1)"
+    local tool="$1"
+    if command -v "$tool" &> /dev/null; then
+        echo -e "   ${tool}: $(which "$tool")"
     else
-        echo -e "   $1: Chưa cài đặt"
+        echo -e "   ${tool}: Chưa cài đặt"
     fi
+    return 0
 }
 
 check_tool docker

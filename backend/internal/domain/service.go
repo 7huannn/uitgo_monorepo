@@ -122,7 +122,7 @@ func (s *TripService) List(ctx context.Context, userID, role string, limit, offs
 }
 
 // PurgeAll removes all trips and related events (dev/demo cleanup).
-func (s *TripService) PurgeAll(ctx context.Context) error {
+func (s *TripService) PurgeAll(_ context.Context) error {
 	if s.repo == nil {
 		return errors.New("trip repo not configured")
 	}

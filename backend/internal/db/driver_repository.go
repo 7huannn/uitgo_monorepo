@@ -13,6 +13,12 @@ import (
 	"uitgo/backend/internal/domain"
 )
 
+// Query conditions
+const (
+	queryByID     = "id = ?"
+	queryByUserID = "user_id = ?"
+)
+
 type driverRepository struct {
 	db *gorm.DB
 }
@@ -124,7 +130,7 @@ func (r *driverRepository) FindByID(ctx context.Context, id string) (*domain.Dri
 	var model driverModel
 	if err := r.db.WithContext(ctx).
 		Preload("Vehicle").
-		First(&model, "id = ?", uid).Error; err != nil {
+		First(&model, queryByID, uid).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, domain.ErrDriverNotFound
 		}
@@ -141,7 +147,7 @@ func (r *driverRepository) FindByUserID(ctx context.Context, userID string) (*do
 	var model driverModel
 	if err := r.db.WithContext(ctx).
 		Preload("Vehicle").
-		First(&model, "user_id = ?", uid).Error; err != nil {
+		First(&model, queryByUserID, uid).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, domain.ErrDriverNotFound
 		}
@@ -155,7 +161,7 @@ func (r *driverRepository) DeleteByID(ctx context.Context, driverID string) erro
 	if err != nil {
 		return domain.ErrDriverNotFound
 	}
-	res := r.db.WithContext(ctx).Delete(&driverModel{}, "id = ?", uid)
+	res := r.db.WithContext(ctx).Delete(&driverModel{}, queryByID, uid)
 	if res.Error != nil {
 		return res.Error
 	}
@@ -225,35 +231,39 @@ func (r *driverRepository) SaveVehicle(ctx context.Context, vehicle *domain.Vehi
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
+
 	var existing vehicleModel
 	err = r.db.WithContext(ctx).Where("driver_id = ?", driverUID).First(&existing).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		model := vehicleModel{
-			ID:          uuid.New(),
-			DriverID:    driverUID,
-			Make:        vehicle.Make,
-			Model:       vehicle.Model,
-			Color:       vehicle.Color,
-			Year:        vehicle.Year,
-			PlateNumber: vehicle.PlateNumber,
-			CreatedAt:   now,
-			UpdatedAt:   now,
-		}
-		if err := r.db.WithContext(ctx).Create(&model).Error; err != nil {
-			if errors.Is(err, gorm.ErrDuplicatedKey) || isUniqueViolation(err) {
-				return nil, domain.ErrVehicleAlreadyExists
-			}
-			return nil, err
-		}
-		return toVehicleDomain(&model), nil
+		return r.createVehicle(ctx, driverUID, vehicle)
 	}
 	if err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) || isUniqueViolation(err) {
-			return nil, domain.ErrVehicleAlreadyExists
-		}
-		return nil, err
+		return nil, wrapDuplicateVehicleError(err)
 	}
+	return r.updateVehicle(ctx, driverUID, vehicle)
+}
+
+func (r *driverRepository) createVehicle(ctx context.Context, driverUID uuid.UUID, vehicle *domain.Vehicle) (*domain.Vehicle, error) {
+	now := time.Now().UTC()
+	model := vehicleModel{
+		ID:          uuid.New(),
+		DriverID:    driverUID,
+		Make:        vehicle.Make,
+		Model:       vehicle.Model,
+		Color:       vehicle.Color,
+		Year:        vehicle.Year,
+		PlateNumber: vehicle.PlateNumber,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := r.db.WithContext(ctx).Create(&model).Error; err != nil {
+		return nil, wrapDuplicateVehicleError(err)
+	}
+	return toVehicleDomain(&model), nil
+}
+
+func (r *driverRepository) updateVehicle(ctx context.Context, driverUID uuid.UUID, vehicle *domain.Vehicle) (*domain.Vehicle, error) {
+	now := time.Now().UTC()
 	updates := map[string]any{
 		"make":         vehicle.Make,
 		"model":        vehicle.Model,
@@ -265,15 +275,20 @@ func (r *driverRepository) SaveVehicle(ctx context.Context, vehicle *domain.Vehi
 	if err := r.db.WithContext(ctx).Model(&vehicleModel{}).
 		Where("driver_id = ?", driverUID).
 		Updates(updates).Error; err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) || isUniqueViolation(err) {
-			return nil, domain.ErrVehicleAlreadyExists
-		}
-		return nil, err
+		return nil, wrapDuplicateVehicleError(err)
 	}
+	var existing vehicleModel
 	if err := r.db.WithContext(ctx).Where("driver_id = ?", driverUID).First(&existing).Error; err != nil {
 		return nil, err
 	}
 	return toVehicleDomain(&existing), nil
+}
+
+func wrapDuplicateVehicleError(err error) error {
+	if errors.Is(err, gorm.ErrDuplicatedKey) || isUniqueViolation(err) {
+		return domain.ErrVehicleAlreadyExists
+	}
+	return err
 }
 
 func (r *driverRepository) FindVehicle(ctx context.Context, driverID string) (*domain.Vehicle, error) {

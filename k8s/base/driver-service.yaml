@@ -23,6 +23,7 @@ spec:
         prometheus.io/path: "/metrics"
     spec:
       # SECURITY: Pod security context
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -30,7 +31,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: driver-service
-          image: uitgo/driver-service:latest
+          image: uitgo/driver-service:v1.0.0
           imagePullPolicy: IfNotPresent
           # SECURITY: Container security context
           securityContext:
@@ -84,9 +85,11 @@ spec:
             requests:
               memory: "64Mi"
               cpu: "50m"
+              ephemeral-storage: "100Mi"
             limits:
               memory: "256Mi"
               cpu: "500m"
+              ephemeral-storage: "500Mi"
 
 ---
 apiVersion: v1

@@ -27,6 +27,9 @@ except ImportError:
 RESULTS_DIR = Path(__file__).resolve().parents[1] / "results"
 REPORT_DIR = Path(__file__).resolve().parents[1] / "report"
 
+# Common labels
+LABEL_TARGET_RPS = "Target RPS"
+
 
 @dataclass
 class TestResult:
@@ -159,73 +162,106 @@ def generate_markdown_report(results: List[TestResult]) -> str:
     md.append("---\n")
     
     # Group by test type
-    test_types = set(r.test_type for r in results)
+    test_types = {r.test_type for r in results}
     
     for test_type in sorted(test_types):
         test_results = [r for r in results if r.test_type == test_type]
-        
-        md.append(f"\n## {test_type.replace('_', ' ').title()}\n")
-        
-        # Sort by environment and RPS
-        test_results.sort(key=lambda r: (r.environment, r.rps_target))
-        
-        # Create comparison table
-        md.append("| Environment | RPS Target | RPS Achieved | P50 (ms) | P95 (ms) | P99 (ms) | Avg (ms) | Max (ms) | Error % | Total Req |")
-        md.append("|-------------|------------|--------------|----------|----------|----------|----------|----------|---------|-----------|")
-        
-        for result in test_results:
-            md.append(
-                f"| {result.environment:11} "
-                f"| {result.rps_target:10} "
-                f"| {result.rps_achieved:12.2f} "
-                f"| {result.p50_latency:8.2f} "
-                f"| {result.p95_latency:8.2f} "
-                f"| {result.p99_latency:8.2f} "
-                f"| {result.avg_latency:8.2f} "
-                f"| {result.max_latency:8.2f} "
-                f"| {result.error_rate:7.3f} "
-                f"| {result.total_requests:9} |"
-            )
-        
-        # Calculate differences between local and AWS
-        local_results = [r for r in test_results if r.environment == 'local']
-        aws_results = [r for r in test_results if r.environment == 'aws']
-        
-        if local_results and aws_results:
-            md.append("\n### Performance Comparison\n")
-            
-            for local, aws in zip(local_results, aws_results):
-                if local.rps_target == aws.rps_target:
-                    rps = local.rps_target if local.rps_target > 0 else "N/A"
-                    
-                    p95_diff = aws.p95_latency - local.p95_latency
-                    p95_pct = (p95_diff / local.p95_latency * 100) if local.p95_latency > 0 else 0
-                    
-                    error_diff = aws.error_rate - local.error_rate
-                    
-                    md.append(f"\n**RPS {rps}:**")
-                    md.append(f"- P95 Latency: AWS is {p95_diff:+.2f}ms ({p95_pct:+.1f}%) vs Local")
-                    md.append(f"- Error Rate: AWS {aws.error_rate:.3f}% vs Local {local.error_rate:.3f}% (Δ {error_diff:+.3f}%)")
-                    md.append(f"- Throughput: AWS achieved {aws.rps_achieved:.1f} RPS vs Local {local.rps_achieved:.1f} RPS")
-                    
-                    # Add insights
-                    if p95_diff > 100:
-                        md.append(f"  - ⚠️ **High network latency**: AWS adds {p95_diff:.0f}ms overhead")
-                    elif p95_diff < 50:
-                        md.append(f"  - ✅ **Good network performance**: Only {p95_diff:.0f}ms overhead")
-                    
-                    if error_diff > 1:
-                        md.append(f"  - ⚠️ **Higher error rate on AWS**: Investigate infrastructure issues")
-                    elif error_diff < 0.1:
-                        md.append(f"  - ✅ **Stable error rates**: Infrastructure is reliable")
+        _append_test_type_section(md, test_type, test_results)
     
     # Summary section
+    _append_summary_section(md, results)
+    
+    # Recommendations
+    _append_recommendations_section(md, results)
+    
+    md.append("\n---")
+    md.append("\n*For detailed metrics, see `summary.csv` and individual JSON files in `loadtests/results/`*\n")
+    
+    return "\n".join(md)
+
+
+def _append_test_type_section(md: List[str], test_type: str, test_results: List[TestResult]) -> None:
+    """Append test type section to markdown report."""
+    md.append(f"\n## {test_type.replace('_', ' ').title()}\n")
+    
+    # Sort by environment and RPS
+    test_results.sort(key=lambda r: (r.environment, r.rps_target))
+    
+    # Create comparison table
+    md.append("| Environment | RPS Target | RPS Achieved | P50 (ms) | P95 (ms) | P99 (ms) | Avg (ms) | Max (ms) | Error % | Total Req |")
+    md.append("|-------------|------------|--------------|----------|----------|----------|----------|----------|---------|-----------|")
+    
+    for result in test_results:
+        md.append(
+            f"| {result.environment:11} "
+            f"| {result.rps_target:10} "
+            f"| {result.rps_achieved:12.2f} "
+            f"| {result.p50_latency:8.2f} "
+            f"| {result.p95_latency:8.2f} "
+            f"| {result.p99_latency:8.2f} "
+            f"| {result.avg_latency:8.2f} "
+            f"| {result.max_latency:8.2f} "
+            f"| {result.error_rate:7.3f} "
+            f"| {result.total_requests:9} |"
+        )
+    
+    # Calculate differences between local and AWS
+    local_results = [r for r in test_results if r.environment == 'local']
+    aws_results = [r for r in test_results if r.environment == 'aws']
+    
+    if local_results and aws_results:
+        _append_performance_comparison(md, local_results, aws_results)
+
+
+def _append_performance_comparison(md: List[str], local_results: List[TestResult], aws_results: List[TestResult]) -> None:
+    """Append performance comparison between local and AWS results."""
+    md.append("\n### Performance Comparison\n")
+    
+    for local, aws in zip(local_results, aws_results):
+        if local.rps_target != aws.rps_target:
+            continue
+        _append_rps_comparison(md, local, aws)
+
+
+def _append_rps_comparison(md: List[str], local: TestResult, aws: TestResult) -> None:
+    """Append comparison for a specific RPS target."""
+    rps = local.rps_target if local.rps_target > 0 else "N/A"
+    
+    p95_diff = aws.p95_latency - local.p95_latency
+    p95_pct = (p95_diff / local.p95_latency * 100) if local.p95_latency > 0 else 0
+    
+    error_diff = aws.error_rate - local.error_rate
+    
+    md.append(f"\n**RPS {rps}:**")
+    md.append(f"- P95 Latency: AWS is {p95_diff:+.2f}ms ({p95_pct:+.1f}%) vs Local")
+    md.append(f"- Error Rate: AWS {aws.error_rate:.3f}% vs Local {local.error_rate:.3f}% (Δ {error_diff:+.3f}%)")
+    md.append(f"- Throughput: AWS achieved {aws.rps_achieved:.1f} RPS vs Local {local.rps_achieved:.1f} RPS")
+    
+    _append_insights(md, p95_diff, error_diff)
+
+
+def _append_insights(md: List[str], p95_diff: float, error_diff: float) -> None:
+    """Append insights based on performance metrics."""
+    if p95_diff > 100:
+        md.append(f"  - ⚠️ **High network latency**: AWS adds {p95_diff:.0f}ms overhead")
+    elif p95_diff < 50:
+        md.append(f"  - ✅ **Good network performance**: Only {p95_diff:.0f}ms overhead")
+    
+    if error_diff > 1:
+        md.append("  - ⚠️ **Higher error rate on AWS**: Investigate infrastructure issues")
+    elif error_diff < 0.1:
+        md.append("  - ✅ **Stable error rates**: Infrastructure is reliable")
+
+
+def _append_summary_section(md: List[str], results: List[TestResult]) -> None:
+    """Append summary section to markdown report."""
     md.append("\n---\n")
     md.append("## Summary\n")
     
     all_local = [r for r in results if r.environment == 'local']
     all_aws = [r for r in results if r.environment == 'aws']
     
+    avg_local_p95 = 0.0
     if all_local:
         avg_local_p95 = sum(r.p95_latency for r in all_local) / len(all_local)
         avg_local_error = sum(r.error_rate for r in all_local) / len(all_local)
@@ -238,39 +274,53 @@ def generate_markdown_report(results: List[TestResult]) -> str:
         md.append(f"- **AWS Average P95**: {avg_aws_p95:.2f}ms")
         md.append(f"- **AWS Average Error Rate**: {avg_aws_error:.3f}%")
         
-        if all_local:
+        if all_local and avg_local_p95 > 0:
             overhead = avg_aws_p95 - avg_local_p95
-            overhead_pct = (overhead / avg_local_p95 * 100) if avg_local_p95 > 0 else 0
+            overhead_pct = (overhead / avg_local_p95 * 100)
             md.append(f"- **Network Overhead**: {overhead:.2f}ms ({overhead_pct:.1f}%)")
-    
-    # Recommendations
+
+
+def _append_recommendations_section(md: List[str], results: List[TestResult]) -> None:
+    """Append recommendations section to markdown report."""
     md.append("\n## Recommendations\n")
     
-    if all_aws:
-        max_error = max(r.error_rate for r in all_aws)
-        max_p95 = max(r.p95_latency for r in all_aws)
-        
-        if max_error > 1:
-            md.append("- ⚠️ **High Error Rate**: Error rate exceeds 1%. Investigate:")
-            md.append("  - Database connection pool size")
-            md.append("  - Rate limiting configuration")
-            md.append("  - Resource exhaustion (CPU/Memory)")
-        
-        if max_p95 > 500:
-            md.append("- ⚠️ **High Latency**: P95 exceeds 500ms. Consider:")
-            md.append("  - Adding Redis caching")
-            md.append("  - Database query optimization")
-            md.append("  - Horizontal scaling (more instances)")
-        
-        if max_error < 0.1 and max_p95 < 200:
-            md.append("- ✅ **Excellent Performance**: System is production-ready")
-            md.append("  - Consider testing at higher load levels")
-            md.append("  - Run soak tests for stability validation")
+    all_aws = [r for r in results if r.environment == 'aws']
     
-    md.append("\n---")
-    md.append("\n*For detailed metrics, see `summary.csv` and individual JSON files in `loadtests/results/`*\n")
+    if not all_aws:
+        return
     
-    return "\n".join(md)
+    max_error = max(r.error_rate for r in all_aws)
+    max_p95 = max(r.p95_latency for r in all_aws)
+    
+    _append_error_recommendations(md, max_error)
+    _append_latency_recommendations(md, max_p95)
+    _append_success_recommendations(md, max_error, max_p95)
+
+
+def _append_error_recommendations(md: List[str], max_error: float) -> None:
+    """Append error rate recommendations."""
+    if max_error > 1:
+        md.append("- ⚠️ **High Error Rate**: Error rate exceeds 1%. Investigate:")
+        md.append("  - Database connection pool size")
+        md.append("  - Rate limiting configuration")
+        md.append("  - Resource exhaustion (CPU/Memory)")
+
+
+def _append_latency_recommendations(md: List[str], max_p95: float) -> None:
+    """Append latency recommendations."""
+    if max_p95 > 500:
+        md.append("- ⚠️ **High Latency**: P95 exceeds 500ms. Consider:")
+        md.append("  - Adding Redis caching")
+        md.append("  - Database query optimization")
+        md.append("  - Horizontal scaling (more instances)")
+
+
+def _append_success_recommendations(md: List[str], max_error: float, max_p95: float) -> None:
+    """Append success recommendations."""
+    if max_error < 0.1 and max_p95 < 200:
+        md.append("- ✅ **Excellent Performance**: System is production-ready")
+        md.append("  - Consider testing at higher load levels")
+        md.append("  - Run soak tests for stability validation")
 
 
 def generate_charts(results: List[TestResult]):
@@ -327,7 +377,7 @@ def generate_charts(results: List[TestResult]):
     ax1 = axes[0, 0]
     ax1.plot(local_rps, local_p95, 'o-', label='Local', linewidth=2, markersize=8)
     ax1.plot(aws_rps, aws_p95, 's-', label='AWS', linewidth=2, markersize=8)
-    ax1.set_xlabel('Target RPS', fontsize=12)
+    ax1.set_xlabel(LABEL_TARGET_RPS, fontsize=12)
     ax1.set_ylabel('P95 Latency (ms)', fontsize=12)
     ax1.set_title('P95 Latency Comparison', fontsize=13, fontweight='bold')
     ax1.legend()
@@ -339,7 +389,7 @@ def generate_charts(results: List[TestResult]):
     width = 0.35
     ax2.bar(x - width/2, local_achieved, width, label='Local', alpha=0.8)
     ax2.bar(x + width/2, aws_achieved, width, label='AWS', alpha=0.8)
-    ax2.set_xlabel('Target RPS', fontsize=12)
+    ax2.set_xlabel(LABEL_TARGET_RPS, fontsize=12)
     ax2.set_ylabel('Achieved RPS', fontsize=12)
     ax2.set_title('Throughput Comparison', fontsize=13, fontweight='bold')
     ax2.set_xticks(x)
@@ -351,7 +401,7 @@ def generate_charts(results: List[TestResult]):
     ax3 = axes[1, 0]
     ax3.plot(local_rps, local_errors, 'o-', label='Local', linewidth=2, markersize=8)
     ax3.plot(aws_rps, aws_errors, 's-', label='AWS', linewidth=2, markersize=8)
-    ax3.set_xlabel('Target RPS', fontsize=12)
+    ax3.set_xlabel(LABEL_TARGET_RPS, fontsize=12)
     ax3.set_ylabel('Error Rate (%)', fontsize=12)
     ax3.set_title('Error Rate Comparison', fontsize=13, fontweight='bold')
     ax3.legend()
@@ -361,7 +411,7 @@ def generate_charts(results: List[TestResult]):
     ax4 = axes[1, 1]
     overhead = [aws - local for aws, local in zip(aws_p95, local_p95)]
     ax4.bar(local_rps, overhead, alpha=0.8, color='coral')
-    ax4.set_xlabel('Target RPS', fontsize=12)
+    ax4.set_xlabel(LABEL_TARGET_RPS, fontsize=12)
     ax4.set_ylabel('Network Overhead (ms)', fontsize=12)
     ax4.set_title('AWS Network Overhead (P95)', fontsize=13, fontweight='bold')
     ax4.grid(True, alpha=0.3, axis='y')
@@ -411,7 +461,7 @@ def main():
     print("\n" + "="*60)
     print("✓ Comparison report generated successfully!")
     print("="*60)
-    print(f"\nView reports:")
+    print("\nView reports:")
     print(f"  - Markdown: {md_path}")
     print(f"  - Charts: {REPORT_DIR / 'comparison_charts.png'}")
     print(f"\nTo view in terminal: cat {md_path}")

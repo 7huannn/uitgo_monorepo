@@ -16,10 +16,13 @@ Output:
 import json
 import re
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import numpy as np
+
+# Metric keys
+METRIC_KEY_P95 = "p(95)"
 
 
 def parse_env_and_rps(path: Path) -> Tuple[str, int]:
@@ -29,15 +32,15 @@ def parse_env_and_rps(path: Path) -> Tuple[str, int]:
     return env, rps
 
 
-def extract_p95(data: Dict) -> float:
+def extract_p95(data: Dict) -> Optional[float]:
     metrics = data.get("metrics", {})
     duration = metrics.get("http_req_duration", {}) or {}
     trend = duration.get("trend") if isinstance(duration, dict) else {}
 
-    if isinstance(duration, dict) and "p(95)" in duration:
-        return duration["p(95)"]
+    if isinstance(duration, dict) and METRIC_KEY_P95 in duration:
+        return duration[METRIC_KEY_P95]
     if isinstance(trend, dict):
-        return trend.get("p(95)")
+        return trend.get(METRIC_KEY_P95)
     return None
 
 
@@ -54,7 +57,7 @@ def load_k6_results(results_dir: Path) -> Dict[str, List[Tuple[int, float]]]:
         if p95 is None:
             continue
         series.setdefault(env, []).append((rps, p95))
-    for env in list(series.keys()):
+    for env in series:
         series[env].sort()
     return {k: v for k, v in series.items() if v}
 

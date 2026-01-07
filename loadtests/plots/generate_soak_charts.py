@@ -100,7 +100,7 @@ def plot_soak_comparison():
         aws_metrics = {'p50': 175, 'p95': 295, 'p99': 420, 'error_rate': 0.8, 'duration': 90}
     
     # Create comparison chart
-    fig, axes = plt.subplots(1, 2, figsize=(12, 6), constrained_layout=True)
+    _, axes = plt.subplots(1, 2, figsize=(12, 6), constrained_layout=True)
     
     # Chart 1: Latency Comparison
     ax1 = axes[0]
@@ -174,7 +174,7 @@ def plot_soak_comparison():
 def plot_network_overhead():
     """Show network latency impact (Local vs AWS)"""
     
-    fig, ax = plt.subplots(figsize=(10, 6), constrained_layout=True)
+    _, ax = plt.subplots(figsize=(10, 6), constrained_layout=True)
     
     components = ['Service\nProcessing', 'Database\nQuery', 'Network\nOverhead', 'Total\nLatency']
     local_times = [50, 45, 0, 95]  # Local has no network overhead
@@ -227,8 +227,8 @@ def main():
     print(f"📂 Output directory: {OUTPUT_DIR}")
     print()
     print("📝 Add to LaTeX report:")
-    print("   \\includegraphics[width=0.95\\textwidth]{assets/soak_aws_comparison.png}")
-    print("   \\includegraphics[width=0.85\\textwidth]{assets/network_overhead_comparison.png}")
+    print(r"   \includegraphics[width=0.95\textwidth]{assets/soak_aws_comparison.png}")
+    print(r"   \includegraphics[width=0.85\textwidth]{assets/network_overhead_comparison.png}")
 
 if __name__ == '__main__':
     main()

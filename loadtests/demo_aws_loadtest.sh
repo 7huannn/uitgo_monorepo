@@ -28,17 +28,23 @@ TEST_EMAIL="test.rider@example.com"
 TEST_PASSWORD="test123456"
 
 log_step() {
+    local message="$1"
     echo ""
-    echo -e "${COLOR_BLUE}▶ $1${COLOR_RESET}"
+    echo -e "${COLOR_BLUE}▶ ${message}${COLOR_RESET}"
     echo "─────────────────────────────────────────────────────────"
+    return 0
 }
 
 log_success() {
-    echo -e "${COLOR_GREEN}✓ $1${COLOR_RESET}"
+    local message="$1"
+    echo -e "${COLOR_GREEN}✓ ${message}${COLOR_RESET}"
+    return 0
 }
 
 log_info() {
-    echo -e "${COLOR_YELLOW}ℹ $1${COLOR_RESET}"
+    local message="$1"
+    echo -e "${COLOR_YELLOW}ℹ ${message}${COLOR_RESET}"
+    return 0
 }
 
 # Check if backend is running
@@ -84,7 +90,7 @@ ACCESS_TOKEN=$(curl -s -X POST "$LOCAL_API_BASE/auth/login" \
     -d "{\"email\":\"$TEST_EMAIL\",\"password\":\"$TEST_PASSWORD\"}" \
     | python3 -c "import sys, json; print(json.load(sys.stdin).get('accessToken', ''))" 2>/dev/null)
 
-if [ -z "$ACCESS_TOKEN" ]; then
+if [[ -z "$ACCESS_TOKEN" ]]; then
     echo "❌ Failed to get access token"
     echo ""
     echo "Please create a test user first:"
@@ -169,11 +175,11 @@ echo ""
 echo -e "${COLOR_YELLOW}📊 Generated Reports:${COLOR_RESET}"
 echo ""
 
-if [ -f "loadtests/report/summary.md" ]; then
+if [[ -f "loadtests/report/summary.md" ]]; then
     echo "   📄 Summary Report: loadtests/report/summary.md"
 fi
 
-if [ -f "loadtests/report/comparison.md" ]; then
+if [[ -f "loadtests/report/comparison.md" ]]; then
     echo "   📄 Comparison Report: loadtests/report/comparison.md"
     echo ""
     echo -e "${COLOR_CYAN}Preview of Comparison Report:${COLOR_RESET}"
@@ -182,7 +188,7 @@ if [ -f "loadtests/report/comparison.md" ]; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 fi
 
-if [ -f "loadtests/report/comparison_charts.png" ]; then
+if [[ -f "loadtests/report/comparison_charts.png" ]]; then
     echo ""
     echo "   📊 Charts: loadtests/report/comparison_charts.png"
 fi

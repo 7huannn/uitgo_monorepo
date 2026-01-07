@@ -66,6 +66,7 @@ spec:
       labels:
         app: grafana
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: grafana
           image: grafana/grafana:10.2.2
@@ -116,9 +117,11 @@ spec:
             requests:
               memory: "128Mi"
               cpu: "100m"
+              ephemeral-storage: "100Mi"
             limits:
               memory: "256Mi"
               cpu: "500m"
+              ephemeral-storage: "500Mi"
           livenessProbe:
             httpGet:
               path: /api/health

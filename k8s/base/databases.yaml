@@ -19,6 +19,7 @@ spec:
       labels:
         app: user-db
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: postgres
           image: postgres:15-alpine
@@ -54,9 +55,11 @@ spec:
             requests:
               memory: "128Mi"
               cpu: "100m"
+              ephemeral-storage: "100Mi"
             limits:
               memory: "512Mi"
               cpu: "500m"
+              ephemeral-storage: "1Gi"
   volumeClaimTemplates:
     - metadata:
         name: user-db-data
@@ -104,6 +107,7 @@ spec:
       labels:
         app: trip-db
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: postgres
           image: postgres:15-alpine
@@ -139,9 +143,11 @@ spec:
             requests:
               memory: "128Mi"
               cpu: "100m"
+              ephemeral-storage: "100Mi"
             limits:
               memory: "512Mi"
               cpu: "500m"
+              ephemeral-storage: "1Gi"
   volumeClaimTemplates:
     - metadata:
         name: trip-db-data
@@ -189,6 +195,7 @@ spec:
       labels:
         app: driver-db
     spec:
+      automountServiceAccountToken: false
       containers:
         - name: postgres
           image: postgres:15-alpine
@@ -224,9 +231,11 @@ spec:
             requests:
               memory: "128Mi"
               cpu: "100m"
+              ephemeral-storage: "100Mi"
             limits:
               memory: "512Mi"
               cpu: "500m"
+              ephemeral-storage: "1Gi"
   volumeClaimTemplates:
     - metadata:
         name: driver-db-data

@@ -97,9 +97,11 @@ spec:
             requests:
               memory: "64Mi"
               cpu: "50m"
+              ephemeral-storage: "100Mi"
             limits:
               memory: "128Mi"
               cpu: "200m"
+              ephemeral-storage: "500Mi"
       volumes:
         - name: config
           configMap:

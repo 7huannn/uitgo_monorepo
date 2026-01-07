@@ -16,6 +16,7 @@ echo ""
 # Function to check ALB health
 check_health() {
     curl -s -o /dev/null -w "%{http_code}" "${AWS_API}/health" 2>/dev/null || echo "000"
+    return 0
 }
 
 # Wait for ALB to be healthy
@@ -23,14 +24,14 @@ echo "⏳ Waiting for AWS infrastructure to be ready..."
 for i in $(seq 1 $MAX_RETRIES); do
     HTTP_CODE=$(check_health)
     
-    if [ "$HTTP_CODE" = "200" ]; then
+    if [[ "$HTTP_CODE" = "200" ]]; then
         echo "✅ ALB is healthy!"
         break
     fi
     
     echo "   Attempt $i/$MAX_RETRIES: HTTP $HTTP_CODE - Retrying in ${RETRY_INTERVAL}s..."
     
-    if [ $i -eq $MAX_RETRIES ]; then
+    if [[ $i -eq $MAX_RETRIES ]]; then
         echo "❌ Failed to reach ALB after $MAX_RETRIES attempts"
         echo "   Check EC2 instances and Docker logs manually"
         exit 1
@@ -62,7 +63,7 @@ TOKEN=$(curl -s -X POST ${AWS_API}/auth/login \
     -H "Content-Type: application/json" \
     -d '{"email":"awstest@uitgo.com","password":"test123456"}' | jq -r '.accessToken')
 
-if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+if [[ -z "$TOKEN" || "$TOKEN" = "null" ]]; then
     echo "   ❌ Failed to get access token"
     exit 1
 fi

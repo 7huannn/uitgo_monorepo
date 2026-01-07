@@ -374,23 +374,51 @@ func (h *AuthHandler) RegisterDriver(c *gin.Context) {
 	req.Name = strings.TrimSpace(req.Name)
 	req.Phone = strings.TrimSpace(req.Phone)
 
+	if err := h.validateDriverRegistration(c, req); err != nil {
+		return // Response already sent by validateDriverRegistration
+	}
+
+	user, err := h.createDriverUser(c, req)
+	if err != nil {
+		return // Response already sent by createDriverUser
+	}
+
+	if err := h.createDriverProfile(c, user, req); err != nil {
+		return // Response already sent by createDriverProfile
+	}
+
+	accessToken, refreshToken, err := h.issueSession(c.Request.Context(), user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, h.buildAuthResponse(user, accessToken, refreshToken))
+}
+
+func (h *AuthHandler) validateDriverRegistration(c *gin.Context, req registerDriverRequest) error {
 	if h.jwtSecret == "" {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "jwt secret not configured"})
-		return
+		return errors.New("jwt secret not configured")
 	}
 
-	if existing, err := h.users.FindByEmail(c.Request.Context(), req.Email); err == nil && existing != nil {
+	existing, err := h.users.FindByEmail(c.Request.Context(), req.Email)
+	if err == nil && existing != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
-		return
-	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check existing user"})
-		return
+		return errors.New("email already registered")
 	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check existing user"})
+		return err
+	}
+	return nil
+}
 
+func (h *AuthHandler) createDriverUser(c *gin.Context, req registerDriverRequest) (*domain.User, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
-		return
+		return nil, err
 	}
 
 	user := &domain.User{
@@ -403,12 +431,15 @@ func (h *AuthHandler) RegisterDriver(c *gin.Context) {
 	if err := h.users.Create(c.Request.Context(), user); err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
-			return
+			return nil, err
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create user"})
-		return
+		return nil, err
 	}
+	return user, nil
+}
 
+func (h *AuthHandler) createDriverProfile(c *gin.Context, user *domain.User, req registerDriverRequest) error {
 	driverInput := domain.DriverRegistrationInput{
 		FullName:      req.Name,
 		Phone:         req.Phone,
@@ -424,31 +455,24 @@ func (h *AuthHandler) RegisterDriver(c *gin.Context) {
 	}
 
 	if _, err := h.driverService.Register(c.Request.Context(), user.ID, driverInput); err != nil {
-		status := http.StatusInternalServerError
-		msg := "failed to create driver profile"
-		if errors.Is(err, domain.ErrDriverAlreadyExists) {
-			status = http.StatusConflict
-			msg = "driver already exists"
-		}
-		if errors.Is(err, domain.ErrVehicleAlreadyExists) {
-			status = http.StatusConflict
-			msg = "vehicle already exists"
-		}
-		// Surface the underlying error for easier debugging in non-conflict cases.
-		if status == http.StatusInternalServerError {
-			msg = err.Error()
-		}
-		c.JSON(status, gin.H{"error": msg})
-		return
+		h.handleDriverRegistrationError(c, err)
+		return err
 	}
+	return nil
+}
 
-	accessToken, refreshToken, err := h.issueSession(c.Request.Context(), user)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
-		return
+func (h *AuthHandler) handleDriverRegistrationError(c *gin.Context, err error) {
+	status := http.StatusInternalServerError
+	msg := err.Error()
+	if errors.Is(err, domain.ErrDriverAlreadyExists) {
+		status = http.StatusConflict
+		msg = "driver already exists"
 	}
-
-	c.JSON(http.StatusCreated, h.buildAuthResponse(user, accessToken, refreshToken))
+	if errors.Is(err, domain.ErrVehicleAlreadyExists) {
+		status = http.StatusConflict
+		msg = "vehicle already exists"
+	}
+	c.JSON(status, gin.H{"error": msg})
 }
 
 func (h *AuthHandler) issueSession(ctx context.Context, user *domain.User) (string, string, error) {

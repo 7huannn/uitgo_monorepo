@@ -17,17 +17,20 @@ import (
 	"uitgo/backend/trip_service/internal/server"
 )
 
-const containerMigrationsPath = "/app/migrations"
+const (
+	containerMigrationsPath = "/app/migrations"
+	serviceName             = "trip-service"
+)
 
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
-	logging.Configure(cfg.LogFormat, "trip-service")
-	flushSentry := observability.InitSentry(cfg.SentryDSN, "trip-service")
+	logging.Configure(cfg.LogFormat, serviceName)
+	flushSentry := observability.InitSentry(cfg.SentryDSN, serviceName)
 	defer flushSentry()
-	shutdownTracer := observability.InitTracing(context.Background(), "trip-service", cfg.TracingEndpoint)
+	shutdownTracer := observability.InitTracing(context.Background(), serviceName, cfg.TracingEndpoint)
 	defer shutdownTracer(context.Background())
 
 	pool, err := db.Connect(cfg.DatabaseURL)
@@ -38,7 +41,7 @@ func main() {
 	if err := db.Migrate(pool, resolveMigrationsPath()); err != nil {
 		log.Fatalf("run migrations: %v", err)
 	}
-	log.Println("trip-service migrations applied")
+	log.Println(serviceName + " migrations applied")
 
 	sqlDB, err := pool.DB()
 	if err != nil {

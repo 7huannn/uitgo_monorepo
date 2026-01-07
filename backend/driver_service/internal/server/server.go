@@ -23,6 +23,8 @@ import (
 	"uitgo/backend/internal/observability"
 )
 
+const driverServiceName = "driver-service"
+
 // Server hosts the driver-service HTTP API.
 type Server struct {
 	engine      *gin.Engine
@@ -31,42 +33,53 @@ type Server struct {
 	queueCancel context.CancelFunc
 }
 
-// New builds the server with driver/profile routes and internal hooks.
-func New(cfg *config.Config, db *gorm.DB, tripSync domain.TripSyncRepository) (*Server, error) {
-	const serviceName = "driver-service"
+// setupRouter creates and configures the gin router with middleware.
+func setupRouter(cfg *config.Config, db *gorm.DB) *gin.Engine {
 	router := gin.New()
 	gin.DisableConsoleColor()
-	router.Use(otelgin.Middleware(serviceName))
-	router.Use(middleware.JSONLogger(serviceName))
+	router.Use(otelgin.Middleware(driverServiceName))
+	router.Use(middleware.JSONLogger(driverServiceName))
 	router.Use(observability.GinMiddleware())
 	router.Use(gin.Recovery())
 	router.Use(middleware.RequestID())
 	router.Use(middleware.Auth(cfg.JWTSecret, cfg.InternalAPIKey))
 
-	metrics := middleware.NewHTTPMetrics(serviceName, cfg.PrometheusEnabled)
+	metrics := middleware.NewHTTPMetrics(driverServiceName, cfg.PrometheusEnabled)
 	router.Use(metrics.Handler())
 
 	auditRepo := domain.NewAuditLogRepository(db)
 	router.Use(middleware.AuditLogger(auditRepo))
 
 	handlers.RegisterHealth(router)
+	metrics.Expose(router)
 
+	return router
+}
+
+// createDriverService initializes the driver service with all dependencies.
+func createDriverService(cfg *config.Config, db *gorm.DB) (*domain.DriverService, error) {
 	driverRepo := dbrepo.NewDriverRepository(db)
 	assignmentRepo := dbrepo.NewTripAssignmentRepository(db)
 	notificationRepo := dbrepo.NewNotificationRepository(db)
 	deviceTokenRepo := dbrepo.NewDeviceTokenRepository(db)
+
 	pushSender, err := notification.BuildSenderFromConfig(context.Background(), cfg)
 	if err != nil {
 		log.Printf("warn: unable to initialize FCM: %v", err)
 	}
 	notificationSvc := notification.NewService(notificationRepo, deviceTokenRepo, pushSender)
+
 	locator, err := location.NewGeoIndex(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB, "driver")
 	if err != nil {
 		return nil, fmt.Errorf("init redis geo index: %w", err)
 	}
-	driverService := domain.NewDriverService(driverRepo, assignmentRepo, tripSync, notificationSvc, locator)
 
-	matchQueue, err := matching.NewQueue(context.Background(), matching.QueueOptions{
+	return domain.NewDriverService(driverRepo, assignmentRepo, nil, notificationSvc, locator), nil
+}
+
+// createMatchQueue initializes the matching queue.
+func createMatchQueue(cfg *config.Config) matching.Queue {
+	queue, err := matching.NewQueue(context.Background(), matching.QueueOptions{
 		Backend:       cfg.MatchQueueBackend,
 		RedisAddr:     cfg.MatchQueueAddr,
 		RedisPassword: cfg.RedisPassword,
@@ -77,6 +90,18 @@ func New(cfg *config.Config, db *gorm.DB, tripSync domain.TripSyncRepository) (*
 	})
 	if err != nil {
 		log.Printf("warn: init trip queue failed: %v", err)
+		return nil
+	}
+	return queue
+}
+
+// New builds the server with driver/profile routes and internal hooks.
+func New(cfg *config.Config, db *gorm.DB, tripSync domain.TripSyncRepository) (*Server, error) {
+	router := setupRouter(cfg, db)
+
+	driverService, err := createDriverService(cfg, db)
+	if err != nil {
+		return nil, err
 	}
 
 	handlers.RegisterDriverRoutes(router, driverService)
@@ -86,14 +111,13 @@ func New(cfg *config.Config, db *gorm.DB, tripSync domain.TripSyncRepository) (*
 
 	registerInternalRoutes(router, cfg, driverService)
 
+	matchQueue := createMatchQueue(cfg)
 	var cancel context.CancelFunc
 	if matchQueue != nil {
 		ctx, c := context.WithCancel(context.Background())
 		cancel = c
 		go consumeTripQueue(ctx, matchQueue, driverService)
 	}
-
-	metrics.Expose(router)
 
 	return &Server{engine: router, cfg: cfg, queue: matchQueue, queueCancel: cancel}, nil
 }
@@ -116,93 +140,120 @@ func registerInternalRoutes(router gin.IRouter, cfg *config.Config, service *dom
 	group := router.Group("/internal")
 	group.Use(middleware.InternalOnly(cfg.InternalAPIKey))
 
-	group.POST("/drivers", func(c *gin.Context) {
-		var req struct {
-			UserID        string  `json:"userId" binding:"required"`
-			FullName      string  `json:"fullName" binding:"required"`
-			Phone         string  `json:"phone" binding:"required"`
-			LicenseNumber string  `json:"licenseNumber" binding:"required"`
-			AvatarURL     *string `json:"avatarUrl"`
-			Vehicle       *struct {
-				Make        string `json:"make"`
-				Model       string `json:"model"`
-				Color       string `json:"color"`
-				Year        int    `json:"year"`
-				PlateNumber string `json:"plateNumber"`
-			} `json:"vehicle"`
-		}
+	group.POST("/drivers", createDriverHandler(service))
+	group.POST("/driver-locations", recordLocationHandler(service))
+	group.DELETE("/trip-assignments", clearAssignmentsHandler(service))
+}
+
+type createDriverRequest struct {
+	UserID        string  `json:"userId" binding:"required"`
+	FullName      string  `json:"fullName" binding:"required"`
+	Phone         string  `json:"phone" binding:"required"`
+	LicenseNumber string  `json:"licenseNumber" binding:"required"`
+	AvatarURL     *string `json:"avatarUrl"`
+	Vehicle       *struct {
+		Make        string `json:"make"`
+		Model       string `json:"model"`
+		Color       string `json:"color"`
+		Year        int    `json:"year"`
+		PlateNumber string `json:"plateNumber"`
+	} `json:"vehicle"`
+}
+
+func createDriverHandler(service *domain.DriverService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req createDriverRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		input := domain.DriverRegistrationInput{
-			FullName:      req.FullName,
-			Phone:         req.Phone,
-			LicenseNumber: req.LicenseNumber,
-			AvatarURL:     req.AvatarURL,
-		}
-		if req.Vehicle != nil {
-			input.Vehicle = &domain.Vehicle{
-				Make:        req.Vehicle.Make,
-				Model:       req.Vehicle.Model,
-				Color:       req.Vehicle.Color,
-				Year:        req.Vehicle.Year,
-				PlateNumber: req.Vehicle.PlateNumber,
-			}
-		}
+		input := buildDriverRegistrationInput(req)
 		driver, err := service.Register(c.Request.Context(), req.UserID, input)
 		if err != nil {
-			status := http.StatusInternalServerError
-			if err == domain.ErrDriverAlreadyExists || err == domain.ErrVehicleAlreadyExists {
-				status = http.StatusConflict
-			}
-			c.JSON(status, gin.H{"error": err.Error()})
+			handleDriverRegistrationError(c, err)
 			return
 		}
 		c.JSON(http.StatusCreated, mapDriverResponse(driver))
-	})
+	}
+}
 
-	group.POST("/driver-locations", func(c *gin.Context) {
-		var req struct {
-			DriverID   string    `json:"driverId" binding:"required"`
-			Lat        float64   `json:"lat" binding:"required"`
-			Lng        float64   `json:"lng" binding:"required"`
-			Accuracy   *float64  `json:"accuracy"`
-			Heading    *float64  `json:"heading"`
-			Speed      *float64  `json:"speed"`
-			RecordedAt time.Time `json:"recordedAt"`
+func buildDriverRegistrationInput(req createDriverRequest) domain.DriverRegistrationInput {
+	input := domain.DriverRegistrationInput{
+		FullName:      req.FullName,
+		Phone:         req.Phone,
+		LicenseNumber: req.LicenseNumber,
+		AvatarURL:     req.AvatarURL,
+	}
+	if req.Vehicle != nil {
+		input.Vehicle = &domain.Vehicle{
+			Make:        req.Vehicle.Make,
+			Model:       req.Vehicle.Model,
+			Color:       req.Vehicle.Color,
+			Year:        req.Vehicle.Year,
+			PlateNumber: req.Vehicle.PlateNumber,
 		}
+	}
+	return input
+}
+
+func handleDriverRegistrationError(c *gin.Context, err error) {
+	status := http.StatusInternalServerError
+	if err == domain.ErrDriverAlreadyExists || err == domain.ErrVehicleAlreadyExists {
+		status = http.StatusConflict
+	}
+	c.JSON(status, gin.H{"error": err.Error()})
+}
+
+type recordLocationRequest struct {
+	DriverID   string    `json:"driverId" binding:"required"`
+	Lat        float64   `json:"lat" binding:"required"`
+	Lng        float64   `json:"lng" binding:"required"`
+	Accuracy   *float64  `json:"accuracy"`
+	Heading    *float64  `json:"heading"`
+	Speed      *float64  `json:"speed"`
+	RecordedAt time.Time `json:"recordedAt"`
+}
+
+func recordLocationHandler(service *domain.DriverService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req recordLocationRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		timestamp := req.RecordedAt
-		if timestamp.IsZero() {
-			timestamp = time.Now().UTC()
-		}
-		location := &domain.DriverLocation{
-			DriverID:   req.DriverID,
-			Latitude:   req.Lat,
-			Longitude:  req.Lng,
-			Accuracy:   req.Accuracy,
-			Heading:    req.Heading,
-			Speed:      req.Speed,
-			RecordedAt: timestamp,
-		}
+		location := buildDriverLocation(req)
 		if err := service.RecordLocation(c.Request.Context(), req.DriverID, location); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		c.Status(http.StatusAccepted)
-	})
+	}
+}
 
-	group.DELETE("/trip-assignments", func(c *gin.Context) {
+func buildDriverLocation(req recordLocationRequest) *domain.DriverLocation {
+	timestamp := req.RecordedAt
+	if timestamp.IsZero() {
+		timestamp = time.Now().UTC()
+	}
+	return &domain.DriverLocation{
+		DriverID:   req.DriverID,
+		Latitude:   req.Lat,
+		Longitude:  req.Lng,
+		Accuracy:   req.Accuracy,
+		Heading:    req.Heading,
+		Speed:      req.Speed,
+		RecordedAt: timestamp,
+	}
+}
+
+func clearAssignmentsHandler(service *domain.DriverService) gin.HandlerFunc {
+	return func(c *gin.Context) {
 		if err := service.ClearAssignments(c.Request.Context()); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
 		c.Status(http.StatusNoContent)
-	})
+	}
 }
 
 func consumeTripQueue(ctx context.Context, queue matching.TripConsumer, driverService *domain.DriverService) {

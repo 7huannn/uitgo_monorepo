@@ -13,6 +13,12 @@ import (
 	"uitgo/backend/internal/matching"
 )
 
+// Common error messages
+const (
+	errAuthRequired = "authentication required"
+	errTripNotFound = "trip not found"
+)
+
 // TripHandler wires HTTP endpoints for trips.
 type TripHandler struct {
 	service       *domain.TripService
@@ -218,14 +224,14 @@ func (h *TripHandler) getTrip(c *gin.Context) {
 	role := roleFromContext(c)
 
 	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": errAuthRequired})
 		return
 	}
 
 	trip, err := h.service.Fetch(c.Request.Context(), tripID)
 	if err != nil {
 		if errors.Is(err, domain.ErrTripNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "trip not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": errTripNotFound})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -253,7 +259,7 @@ func (h *TripHandler) updateTripStatus(c *gin.Context) {
 	role := roleFromContext(c)
 
 	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": errAuthRequired})
 		return
 	}
 
@@ -273,7 +279,7 @@ func (h *TripHandler) updateTripStatus(c *gin.Context) {
 	trip, err := h.service.Fetch(c.Request.Context(), tripID)
 	if err != nil {
 		if errors.Is(err, domain.ErrTripNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "trip not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": errTripNotFound})
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -288,7 +294,7 @@ func (h *TripHandler) updateTripStatus(c *gin.Context) {
 
 	if err := h.service.UpdateStatus(c.Request.Context(), tripID, status); err != nil {
 		if errors.Is(err, domain.ErrTripNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "trip not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": errTripNotFound})
 			return
 		}
 		if errors.Is(err, domain.ErrInvalidStatus) {
@@ -330,7 +336,7 @@ func (h *TripHandler) assignDriver(c *gin.Context) {
 	role := roleFromContext(c)
 
 	if userID == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": errAuthRequired})
 		return
 	}
 

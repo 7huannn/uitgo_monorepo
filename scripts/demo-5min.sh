@@ -57,7 +57,7 @@ TOKEN=$(curl -s http://uitgo.local/auth/login \
   -H "Content-Type: application/json" \
   -d '{"phone":"+84901234567","password":"rider123"}' | jq -r '.access_token' || echo "")
 
-if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
+if [[ -z "$TOKEN" || "$TOKEN" == "null" ]]; then
   echo "⚠️  No token - register a test user first"
   echo "Run: make seed"
 else

@@ -401,7 +401,7 @@ func (m *HubManager) HandleWebsocket(service *domain.TripService) gin.HandlerFun
 }
 
 // canAccessTripWS checks if the user has permission to connect to the trip's WebSocket
-func canAccessTripWS(trip *domain.Trip, userID, role string, driverRepo DriverLocationWriter) bool {
+func canAccessTripWS(trip *domain.Trip, userID, role string, _ DriverLocationWriter) bool {
 	// Admins can access all trips
 	if strings.ToLower(role) == "admin" {
 		return true
