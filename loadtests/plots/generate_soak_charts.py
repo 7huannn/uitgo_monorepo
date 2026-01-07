@@ -68,36 +68,42 @@ def extract_metrics(data):
         'duration': duration_min,
     }
 
-def plot_soak_comparison():
-    """Generate Local vs AWS comparison chart"""
-    
-    # Load results
+def _load_local_metrics():
+    """Load local soak test metrics"""
     local_data = load_soak_results('local_30min.json')
+    if not local_data:
+        print("⚠️  Local soak test result not found. Will use placeholder.")
+        return None
+    return extract_metrics(local_data)
 
-    aws_data = None
+def _load_aws_metrics():
+    """Load AWS soak test metrics"""
     for candidate in AWS_SOAK_CANDIDATES:
         aws_data = load_soak_results(candidate)
         if aws_data:
             print(f"ℹ️  Using AWS soak data: {candidate}")
-            break
+            return extract_metrics(aws_data)
+    print("⚠️  AWS soak test result not found. Will use placeholder.")
+    return None
+
+def _get_default_metrics():
+    """Return default placeholder metrics"""
+    return (
+        {'p50': 95, 'p95': 210, 'p99': 290, 'error_rate': 0.5, 'duration': 30},
+        {'p50': 175, 'p95': 295, 'p99': 420, 'error_rate': 0.8, 'duration': 90}
+    )
+
+def plot_soak_comparison():
+    """Generate Local vs AWS comparison chart"""
     
-    if not local_data:
-        print("⚠️  Local soak test result not found. Will use placeholder.")
-        local_metrics = None
-    else:
-        local_metrics = extract_metrics(local_data)
-    
-    if not aws_data:
-        print("⚠️  AWS soak test result not found. Will use placeholder.")
-        aws_metrics = None
-    else:
-        aws_metrics = extract_metrics(aws_data)
+    # Load results
+    local_metrics = _load_local_metrics()
+    aws_metrics = _load_aws_metrics()
     
     # If both missing, use example data
     if not local_metrics and not aws_metrics:
         print("📊 Using example data for visualization")
-        local_metrics = {'p50': 95, 'p95': 210, 'p99': 290, 'error_rate': 0.5, 'duration': 30}
-        aws_metrics = {'p50': 175, 'p95': 295, 'p99': 420, 'error_rate': 0.8, 'duration': 90}
+        local_metrics, aws_metrics = _get_default_metrics()
     
     # Create comparison chart
     _, axes = plt.subplots(1, 2, figsize=(12, 6), constrained_layout=True)
@@ -207,7 +213,7 @@ def plot_network_overhead():
     # Add annotation for network overhead
     ax.annotate('Network Overhead\n~80ms',
                 xy=(2 + width/2, 80), xytext=(2.5, 120),
-                arrowprops=dict(arrowstyle='->', color='#e67e22', lw=2),
+                arrowprops={'arrowstyle': '->', 'color': '#e67e22', 'lw': 2},
                 fontsize=10, color='#e67e22', fontweight='bold')
     
     output_file = OUTPUT_DIR / 'network_overhead_comparison.png'

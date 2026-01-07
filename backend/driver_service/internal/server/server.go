@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"gorm.io/gorm"
 
 	"uitgo/backend/internal/config"
 	dbrepo "uitgo/backend/internal/db"
@@ -96,7 +96,7 @@ func createMatchQueue(cfg *config.Config) matching.Queue {
 }
 
 // New builds the server with driver/profile routes and internal hooks.
-func New(cfg *config.Config, db *gorm.DB, tripSync domain.TripSyncRepository) (*Server, error) {
+func New(cfg *config.Config, db *gorm.DB, _ domain.TripSyncRepository) (*Server, error) {
 	router := setupRouter(cfg, db)
 
 	driverService, err := createDriverService(cfg, db)

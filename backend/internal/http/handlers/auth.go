@@ -402,12 +402,10 @@ func (h *AuthHandler) validateDriverRegistration(c *gin.Context, req registerDri
 		return errors.New("jwt secret not configured")
 	}
 
-	existing, err := h.users.FindByEmail(c.Request.Context(), req.Email)
-	if err == nil && existing != nil {
+	if existing, err := h.users.FindByEmail(c.Request.Context(), req.Email); err == nil && existing != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
 		return errors.New("email already registered")
-	}
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check existing user"})
 		return err
 	}
